@@ -20,3 +20,8 @@ jobs:
         run: node checks/check_views_selftest.mjs
       - name: Views produce balanced markup
         run: node checks/check_views.mjs
+      - name: Paged tables behave
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+          node checks/check_render.mjs

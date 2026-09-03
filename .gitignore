@@ -7,3 +7,4 @@ __pycache__/
 #   python3 scripts/build_data.py BA_Master_Tracker.xlsx --redact-emails
 #   python3 scripts/build_standalone.py
 BA_Master_Tracker.xlsx
+node_modules/

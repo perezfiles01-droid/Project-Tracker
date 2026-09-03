@@ -32,7 +32,10 @@ ok("real app.js: did not swallow the file", appHtml.length > 500 && appHtml.leng
    `extracted ${appHtml.length} of ${app.length} chars`);
 
 const drive = readFileSync(join(root, "assets/drive.js"), "utf8");
-ok("real drive.js: keeps its card markup", templateText(drive).includes('class="card"'));
+const driveHtml = templateText(drive);
+ok("real drive.js: keeps the pinned table markup", driveHtml.includes('class="cellgrid"'));
+ok("real drive.js: keeps the files table markup", driveHtml.includes('class="filetable"'));
+ok("real drive.js: keeps the pager markup", driveHtml.includes('class="pager"'));
 
 // --- planted cases ----------------------------------------------------------
 ok("catches a genuinely unclosed div",

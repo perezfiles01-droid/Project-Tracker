@@ -150,3 +150,19 @@ td.wrap{max-width:420px;white-space:pre-wrap}
   .main{padding:20px 16px 60px}
 }
 .note.rich{white-space:normal}
+
+/* ---------- paged tables (Google Drive page) ---------- */
+table.cellgrid{min-width:0;table-layout:fixed}
+table.cellgrid td{width:33.33%;vertical-align:top;border-bottom:1px solid var(--line)}
+table.cellgrid tr:last-child td{border-bottom:0}
+table.cellgrid td.pad{background:transparent}
+table.cellgrid .t{font-weight:600;line-height:1.35;margin-bottom:4px;word-break:break-word}
+table.cellgrid .m{font-size:12.5px;color:var(--muted)}
+table.cellgrid .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+
+.pager{display:flex;align-items:center;gap:12px;margin:12px 0 4px;flex-wrap:wrap}
+.pager .pageinfo{font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.pager .btn[disabled]{opacity:.4;cursor:not-allowed}
+.pager .btn[disabled]:hover{border-color:var(--line);color:var(--muted)}
+
+td .namecell{display:block;word-break:break-word}

@@ -18,6 +18,38 @@
   let browsing = [];         // last fetched file list
   let notice = "";
 
+  // Page indexes for the two paged tables on this page. Kept per-table so
+  // paging one does not reset the other.
+  const PINNED_COLS = 3, PINNED_ROWS = 2;          // 3 across, 2 down = 6 a page
+  const PINNED_PER_PAGE = PINNED_COLS * PINNED_ROWS;
+  const FILES_PER_PAGE = 10;
+  const page = { pinned: 0, files: 0 };
+
+  /**
+   * Clamp a page index to a list that may have shrunk (a search, or removing
+   * the last item on the final page) so the table can never render empty with
+   * rows sitting on an earlier page.
+   */
+  const clampPage = (key, total, perPage) => {
+    const last = Math.max(0, Math.ceil(total / perPage) - 1);
+    if (page[key] > last) page[key] = last;
+    return page[key];
+  };
+
+  /** Pager control shared by both tables. Renders nothing for a single page. */
+  const pager = (key, total, perPage) => {
+    const pages = Math.ceil(total / perPage) || 1;
+    if (pages <= 1) return "";
+    const cur = page[key];
+    const from = cur * perPage + 1;
+    const to = Math.min(total, (cur + 1) * perPage);
+    return `<div class="pager">
+      <button class="btn sm" data-page="${key}:prev" ${cur === 0 ? "disabled" : ""}>‹ Prev</button>
+      <span class="pageinfo">Showing ${from}–${to} of ${total} · page ${cur + 1} of ${pages}</span>
+      <button class="btn sm" data-page="${key}:next" ${cur >= pages - 1 ? "disabled" : ""}>Next ›</button>
+    </div>`;
+  };
+
   // Opened from disk there is no usable web origin, so name the hosted site instead.
   const originHint = () =>
     location.protocol.startsWith("http") ? location.origin : "https://perezfiles01-droid.github.io";
@@ -115,6 +147,65 @@
 
   function unpin(id) { save(saved().filter((l) => l.id !== id)); window.TrackerRender(); }
 
+  /**
+   * Pinned links as a table laid out PINNED_COLS across and PINNED_ROWS down.
+   * A table rather than a grid so the columns stay aligned as names vary in
+   * length, and paged so the page does not grow without limit.
+   */
+  function pinnedTable(list) {
+    if (!list.length) return `<div class="empty">Nothing pinned yet.</div>`;
+    const cur = clampPage("pinned", list.length, PINNED_PER_PAGE);
+    const slice = list.slice(cur * PINNED_PER_PAGE, (cur + 1) * PINNED_PER_PAGE);
+
+    const rows = [];
+    for (let r = 0; r < PINNED_ROWS; r++) {
+      const cells = slice.slice(r * PINNED_COLS, (r + 1) * PINNED_COLS);
+      if (!cells.length) break;
+      // Pad the final row so the columns keep their width.
+      while (cells.length < PINNED_COLS) cells.push(null);
+      rows.push(`<tr>${cells.map((l) => l
+        ? `<td>
+             <div class="t"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a></div>
+             <div class="m">${esc(l.project)}${l.modified ? " · modified " + esc(l.modified) : ""}</div>
+             <div class="row">
+               <span class="tag">${esc(l.meta || "drive")}</span>
+               <button class="btn sm" data-unpin="${esc(l.id)}">Remove</button>
+             </div>
+           </td>`
+        : `<td class="pad"></td>`).join("")}</tr>`);
+    }
+
+    return `<div class="tablewrap"><table class="cellgrid">
+        <tbody>${rows.join("")}</tbody>
+      </table></div>${pager("pinned", list.length, PINNED_PER_PAGE)}`;
+  }
+
+  /**
+   * Recent Drive files as a paged table, FILES_PER_PAGE rows at a time.
+   * Fifty cards in a column is unreadable; a table gives the name room and
+   * keeps type, date and the pin action in fixed columns.
+   */
+  function filesTable(files) {
+    if (!files.length) return `<div class="empty">No files.</div>`;
+    const cur = clampPage("files", files.length, FILES_PER_PAGE);
+    const slice = files.slice(cur * FILES_PER_PAGE, (cur + 1) * FILES_PER_PAGE);
+
+    const kind = (m) => (m || "").replace("application/vnd.google-apps.", "").split("/").pop() || "file";
+
+    return `<div class="tablewrap"><table class="filetable">
+        <thead><tr>
+          <th>Name</th><th>Type</th><th>Modified</th><th></th>
+        </tr></thead>
+        <tbody>${slice.map((f) => `
+          <tr>
+            <td><a class="namecell" href="${esc(f.webViewLink)}" target="_blank" rel="noopener">${esc(f.name)}</a></td>
+            <td><span class="tag">${esc(kind(f.mimeType))}</span></td>
+            <td>${esc((f.modifiedTime || "").slice(0, 10))}</td>
+            <td><button class="btn sm" data-pin="${esc(f.id)}">Pin to tracker</button></td>
+          </tr>`).join("")}</tbody>
+      </table></div>${pager("files", files.length, FILES_PER_PAGE)}`;
+  }
+
   /* ---------- view ---------- */
   function view(q) {
     const { clientId, apiKey } = cfg();
@@ -147,23 +238,10 @@
       </div>
 
       <h3 class="sec">Pinned Drive links (${list.length})</h3>
-      <div class="grid">${list.map((l) => `
-        <div class="card">
-          <div class="t"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a></div>
-          <div class="m">${esc(l.project)}${l.modified ? " · modified " + esc(l.modified) : ""}</div>
-          <div class="row">
-            <span class="tag">${esc(l.meta || "drive")}</span>
-            <button class="btn sm" data-unpin="${esc(l.id)}">Remove</button>
-          </div>
-        </div>`).join("") || `<div class="empty">Nothing pinned yet.</div>`}</div>
+      ${pinnedTable(list)}
 
       ${token ? `<h3 class="sec">Your Drive — recent files (${files.length})</h3>
-        <div class="grid">${files.map((f) => `
-          <div class="card">
-            <div class="t"><a href="${esc(f.webViewLink)}" target="_blank" rel="noopener">${esc(f.name)}</a></div>
-            <div class="m">${esc((f.mimeType || "").split(".").pop())} · ${esc((f.modifiedTime || "").slice(0, 10))}</div>
-            <div class="row"><button class="btn sm" data-pin="${esc(f.id)}">Pin to tracker</button></div>
-          </div>`).join("") || `<div class="empty">No files.</div>`}</div>` : ""}`;
+        ${filesTable(files)}` : ""}`;
   }
 
   /* ---------- wiring ---------- */
@@ -185,6 +263,13 @@
     const u = e.target.closest("[data-unpin]");
     if (u) return unpin(u.dataset.unpin);
 
+    const pg = e.target.closest("[data-page]");
+    if (pg) {
+      const [key, dir] = pg.dataset.page.split(":");
+      page[key] = Math.max(0, page[key] + (dir === "next" ? 1 : -1));
+      return window.TrackerRender();
+    }
+
     if (e.target.id === "openDrive") return window.TrackerGo("drive");
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
       $("#clientId").value = localStorage.getItem("tracker.clientId") || "";
@@ -201,5 +286,11 @@
     }
   });
 
-  window.TrackerDrive = { view, connect, saved };
+  window.TrackerDrive = {
+    view, connect, saved,
+    // Test seam for checks/check_render.mjs: the file list and token live in
+    // this closure, so a browser-side check has no other way to exercise the
+    // real render path without hitting Google.
+    _seed(files) { token = "seed"; browsing = files; notice = ""; window.TrackerRender(); },
+  };
 })();
