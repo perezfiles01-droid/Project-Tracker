@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Never commit the source workbook to a PUBLIC repository — it contains the
+# unredacted email addresses and every internal link. Rebuild locally instead:
+#   python3 scripts/build_data.py BA_Master_Tracker.xlsx --redact-emails
+#   python3 scripts/build_standalone.py
+BA_Master_Tracker.xlsx

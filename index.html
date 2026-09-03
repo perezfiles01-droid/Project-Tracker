@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tracker — BA project links &amp; documents</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="description" content="Central index of tracking links, sites and documents for the GLASS and EDRMS ADB projects.">
+<link rel="icon" href="assets/favicon.svg">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="dot">T</div>
+      <h1>Tracker<span id="brandSub">BA master index</span></h1>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <button id="openDrive">Google Drive</button>
+      <button id="openSettings">Settings</button>
+      <button id="toggleTheme">Toggle theme</button>
+      <div id="genStamp" style="margin-top:8px"></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search">
+        <input id="q" type="search" placeholder="Search every link, task and document…" autocomplete="off">
+      </div>
+      <button class="btn" id="exportBtn">Export JSON</button>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<!-- Settings -->
+<div class="modal" id="settingsModal" hidden>
+  <div class="box">
+    <h3>Google Drive connection</h3>
+    <p class="lede">These stay in this browser only (localStorage). They are never committed to the
+      repository. Setup steps are in <code>README.md</code> → “Connecting Google Drive”.</p>
+    <div class="field">
+      <label for="clientId">OAuth Client ID</label>
+      <input id="clientId" placeholder="1234567890-abc.apps.googleusercontent.com" spellcheck="false">
+      <small>Google Cloud console → APIs &amp; Services → Credentials → OAuth client ID (Web application).</small>
+    </div>
+    <div class="field">
+      <label for="apiKey">API key</label>
+      <input id="apiKey" placeholder="AIza…" spellcheck="false">
+      <small>Same console → Create credentials → API key. Needed by the Drive Picker.</small>
+    </div>
+    <div class="actions">
+      <button class="btn" id="settingsCancel">Cancel</button>
+      <button class="btn primary" id="settingsSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/drive.js"></script>
+</body>
+</html>
