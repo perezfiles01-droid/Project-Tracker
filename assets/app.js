@@ -120,6 +120,8 @@
       const key = "project:" + p.id;
       const q = window.TrackerLinks.findValue(key);
       let html = `<h2 class="page">${esc(p.name)}</h2><p class="lede">${esc(p.full)} — ${esc(p.blurb)}</p>
+        ${window.TrackerProjects.view(p)}
+        <h2 class="page sub">Reference</h2>
         <div class="pagetools">${window.TrackerLinks.searchBox(key, "Search this project…")}</div>`;
       for (const sec of p.sections) {
         html += `<h3 class="sec">${esc(sec.title)}</h3>`;
