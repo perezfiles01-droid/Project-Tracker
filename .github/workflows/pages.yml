@@ -5,10 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 'actions: write' lets configure-pages turn Pages on itself via enablement,
+# so the site deploys without anyone flipping the Settings -> Pages switch.
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: pages
@@ -21,8 +24,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
