@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Redirecting to Tracker</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:#0b0b0d;color:#f4f4f5;display:grid;place-items:center;height:100vh;margin:0;text-align:center}
+  a{color:#ef4444}
+</style>
+<p>Page not found — <a id="home" href="/Project-Tracker/">go to the Tracker</a>.</p>
+<script>
+  // Pages serves this for any missing path under the site. Send visitors to the
+  // app root instead of a dead end, but never redirect from the root itself,
+  // which would loop if index.html were genuinely missing.
+  var base = location.pathname.split("/")[1];
+  var home = base ? "/" + base + "/" : "/";
+  document.getElementById("home").href = home;
+  if (location.pathname !== home && location.pathname !== home + "index.html") {
+    location.replace(home);
+  }
+</script>
