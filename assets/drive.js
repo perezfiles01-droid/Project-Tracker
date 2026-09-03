@@ -18,37 +18,13 @@
   let browsing = [];         // last fetched file list
   let notice = "";
 
-  // Page indexes for the two paged tables on this page. Kept per-table so
-  // paging one does not reset the other.
+  // Page sizes for the two paged tables on this page. The pager itself is
+  // shared (assets/ui.js) so every table in the app pages the same way.
   const PINNED_COLS = 3, PINNED_ROWS = 2;          // 3 across, 2 down = 6 a page
   const PINNED_PER_PAGE = PINNED_COLS * PINNED_ROWS;
   const FILES_PER_PAGE = 10;
-  const page = { pinned: 0, files: 0 };
-
-  /**
-   * Clamp a page index to a list that may have shrunk (a search, or removing
-   * the last item on the final page) so the table can never render empty with
-   * rows sitting on an earlier page.
-   */
-  const clampPage = (key, total, perPage) => {
-    const last = Math.max(0, Math.ceil(total / perPage) - 1);
-    if (page[key] > last) page[key] = last;
-    return page[key];
-  };
-
-  /** Pager control shared by both tables. Renders nothing for a single page. */
-  const pager = (key, total, perPage) => {
-    const pages = Math.ceil(total / perPage) || 1;
-    if (pages <= 1) return "";
-    const cur = page[key];
-    const from = cur * perPage + 1;
-    const to = Math.min(total, (cur + 1) * perPage);
-    return `<div class="pager">
-      <button class="btn sm" data-page="${key}:prev" ${cur === 0 ? "disabled" : ""}>‹ Prev</button>
-      <span class="pageinfo">Showing ${from}–${to} of ${total} · page ${cur + 1} of ${pages}</span>
-      <button class="btn sm" data-page="${key}:next" ${cur >= pages - 1 ? "disabled" : ""}>Next ›</button>
-    </div>`;
-  };
+  const clampPage = (key, total, perPage) => window.TrackerUI.pageIndex(key, total, perPage);
+  const pager = (key, total, perPage) => window.TrackerUI.pager(key, total, perPage);
 
   // Opened from disk there is no usable web origin, so name the hosted site instead.
   const originHint = () =>
@@ -302,12 +278,6 @@
     const rm = e.target.closest('[data-remove^="drive:"]');
     if (rm) return unpin(rm.dataset.remove.slice(7));
 
-    const pg = e.target.closest("[data-page]");
-    if (pg) {
-      const [key, dir] = pg.dataset.page.split(":");
-      page[key] = Math.max(0, page[key] + (dir === "next" ? 1 : -1));
-      return window.TrackerRender();
-    }
 
     if (e.target.id === "openDrive") return window.TrackerGo("drive");
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {

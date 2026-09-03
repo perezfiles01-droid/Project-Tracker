@@ -114,29 +114,7 @@
 
   /* ---------- views ---------- */
   const views = {
-    overview() {
-      const q = state.query;
-      const links = allLinks().filter((l) => matches(l, q));
-      const daily = state.data.daily;
-      const unverified = allLinks().filter((l) => l.url && l.verified === false).length;
-      const stats = [
-        ["Tracked links", allLinks().length],
-        ["Projects", activeProjects().length],
-        ["Logged activities", daily.length],
-        ["Open tasks", window.TrackerTasks.load().filter((t) => t.status !== "Done").length],
-        ["Links to verify", unverified],
-      ];
-      return `
-        <h2 class="page">Overview</h2>
-        <p class="lede">Everything from <code>${esc(state.data.source)}</code>, rebuilt
-          ${esc(state.data.generatedAt)}.</p>
-        <div class="stats">${stats.map(([l, n]) =>
-          `<div class="stat"><div class="n">${n}</div><div class="l">${esc(l)}</div></div>`).join("")}</div>
-        <h3 class="sec">${q ? `Links matching “${esc(q)}”` : "All links"} (${links.length})</h3>
-        <div class="grid">${links.map((l) => linkCard(l,
-          [`<span class="tag accent">${esc(l.project)}</span>`])).join("") ||
-          `<div class="empty">No links match your search.</div>`}</div>`;
-    },
+    overview() { return window.TrackerLinks.overview(state.query); },
 
     project(p) {
       const q = state.query;
@@ -246,7 +224,7 @@
    * their own items, so a third group is a line of data.
    */
   const navGroups = () => [
-    { title: "Index", items: [["overview", "Overview", allLinks().length]] },
+    { title: "Index", items: [["overview", "Overview", window.TrackerLinks.resolved().length]] },
     { title: "Projects", items: activeProjects().map((p) => [`p:${p.id}`, p.name, null]) },
     { title: "Task", items: [
       ["todo", "To Do List", window.TrackerTasks.load().length],
@@ -272,6 +250,8 @@
     if (state.route.startsWith("p:")) {
       const p = state.data.projects.find((x) => x.id === state.route.slice(2));
       html = p ? views.project(p) : `<div class="empty">Unknown project.</div>`;
+    } else if (state.route.startsWith("g:")) {
+      html = window.TrackerLinks.tableView(state.route.slice(2), state.query);
     } else {
       html = (views[state.route] || views.overview)();
     }

@@ -243,6 +243,92 @@ ok("a renamed pinned link survives a reload",
    (await page.locator("table.cellgrid").innerText()).includes("Renamed without re-adding"));
 
 /* ---------------------------------------------------------------------------
+   Overview is project cards now, and each opens a paginated four-column table.
+--------------------------------------------------------------------------- */
+await page.click('button[data-route="overview"]');
+await page.waitForSelector(".grid.cards");
+ok("Overview shows no KPI stat row", (await page.locator(".stats").count()) === 0);
+ok("Overview shows no flat link grid",
+   (await page.locator(".card:not(.groupcard)").count()) === 0);
+const cards = await page.locator(".card.groupcard").count();
+ok("Overview shows one card per project group", cards === 3, `saw ${cards}`);
+
+await page.click('.card.groupcard[data-route="g:edrms-adb"]');
+await page.waitForSelector("table.linktable");
+const heads = await page.locator("table.linktable thead th").allTextContents();
+ok("the table carries exactly Site / Description / Email Access / Link",
+   JSON.stringify(heads.slice(0, 4)) === JSON.stringify(["Site", "Description", "Email Access", "Link"]),
+   heads.join(" · "));
+
+const PER = Number(readFileSync(join(root, "assets/links.js"), "utf8")
+  .match(/ROWS_PER_PAGE\s*=\s*(\d+)/)[1]);
+ok(`the table pages ${PER} rows at a time`,
+   (await page.locator("table.linktable tbody tr").count()) === PER,
+   String(await page.locator("table.linktable tbody tr").count()));
+
+let total = await page.locator("table.linktable tbody tr").count();
+let guard = 0;
+while (!(await page.locator('[data-page^="links:"][data-page$=":next"]').isDisabled()) && guard++ < 20) {
+  await page.click('[data-page^="links:"][data-page$=":next"]');
+  await page.waitForTimeout(90);
+  const n = await page.locator("table.linktable tbody tr").count();
+  ok(`a later page never exceeds ${PER} rows`, n <= PER, String(n));
+  total += n;
+}
+ok("paging reaches all 38 EDRMS links", total === 38, `counted ${total}`);
+
+// Every row must open directly, and be correctable in place.
+await page.click('[data-page^="links:"][data-page$=":prev"]');
+await page.waitForTimeout(90);
+ok("rows offer a direct open link",
+   (await page.locator('table.linktable a.btn[target="_blank"]').count()) > 0);
+
+await page.click("table.linktable tbody tr [data-edit]");
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_description", "Written by hand, not from the workbook");
+await page.fill("#fd_account", "someone@example.test");
+await page.click('[data-fd="save"]');
+await page.waitForTimeout(150);
+ok("a typed description appears in the table",
+   (await page.locator("table.linktable").innerText()).includes("Written by hand"));
+
+// The reload lands straight back on #g:edrms-adb — the group route is a real
+// deep link, so there is no card to click here.
+await page.reload({ waitUntil: "load" });
+await page.waitForSelector("table.linktable");
+ok("the group route survives a reload as a deep link",
+   (await page.locator("h2.page").textContent()).trim() === "EDRMS ADB");
+// Search rather than read page 1: paging resets on reload and the edited row
+// sits on a later page, so a page-1 read would fail for the wrong reason.
+await page.fill("#q", "Written by hand");
+await page.waitForTimeout(150);
+const after = await page.locator("table.linktable").innerText();
+ok("the description survives a reload", after.includes("Written by hand"));
+ok("the email access survives a reload", after.includes("someone@example.test"));
+await page.fill("#q", "");
+await page.waitForTimeout(150);
+
+// Adding a link, and removing one.
+const before = await page.locator("table.linktable tbody tr").count();
+await page.click("[data-addlink]");
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_name", "A link I added myself");
+await page.fill("#fd_url", "https://example.test/mine");
+await page.click('[data-fd="save"]');
+await page.waitForTimeout(150);
+await page.fill("#q", "A link I added myself");
+await page.waitForTimeout(150);
+ok("an added link appears", (await page.locator("table.linktable").innerText()).includes("A link I added"));
+await page.click("table.linktable tbody tr [data-remove]");
+await page.waitForTimeout(150);
+ok("a removed link goes away",
+   !(await page.locator("#view").innerText()).includes("A link I added myself"));
+await page.fill("#q", "");
+await page.waitForTimeout(150);
+ok("removing a workbook row does not disturb the rest",
+   (await page.locator("table.linktable tbody tr").count()) === before);
+
+/* ---------------------------------------------------------------------------
    Theme. System had nothing to follow before: the stylesheet carried no
    prefers-color-scheme block and index.html hardcoded dark.
 --------------------------------------------------------------------------- */

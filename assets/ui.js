@@ -120,5 +120,45 @@
     });
   }
 
-  window.TrackerUI = { formDialog };
+  /* ---------- shared pager ----------
+     Lifted out of drive.js, where it was private to that closure while two
+     tables used it and a third needed it. One implementation, keyed per
+     table, so paging one never disturbs another. */
+  const page = {};
+
+  /**
+   * Clamp a page index to a list that may have shrunk (a search, or removing
+   * the last item on the final page) so a table can never render empty with
+   * its rows sitting on an earlier page.
+   */
+  const pageIndex = (key, total, perPage) => {
+    const last = Math.max(0, Math.ceil(total / perPage) - 1);
+    if ((page[key] || 0) > last) page[key] = last;
+    return page[key] || 0;
+  };
+
+  /** Pager control. Renders nothing for a single page. */
+  const pager = (key, total, perPage) => {
+    const pages = Math.ceil(total / perPage) || 1;
+    if (pages <= 1) return "";
+    const cur = pageIndex(key, total, perPage);
+    const from = cur * perPage + 1;
+    const to = Math.min(total, (cur + 1) * perPage);
+    return `<div class="pager">
+      <button class="btn sm" data-page="${key}:prev" ${cur === 0 ? "disabled" : ""}>‹ Prev</button>
+      <span class="pageinfo">Showing ${from}–${to} of ${total} · page ${cur + 1} of ${pages}</span>
+      <button class="btn sm" data-page="${key}:next" ${cur >= pages - 1 ? "disabled" : ""}>Next ›</button>
+    </div>`;
+  };
+
+  document.addEventListener("click", (e) => {
+    const pg = e.target.closest("[data-page]");
+    if (!pg) return;
+    const i = pg.dataset.page.lastIndexOf(":");
+    const key = pg.dataset.page.slice(0, i), dir = pg.dataset.page.slice(i + 1);
+    page[key] = Math.max(0, (page[key] || 0) + (dir === "next" ? 1 : -1));
+    window.TrackerRender();
+  });
+
+  window.TrackerUI = { formDialog, pager, pageIndex };
 })();

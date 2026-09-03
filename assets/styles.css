@@ -220,3 +220,19 @@ td .namecell{display:block;word-break:break-word}
 .card.task .atts{gap:6px}
 .attchip{cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-family:inherit}
 .attchip:hover{border-color:var(--accent);color:var(--text)}
+
+/* ---------- overview project cards ---------- */
+.grid.cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.card.groupcard{
+  text-align:left;font:inherit;color:inherit;cursor:pointer;
+  border:1px solid var(--line);background:var(--panel);
+}
+.card.groupcard:hover{border-color:var(--accent);transform:translateY(-2px)}
+.card.groupcard .t{font-size:16px}
+
+/* ---------- link table ---------- */
+table.linktable{min-width:820px}
+table.linktable td.wrap{max-width:340px}
+table.linktable .sitename{font-weight:600}
+table.linktable td.actions{white-space:nowrap;display:flex;gap:6px}
+table.linktable a.btn{display:inline-block;text-decoration:none}

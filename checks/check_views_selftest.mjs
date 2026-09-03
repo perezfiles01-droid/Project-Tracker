@@ -25,7 +25,7 @@ const ok = (name, cond, detail = "") => {
 const app = readFileSync(join(root, "assets/app.js"), "utf8");
 const appHtml = templateText(app);
 
-ok("real app.js: keeps markup that is really there", appHtml.includes('class="stat"'));
+ok("real app.js: keeps markup that is really there", appHtml.includes('class="nav-title"'));
 ok("real app.js: keeps the tablewrap container", appHtml.includes('class="tablewrap"'));
 ok("real app.js: excludes code outside templates", !appHtml.includes("const state ="));
 ok("real app.js: did not swallow the file", appHtml.length > 500 && appHtml.length < app.length,
@@ -35,7 +35,28 @@ const drive = readFileSync(join(root, "assets/drive.js"), "utf8");
 const driveHtml = templateText(drive);
 ok("real drive.js: keeps the pinned table markup", driveHtml.includes('class="cellgrid"'));
 ok("real drive.js: keeps the files table markup", driveHtml.includes('class="filetable"'));
-ok("real drive.js: keeps the pager markup", driveHtml.includes('class="pager"'));
+
+// The pager moved to the shared layer; assert it there rather than in drive.js,
+// and cover the other markup-producing files so none can be silently swallowed.
+const ui = readFileSync(join(root, "assets/ui.js"), "utf8");
+const uiHtml = templateText(ui);
+ok("real ui.js: keeps the pager markup", uiHtml.includes('class="pager"'));
+ok("real ui.js: keeps the dialog field markup", uiHtml.includes('class="field"'));
+ok("real ui.js: did not swallow the file", uiHtml.length > 300 && uiHtml.length < ui.length,
+   `extracted ${uiHtml.length} of ${ui.length} chars`);
+
+const links = readFileSync(join(root, "assets/links.js"), "utf8");
+const linksHtml = templateText(links);
+ok("real links.js: keeps the project card markup", linksHtml.includes('class="card groupcard"'));
+ok("real links.js: keeps the link table markup", linksHtml.includes('class="linktable"'));
+ok("real links.js: did not swallow the file", linksHtml.length > 300 && linksHtml.length < links.length,
+   `extracted ${linksHtml.length} of ${links.length} chars`);
+
+const tasks = readFileSync(join(root, "assets/tasks.js"), "utf8");
+const tasksHtml = templateText(tasks);
+ok("real tasks.js: keeps the task card markup", tasksHtml.includes('class="card task'));
+ok("real tasks.js: did not swallow the file", tasksHtml.length > 300 && tasksHtml.length < tasks.length,
+   `extracted ${tasksHtml.length} of ${tasks.length} chars`);
 
 // --- planted cases ----------------------------------------------------------
 ok("catches a genuinely unclosed div",
