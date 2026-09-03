@@ -126,7 +126,7 @@
       : `<div class="note rich"><b>Not connected yet.</b> In the Google Cloud console open
            <b>Google Auth Platform → Clients</b>, create a <b>Web application</b> client with
            <code>${esc(originHint())}</code> as an authorised JavaScript origin, enable the
-           <b>Google Drive API</b>, then paste the Client ID under <b>Settings</b> below.
+           <b>Google Drive API</b>, then paste the Client ID using the <b>Enter your Client ID</b> button below.
            Full walkthrough in the repository README.</div>`;
 
     return `
@@ -137,7 +137,10 @@
       ${setup}
       ${notice ? `<div class="note" style="border-color:var(--warn)">${esc(notice)}</div>` : ""}
       <div class="chips" style="margin-top:14px">
-        <button class="btn ${token ? "" : "primary"}" id="driveConnect">${token ? "Refresh files" : "Connect Google Drive"}</button>
+        ${clientId
+          ? `<button class="btn ${token ? "" : "primary"}" id="driveConnect">${token ? "Refresh files" : "Connect Google Drive"}</button>`
+          : `<button class="btn primary" data-open-settings>Enter your Client ID</button>
+             <button class="btn" id="driveConnect">Connect Google Drive</button>`}
         ${token ? `<button class="btn" id="driveDisconnect">Disconnect</button>` : ""}
         <button class="btn" id="driveAddManual">Add a link manually</button>
         ${apiKey ? "" : `<span class="tag dead" style="align-self:center">No API key needed</span>`}
@@ -183,7 +186,7 @@
     if (u) return unpin(u.dataset.unpin);
 
     if (e.target.id === "openDrive") return window.TrackerGo("drive");
-    if (e.target.id === "openSettings") {
+    if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
       $("#clientId").value = localStorage.getItem("tracker.clientId") || "";
       $("#apiKey").value = localStorage.getItem("tracker.apiKey") || "";
       $("#settingsModal").hidden = false;
