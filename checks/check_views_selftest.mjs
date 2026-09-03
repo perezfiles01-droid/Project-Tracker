@@ -47,7 +47,7 @@ ok("real ui.js: did not swallow the file", uiHtml.length > 300 && uiHtml.length 
 
 const links = readFileSync(join(root, "assets/links.js"), "utf8");
 const linksHtml = templateText(links);
-ok("real links.js: keeps the projects grid markup", linksHtml.includes('class="cellgrid"'));
+ok("real links.js: keeps the project tile markup", linksHtml.includes('class="ptiles"'));
 ok("real links.js: keeps the section search markup", linksHtml.includes('class="search sectionsearch"'));
 ok("real links.js: keeps the link table markup", linksHtml.includes('class="linktable"'));
 ok("real links.js: did not swallow the file", linksHtml.length > 300 && linksHtml.length < links.length,

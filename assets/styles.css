@@ -315,3 +315,45 @@ table.detailtable th[scope="row"]{
 }
 table.detailtable td{vertical-align:top}
 table.detailtable .detaildesc{white-space:pre-wrap}
+
+/* ---------- breathing room between a section's search box and its table ---------- */
+.sectionhead{margin-bottom:14px}
+.sectiontools{margin-bottom:14px}
+.linksection .tablewrap{margin-top:14px}
+.pagetools{margin-bottom:16px}
+.search.sectionsearch{margin-bottom:2px}
+
+/* ---------- icon buttons ---------- */
+.btn.icon{
+  display:inline-grid;place-items:center;padding:6px;line-height:0;
+  width:30px;height:30px;flex:0 0 auto;
+}
+.btn.icon svg{width:15px;height:15px;fill:none;stroke:currentColor;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn.icon:hover{border-color:var(--accent);color:var(--accent)}
+.btn.icon.danger:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- project tiles ---------- */
+.ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:stretch}
+.ptile{
+  display:flex;align-items:center;gap:8px;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px;
+  transition:border-color .15s,transform .15s;
+}
+.ptile:hover{border-color:var(--accent);transform:translateY(-2px)}
+.ptile.picked{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.ptileopen{
+  flex:1;min-width:0;text-align:left;background:none;border:0;cursor:pointer;
+  color:inherit;font:inherit;padding:0;
+}
+.ptileopen .t{font-weight:600;font-size:16px;word-break:break-word}
+.ptileacts{display:flex;gap:6px;flex:0 0 auto}
+@media (max-width:900px){ .ptiles{grid-template-columns:1fr} }
+
+/* ---------- email access filter, in its own column header ---------- */
+th.emailhead{white-space:nowrap}
+th.emailhead .emaillabel{margin-right:6px}
+th.emailhead .accountpick{
+  background:var(--panel);border:1px solid var(--line);border-radius:7px;
+  padding:2px 4px;font-size:11px;max-width:130px;text-transform:none;letter-spacing:0;
+}

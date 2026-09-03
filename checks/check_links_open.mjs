@@ -10,6 +10,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { executableCode as code } from "./lib/code.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const assets = join(root, "assets");
@@ -21,32 +22,6 @@ const ok = (name, cond, detail = "") => {
 };
 
 /** Strip comments and quoted strings so a mention in prose is not a hit. */
-function code(src) {
-  let out = "", i = 0, quote = null, tpl = 0, line = false, block = false, prev = "";
-  while (i < src.length) {
-    const c = src[i], n = src[i + 1];
-    if (line) { if (c === "\n") { line = false; out += c; } i++; continue; }
-    if (block) { if (c === "*" && n === "/") { block = false; i += 2; } else i++; continue; }
-    if (quote) {
-      if (c === "\\") { i += 2; continue; }
-      if (c === quote) quote = null;
-      i++; continue;
-    }
-    if (tpl) {
-      if (c === "\\") { i += 2; continue; }
-      if (c === "`") tpl--;
-      i++; continue;
-    }
-    if (c === "/" && n === "/") { line = true; i += 2; continue; }
-    if (c === "/" && n === "*") { block = true; i += 2; continue; }
-    if (c === "'" || c === '"') { quote = c; i++; continue; }
-    if (c === "`") { tpl++; i++; continue; }
-    out += c;
-    if (!/\s/.test(c)) prev = c;
-    i++;
-  }
-  return out;
-}
 
 /** Comments out, strings and templates kept — attributes live inside those. */
 function stripComments(src) {

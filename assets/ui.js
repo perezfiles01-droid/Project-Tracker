@@ -68,15 +68,25 @@
    *
    * An attachments field resolves to { keep: [ids], added: [File] }.
    */
-  function formDialog({ title, intro, fields, submitLabel = "Save" }) {
+  /**
+   * `choices` replaces the Cancel/Save pair with named buttons, for a dialog
+   * that offers two equal actions rather than one commit. It resolves with
+   * the chosen button's value instead of the field values.
+   */
+  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null }) {
     const box = ensureHost();
     box.innerHTML = `<div class="box">
         <h3>${esc(title)}</h3>
         ${intro ? `<p class="lede">${esc(intro)}</p>` : ""}
         <div class="fieldset">${fields.map(fieldHtml).join("")}</div>
         <div class="actions">
-          <button class="btn" data-fd="cancel">Cancel</button>
-          <button class="btn primary" data-fd="save">${esc(submitLabel)}</button>
+          ${choices
+            ? choices.map((c) =>
+                `<button class="btn${c.primary ? " primary" : ""}" data-fd="choice"
+                         data-value="${esc(c.value)}">${esc(c.label)}</button>`).join("") +
+              `<button class="btn" data-fd="cancel">Close</button>`
+            : `<button class="btn" data-fd="cancel">Cancel</button>
+               <button class="btn primary" data-fd="save">${esc(submitLabel)}</button>`}
         </div>
       </div>`;
     box.hidden = false;
@@ -124,6 +134,8 @@
       };
       const onClick = (e) => {
         if (e.target === box || e.target.closest('[data-fd="cancel"]')) return close(null);
+        const choice = e.target.closest('[data-fd="choice"]');
+        if (choice) return close({ choice: choice.dataset.value });
         if (e.target.closest('[data-fd="save"]')) return close(collect());
       };
       document.addEventListener("keydown", onKey);
@@ -217,5 +229,29 @@
     return i === -1 ? raw : raw.slice(i + 1);
   };
 
-  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId };
+  /* ---------- icon buttons ----------
+     Nineteen action buttons across five modules spelled out "Edit", "Remove",
+     "Delete", "Rename". One helper instead, so an icon is drawn once and every
+     button keeps a real name for screen readers and on hover - an icon with no
+     accessible name is a button nobody can identify. */
+  const ICONS = {
+    edit: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 6.5l3 3"/>',
+    remove: '<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6.5 7l1 12h9l1-12"/><path d="M10 11v5M14 11v5"/>',
+    rename: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 6.5l3 3"/>',
+    add: '<path d="M12 5v14M5 12h14"/>',
+    open: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    done: '<path d="M4 12.5l5 5L20 6.5"/>',
+  };
+
+  /**
+   * An icon button. `attrs` carries whatever the caller needs on it, usually
+   * data-edit / data-remove, so the existing handlers are untouched.
+   */
+  const iconButton = (icon, label, attrs = "", cls = "") =>
+    `<button class="btn sm icon ${cls}" ${attrs} title="${esc(label)}" aria-label="${esc(label)}">
+       <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
+     </button>`;
+
+  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId,
+                       iconButton, ICONS };
 })();

@@ -75,7 +75,13 @@ await page.click("tr.taskrow");
 await page.waitForTimeout(250);
 ok("clicking a task opens a detail row", (await page.locator("tr.detail").count()) === 1);
 const detail = await page.locator("tr.detail").innerText();
-ok("the detail offers add/rename/delete", /Edit/.test(detail) && /Remove/.test(detail), detail.replace(/\s+/g, " ").slice(0, 90));
+// Asserted by control, not by label: the actions are icon buttons now, so
+// their accessible name carries the meaning rather than visible text.
+const detailActions = await page.$$eval("tr.detail button[aria-label]",
+  (bs) => bs.map((b) => b.getAttribute("aria-label")));
+ok("the detail offers edit and remove",
+   detailActions.includes("Edit") && detailActions.includes("Remove"),
+   detailActions.join(", ") || detail.replace(/\s+/g, " ").slice(0, 60));
 
 // --- and it survives a reload ------------------------------------------------
 await page.reload({ waitUntil: "load" });

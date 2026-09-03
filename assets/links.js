@@ -15,18 +15,24 @@
   const ADDED = "tracker.userLinks";   // [ {id,project,name,description,account,url} ]
   const DRIVE = "tracker.driveLinks";  // owned by drive.js; shared shape
   const TABLES = "tracker.linkTables"; // [ {id,project,name} ] tables you name yourself
+  const PROJECTS = "tracker.projects"; // { added:[{key,name}], renamed:{key:name}, hidden:[key] }
 
   const read = (key, fallback) => {
-    try { return JSON.parse(localStorage.getItem(key) || fallback); } catch { return JSON.parse(fallback); }
+    return window.TrackerStore.get(key, JSON.parse(fallback));
   };
   const edits = () => read(EDITS, "{}");
   const added = () => read(ADDED, "[]");
   const drive = () => read(DRIVE, "[]");
-  const writeEdits = (o) => localStorage.setItem(EDITS, JSON.stringify(o));
-  const writeAdded = (a) => localStorage.setItem(ADDED, JSON.stringify(a));
-  const writeDrive = (a) => localStorage.setItem(DRIVE, JSON.stringify(a));
+  const writeEdits = (o) => window.TrackerStore.set(EDITS, o);
+  const writeAdded = (a) => window.TrackerStore.set(ADDED, a);
+  const writeDrive = (a) => window.TrackerStore.set(DRIVE, a);
   const customTables = () => read(TABLES, "[]");
-  const writeTables = (a) => localStorage.setItem(TABLES, JSON.stringify(a));
+  const projectStore = () => {
+    const v = read(PROJECTS, "{}");
+    return { added: v.added || [], renamed: v.renamed || {}, hidden: v.hidden || [] };
+  };
+  const writeProjects = (v) => window.TrackerStore.set(PROJECTS, v);
+  const writeTables = (a) => window.TrackerStore.set(TABLES, a);
 
   const slug = (s) => String(s ?? "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "x";
@@ -104,10 +110,17 @@
   /** One tile per project. Google Drive is not a project and is not here. */
   function groups() {
     const rows = resolved();
+    const ps = projectStore();
     const order = window.TrackerState.data.projects
       .filter((p) => p.active !== false).map((p) => p.name);
     for (const r of rows) if (r.project && !order.includes(r.project)) order.push(r.project);
-    return order.map((name) => {
+    for (const a of ps.added) if (!order.includes(a.name)) order.push(a.name);
+    return order
+      // A workbook project cannot be deleted from data/tracker.json, which is
+      // served read-only, so "delete" is a tombstone keyed on the slug.
+      .filter((name) => !ps.hidden.includes(slug(name)))
+      .map((name) => ps.renamed[slug(name)] || name)
+      .map((name) => {
       const items = rows.filter((r) => r.project === name);
       return { key: slug(name), name, count: items.length,
                tables: tablesFor(name).length,
@@ -122,8 +135,9 @@
    */
   function tablesFor(projectName) {
     const names = [];
+    const owned = originalNames(projectName);
     for (const r of resolved()) {
-      if (r.project === projectName && r.table && !names.includes(r.table)) names.push(r.table);
+      if (owned.includes(r.project) && r.table && !names.includes(r.table)) names.push(r.table);
     }
     for (const t of customTables()) {
       if (t.project === projectName && !names.includes(t.name)) names.push(t.name);
@@ -133,12 +147,31 @@
   }
 
   const groupByKey = (key) => groups().find((g) => g.key === key);
+  /**
+   * A rename changes the display name only; rows still carry the name they
+   * were filed under, so both are accepted when collecting a project's rows.
+   */
+  const originalNames = (displayName) => {
+    const ps = projectStore();
+    const names = [displayName];
+    for (const [k, v] of Object.entries(ps.renamed)) {
+      if (v !== displayName) continue;
+      for (const p of window.TrackerState.data.projects) if (slug(p.name) === k) names.push(p.name);
+      for (const r of resolved()) if (slug(r.project) === k) names.push(r.project);
+    }
+    return [...new Set(names)];
+  };
   const rowsFor = (key) => {
     const g = groupByKey(key);
-    return g ? resolved().filter((r) => r.project === g.name) : [];
+    if (!g) return [];
+    const names = originalNames(g.name);
+    return resolved().filter((r) => names.includes(r.project));
   };
-  const rowsIn = (projectName, tableName) => resolved().filter((r) =>
-    r.project === projectName && (r.table || tablesFor(projectName)[0]) === tableName);
+  const rowsIn = (projectName, tableName) => {
+    const names = originalNames(projectName);
+    return resolved().filter((r) =>
+      names.includes(r.project) && (r.table || tablesFor(projectName)[0]) === tableName);
+  };
 
   /* ---------- writes ---------- */
   function saveRow(row, values) {
@@ -263,31 +296,27 @@
   function projectsTable() {
     const q = (find.projects || "").toLowerCase();
     const list = groups().filter((g) => !q || g.name.toLowerCase().includes(q));
-    if (!list.length) return `<div class="empty">No project matches that search.</div>`;
     const cur = window.TrackerUI.pageIndex("projects", list.length, PROJ_PER_PAGE);
     const slice = list.slice(cur * PROJ_PER_PAGE, (cur + 1) * PROJ_PER_PAGE);
+    const ib = window.TrackerUI.iconButton;
 
-    const rows = [];
-    for (let r = 0; r < PROJ_ROWS; r++) {
-      const cells = slice.slice(r * PROJ_COLS, (r + 1) * PROJ_COLS);
-      if (!cells.length) break;
-      while (cells.length < PROJ_COLS) cells.push(null);
-      rows.push(`<tr>${cells.map((g) => g
-        ? `<td class="${selected === g.key ? "picked" : ""}">
-             <div class="t">${esc(g.name)}</div>
-             <div class="m">${g.count} link${g.count === 1 ? "" : "s"} in
-               ${g.tables} table${g.tables === 1 ? "" : "s"}${
-                 g.undescribed ? ` · ${g.undescribed} without a description` : ""}</div>
-             <div class="row">
-               <button class="btn sm" data-pick="${esc(g.key)}">${
-                 selected === g.key ? "Hide tables" : "Open tables"}</button>
-             </div>
-           </td>`
-        : `<td class="pad"></td>`).join("")}</tr>`);
-    }
-    return `<div class="tablewrap"><table class="cellgrid">
-        <tbody>${rows.join("")}</tbody>
-      </table></div>${window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE)}`;
+    // Independent tiles rather than cells of one table: each project is its
+    // own thing, so it gets its own card and its own controls. Three across
+    // and six to a page, with the seventh paging - unchanged.
+    const tiles = slice.map((g) => `
+      <div class="ptile${selected === g.key ? " picked" : ""}">
+        <button class="ptileopen" data-pick="${esc(g.key)}">
+          <span class="t">${esc(g.name)}</span>
+        </button>
+        <div class="ptileacts">
+          ${ib("rename", "Rename project", `data-edit="project:${esc(g.key)}"`)}
+          ${ib("remove", "Delete project", `data-remove="project:${esc(g.key)}"`)}
+        </div>
+      </div>`).join("");
+
+    return `<div class="ptiles">${tiles ||
+        `<div class="empty">No project matches that search.</div>`}</div>
+      ${window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE)}`;
   }
 
   /** One named table inside a project. */
@@ -315,15 +344,22 @@
           ? `<a class="btn sm" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>`
           : dash}</td>
         <td class="actions">
-          <button class="btn sm" data-edit="link:${esc(r.id)}">Edit</button>
-          <button class="btn sm" data-remove="link:${esc(r.id)}">Remove</button>
+          ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="link:${esc(r.id)}"`)}
+          ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="link:${esc(r.id)}"`)}
         </td>
       </tr>`).join("");
 
-    const emailPicker = `<select class="accountpick" data-account="${esc(key)}">
-        <option value="">All email access</option>
-        ${emails.map((a) => `<option value="${esc(a)}"${a === chosen ? " selected" : ""}>${esc(a)}</option>`).join("")}
-      </select>`;
+    // The filter belongs to its column, not to a separate control above the
+    // table: a lone "All email access" select gave no clue which column it
+    // acted on.
+    const emailHeader = `<th class="emailhead">
+        <span class="emaillabel">Email Access</span>
+        ${emails.length ? `<select class="accountpick" data-account="${esc(key)}"
+          title="Filter by account" aria-label="Filter by email access">
+          <option value="">All</option>
+          ${emails.map((a) => `<option value="${esc(a)}"${a === chosen ? " selected" : ""}>${esc(a)}</option>`).join("")}
+        </select>` : ""}
+      </th>`;
 
     return `<section class="linksection">
         <div class="sectionhead">
@@ -332,10 +368,9 @@
             ${searchBox(key, "Search site or description…")}
           </div>
           <div class="sectiontools">
-            ${emails.length ? emailPicker : ""}
-            <button class="btn sm" data-addto="${esc(projectName)}|${esc(tableName)}">Add link</button>
-            <button class="btn sm" data-edit="table:${esc(projectName)}|${esc(tableName)}">Rename</button>
-            <button class="btn sm" data-remove="table:${esc(projectName)}|${esc(tableName)}">Delete</button>
+            ${window.TrackerUI.iconButton("add", "Add link", `data-addto="${esc(projectName)}|${esc(tableName)}"`)}
+            ${window.TrackerUI.iconButton("rename", "Rename", `data-edit="table:${esc(projectName)}|${esc(tableName)}"`)}
+            ${window.TrackerUI.iconButton("remove", "Delete", `data-remove="table:${esc(projectName)}|${esc(tableName)}"`)}
           </div>
         </div>
         ${rows.length
@@ -343,7 +378,7 @@
                <thead><tr>
                  ${window.TrackerUI.sortHeader(key, "name", "Site")}
                  ${window.TrackerUI.sortHeader(key, "description", "Description")}
-                 <th>Email Access</th><th>Link</th><th></th>
+                 ${emailHeader}<th>Link</th><th></th>
                </tr></thead>
                <tbody>${body}</tbody>
              </table></div>${window.TrackerUI.pager(key, rows.length, ROWS_PER_PAGE)}`
@@ -358,13 +393,18 @@
       <h2 class="page">Projects</h2>
       <p class="lede">Open a project to see its tables. Add your own tables to
         group links however you need.</p>
-      <div class="sectiontools">${searchBox("projects", "Search projects…")}</div>
+      <div class="sectionhead">
+        <div class="sectionleft">${searchBox("projects", "Search projects…")}</div>
+        <div class="sectiontools">
+          ${window.TrackerUI.iconButton("add", "Add project", `data-newproject="1"`)}
+        </div>
+      </div>
       ${projectsTable()}
       ${g ? `
         <div class="opened">
           <div class="sectionhead">
-            <h2 class="page sub">Link tables in ${esc(g.name)}</h2>
-            <button class="btn sm" data-newtable="${esc(g.name)}">New table</button>
+            <h2 class="page sub">Table of Artifacts</h2>
+            ${window.TrackerUI.iconButton("add", "New table", `data-newtable="${esc(g.name)}"`)}
           </div>
           ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
         </div>` : ""}`;
@@ -422,7 +462,70 @@
     window.TrackerRender();
   }
 
+  async function newProject() {
+    const v = await window.TrackerUI.formDialog({
+      title: "Add project", submitLabel: "Add project",
+      fields: [{ name: "name", label: "Project name", value: "",
+                 placeholder: "What the project is called" }],
+    });
+    if (!v || !v.name) return;
+    const ps = projectStore();
+    if (!groups().some((g) => g.name === v.name)) {
+      ps.added.push({ key: slug(v.name), name: v.name });
+      // A project hidden earlier under the same name comes back rather than
+      // being added twice.
+      ps.hidden = ps.hidden.filter((k) => k !== slug(v.name));
+      writeProjects(ps);
+    }
+    window.TrackerRender();
+  }
+
+  async function renameProject(key) {
+    const g = groupByKey(key);
+    if (!g) return;
+    const v = await window.TrackerUI.formDialog({
+      title: "Rename project", submitLabel: "Save name",
+      fields: [{ name: "name", label: "Project name", value: g.name }],
+    });
+    if (!v || !v.name || v.name === g.name) return;
+    const ps = projectStore();
+    const own = ps.added.find((a) => slug(a.name) === key || a.key === key);
+    if (own) own.name = v.name;          // one you added: rename it in place
+    else ps.renamed[key] = v.name;       // a workbook one: overlay the name
+    writeProjects(ps);
+    if (selected === key) selected = slug(v.name);
+    window.TrackerRender();
+  }
+
+  async function deleteProject(key) {
+    const g = groupByKey(key);
+    if (!g) return;
+    const n = rowsFor(key).length;
+    const v = await window.TrackerUI.formDialog({
+      title: "Delete project",
+      intro: `Remove "${g.name}" from the tracker?` +
+             (n ? ` Its ${n} link${n === 1 ? "" : "s"} go with it.` : " It has no links.") +
+             " Links from the workbook can be brought back by adding the project again.",
+      submitLabel: "Delete project",
+      fields: [{ name: "confirm", label: "Type the project name to confirm", value: "",
+                 placeholder: g.name }],
+    });
+    if (!v || v.confirm.trim().toLowerCase() !== g.name.trim().toLowerCase()) return;
+    const ps = projectStore();
+    ps.added = ps.added.filter((a) => slug(a.name) !== key && a.key !== key);
+    if (!ps.hidden.includes(key)) ps.hidden.push(key);
+    writeProjects(ps);
+    if (selected === key) selected = null;
+    window.TrackerRender();
+  }
+
   document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-newproject]")) return newProject();
+    const pe = e.target.closest('[data-edit^="project:"]');
+    if (pe) return renameProject(window.TrackerUI.actionId(pe, "edit"));
+    const pd = e.target.closest('[data-remove^="project:"]');
+    if (pd) return deleteProject(window.TrackerUI.actionId(pd, "remove"));
+
     const pick = e.target.closest("[data-pick]");
     if (pick) {
       selected = selected === pick.dataset.pick ? null : pick.dataset.pick;
@@ -506,7 +609,7 @@
 
   window.TrackerLinks = {
     searchBox, findValue: (key) => (find[key] || "").toLowerCase(),
-    resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, saveRow, addRow, addTable,
+    resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, newProject, saveRow, addRow, addTable,
     renameTable, deleteTable,
     removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,
   };

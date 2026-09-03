@@ -22,8 +22,8 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
-  const write = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+  const read = (k) => window.TrackerStore.get(k, []);
+  const write = (k, v) => window.TrackerStore.set(k, v);
 
   const ART_STATUS = ["Not started", "In progress", "For review", "Signed off", "Blocked"];
   const TL_STATUS = ["Not started", "In progress", "Complete", "Blocked"];
@@ -153,7 +153,7 @@
           ${window.TrackerLinks.searchBox("art:" + p.id, "Search artifacts…")}
         </div>
         <div class="sectiontools">
-          <button class="btn sm" data-edit="art:${esc(p.id)}|new">Add artifact</button>
+          ${window.TrackerUI.iconButton("add", "Add artifact", `data-edit="art:${esc(p.id)}|new"`)}
         </div>
       </div>
       ${rows.length ? `<div class="tablewrap"><table class="linktable projtable"><thead><tr>
@@ -169,8 +169,8 @@
             <td>${a.owner ? esc(a.owner) : dash}</td>
             <td>${a.url ? `<a class="btn sm" href="${esc(a.url)}" target="_blank" rel="noopener">Open ↗</a>` : dash}</td>
             <td><span class="actions">
-              <button class="btn sm" data-edit="art:${esc(p.id)}|${esc(a.id)}">Edit</button>
-              <button class="btn sm" data-remove="art:${esc(a.id)}">Remove</button>
+              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="art:${esc(p.id)}|${esc(a.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="art:${esc(a.id)}"`)}
             </span></td>
           </tr>`).join("")}</tbody></table></div>${pager("art:" + p.id, rows)}`
         : `<div class="empty">No artifacts yet.</div>`}
@@ -188,7 +188,7 @@
         </div>
         <div class="sectiontools">
           ${overall === null ? "" : `<span class="rollup">Overall ${bar(overall)}</span>`}
-          <button class="btn sm" data-edit="tl:${esc(p.id)}|new">Add milestone</button>
+          ${window.TrackerUI.iconButton("add", "Add milestone", `data-edit="tl:${esc(p.id)}|new"`)}
         </div>
       </div>
       ${rows.length ? `<div class="tablewrap"><table class="linktable projtable"><thead><tr>
@@ -206,8 +206,8 @@
             <td class="pcell">${bar(t.progress)}</td>
             <td>${statusTag(t.status)}</td>
             <td><span class="actions">
-              <button class="btn sm" data-edit="tl:${esc(p.id)}|${esc(t.id)}">Edit</button>
-              <button class="btn sm" data-remove="tl:${esc(t.id)}">Remove</button>
+              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="tl:${esc(p.id)}|${esc(t.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="tl:${esc(t.id)}"`)}
             </span></td>
           </tr>`).join("")}</tbody></table></div>${pager("tl:" + p.id, rows)}`
         : `<div class="empty">No milestones yet.</div>`}

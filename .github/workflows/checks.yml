@@ -41,6 +41,12 @@ jobs:
         run: node checks/check_crud.mjs
       - name: Every table pages
         run: node checks/check_paging.mjs
+      - name: Storage is owned by one module
+        run: node checks/check_storage.mjs
+      - name: Backup saves and restores everything
+        run: node checks/check_backup.mjs
+      - name: The visible contract holds
+        run: node checks/check_ui_bits.mjs
       - name: Task table and dialog behave
         run: node checks/check_tasks.mjs
       - name: Artifacts and timeline behave

@@ -81,7 +81,7 @@
   /* ---------- link inventory (flattened, for search + overview) ---------- */
   /**
    * Projects shown in the nav and counted on Overview. A project carrying
-   * active:false stays in the JSON and in Export JSON but leaves the UI, so
+   * active:false stays in the JSON and in the backup file but leaves the UI, so
    * a finished engagement comes back by flipping one flag.
    */
   const activeProjects = () => state.data.projects.filter((p) => p.active !== false);
@@ -113,8 +113,7 @@
   }
 
   const driveLinks = () => {
-    try { return JSON.parse(localStorage.getItem("tracker.driveLinks") || "[]"); }
-    catch { return []; }
+    return window.TrackerStore.get("tracker.driveLinks", []);
   };
   window.TrackerDriveLinks = driveLinks;
 
@@ -196,8 +195,8 @@
           { key: "url", label: "Link", render: linkCell },
           { key: "id", label: "", render: (r) =>
               `<span class="actions">
-                 <button class="btn sm" data-edit="act:${esc(r.id)}">Edit</button>
-                 <button class="btn sm" data-remove="act:${esc(r.id)}">Remove</button>
+                 ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="act:${esc(r.id)}"`)}
+                 ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="act:${esc(r.id)}"`)}
                </span>` },
         ], rows)}`;
     },
@@ -341,34 +340,19 @@
       b.setAttribute("aria-pressed", b.dataset.themeSet === mode));
   }
   const themeMode = () => {
-    const v = localStorage.getItem("tracker.theme");
+    const v = window.TrackerStore.getText("tracker.theme");
     return v === "light" || v === "dark" ? v : "system";
   };
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-theme-set]");
     if (!b) return;
     const mode = b.dataset.themeSet;
-    if (mode === "system") localStorage.removeItem("tracker.theme");
-    else localStorage.setItem("tracker.theme", mode);
+    if (mode === "system") window.TrackerStore.remove("tracker.theme");
+    else window.TrackerStore.setText("tracker.theme", mode);
     applyTheme(mode);
   });
   applyTheme(themeMode());
   window.TrackerTheme = { applyTheme, themeMode };
-
-  $("#exportBtn").addEventListener("click", () => {
-    const tasks = window.TrackerTasks.load().map((t) => ({
-      ...t,
-      // Attachment bytes live in IndexedDB and do not travel in a JSON export.
-      attachments: (t.attachments || []).map((a) => ({ name: a.name, kind: a.kind, url: a.url })),
-    }));
-    const blob = new Blob([JSON.stringify({ ...state.data, driveLinks: driveLinks(), tasks }, null, 1)],
-      { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "tracker-export.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
 
   window.addEventListener("hashchange", () => {
     const r = location.hash.slice(1) || "overview";

@@ -31,13 +31,13 @@
     location.protocol.startsWith("http") ? location.origin : "https://perezfiles01-droid.github.io";
 
   const cfg = () => ({
-    clientId: localStorage.getItem("tracker.clientId") || (window.TRACKER_CONFIG?.googleClientId || ""),
-    apiKey: localStorage.getItem("tracker.apiKey") || (window.TRACKER_CONFIG?.googleApiKey || ""),
+    clientId: window.TrackerStore.getText("tracker.clientId") || (window.TRACKER_CONFIG?.googleClientId || ""),
+    apiKey: window.TrackerStore.getText("tracker.apiKey") || (window.TRACKER_CONFIG?.googleApiKey || ""),
     folderId: window.TRACKER_CONFIG?.driveFolderId || "",
   });
 
-  const saved = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
-  const save = (list) => localStorage.setItem(KEY, JSON.stringify(list));
+  const saved = () => window.TrackerStore.get(KEY, []);
+  const save = (list) => window.TrackerStore.set(KEY, list);
 
   /* ---------- auth ---------- */
   function loadGis() {
@@ -188,8 +188,8 @@
              <div class="m">${esc(l.project)}${l.modified ? " · modified " + esc(l.modified) : ""}</div>
              <div class="row">
                <span class="tag">${esc(l.meta || "drive")}</span>
-               <button class="btn sm" data-edit="drive:${esc(l.id)}">Edit</button>
-               <button class="btn sm" data-remove="drive:${esc(l.id)}">Remove</button>
+               ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="drive:${esc(l.id)}"`)}
+               ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="drive:${esc(l.id)}"`)}
              </div>
            </td>`
         : `<td class="pad"></td>`).join("")}</tr>`);
@@ -291,14 +291,14 @@
 
     if (e.target.id === "openDrive") return window.TrackerGo("drive");
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
-      $("#clientId").value = localStorage.getItem("tracker.clientId") || "";
-      $("#apiKey").value = localStorage.getItem("tracker.apiKey") || "";
+      $("#clientId").value = window.TrackerStore.getText("tracker.clientId");
+      $("#apiKey").value = window.TrackerStore.getText("tracker.apiKey");
       $("#settingsModal").hidden = false;
     }
     if (e.target.id === "settingsCancel" || e.target.id === "settingsModal") $("#settingsModal").hidden = true;
     if (e.target.id === "settingsSave") {
-      localStorage.setItem("tracker.clientId", $("#clientId").value.trim());
-      localStorage.setItem("tracker.apiKey", $("#apiKey").value.trim());
+      window.TrackerStore.setText("tracker.clientId", $("#clientId").value.trim());
+      window.TrackerStore.setText("tracker.apiKey", $("#apiKey").value.trim());
       $("#settingsModal").hidden = true;
       notice = "Credentials saved in this browser.";
       window.TrackerRender();

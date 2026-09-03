@@ -14,10 +14,10 @@
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   const LOG = "tracker.activity";
-  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
-  const logRead = () => { try { return JSON.parse(localStorage.getItem(LOG) || "[]"); } catch { return []; } };
-  const logWrite = (a) => localStorage.setItem(LOG, JSON.stringify(a));
-  const save = (list) => localStorage.setItem(KEY, JSON.stringify(list));
+  const load = () => window.TrackerStore.get(KEY, []);
+  const logRead = () => window.TrackerStore.get(LOG, []);
+  const logWrite = (a) => window.TrackerStore.set(LOG, a);
+  const save = (list) => window.TrackerStore.set(KEY, list);
   window.TrackerTasks = { load };
 
   /* ---------- attachment bytes ---------- */
@@ -244,10 +244,10 @@
               `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
           </table></div>
           <div class="row">
-            <button class="btn sm" data-edit="task:${esc(t.id)}">Edit</button>
-            <button class="btn sm" data-remove="task:${esc(t.id)}">Remove</button>
+            ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
+            ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
             ${t.status === "Done" ? "" :
-              `<button class="btn sm" data-done="${esc(t.id)}">Mark done</button>`}
+              `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
           </div>
         </div>
       </td></tr>`;

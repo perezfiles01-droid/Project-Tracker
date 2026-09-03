@@ -286,34 +286,43 @@ ok("a renamed pinned link survives a reload",
    opening UNDERNEATH rather than replacing the tiles.
 --------------------------------------------------------------------------- */
 await page.click('button[data-route="overview"]');
-await page.waitForSelector("table.cellgrid");
+await page.waitForSelector(".ptiles");
 ok("the page is headed Projects",
    (await page.locator("h2.page").first().textContent()).trim() === "Projects");
 ok("Overview shows no KPI stat row", (await page.locator(".stats").count()) === 0);
 
+// Projects are independent tiles now rather than cells of one table, so the
+// three-across rule is read off the grid instead of a row's cell count.
 const projCols = Number(readFileSync(join(root, "assets/links.js"), "utf8")
   .match(/PROJ_COLS\s*=\s*(\d+)/)[1]);
 const wide = await page.evaluate(() =>
-  Math.max(...[...document.querySelectorAll("#view table.cellgrid tbody tr")]
-    .map((r) => r.children.length)));
-ok(`the projects table is ${projCols} across`, wide === projCols, `saw ${wide}`);
+  getComputedStyle(document.querySelector(".ptiles")).gridTemplateColumns.split(" ").length);
+ok(`the project tiles are ${projCols} across`, wide === projCols, `saw ${wide}`);
 ok("Google Drive is not a project tile",
-   !(await page.locator("#view table.cellgrid").innerText()).includes("Google Drive"));
+   !(await page.locator("#view .ptiles").innerText()).includes("Google Drive"));
 
 ok("no link table is open before a project is picked",
    (await page.locator("table.linktable").count()) === 0);
 await page.click('[data-pick="edrms-adb"]');
 await page.waitForSelector("table.linktable");
-ok("the projects table is still on screen with the tables open",
-   (await page.locator("#view table.cellgrid").count()) === 1);
+ok("the project tiles are still on screen with the tables open",
+   (await page.locator("#view .ptiles").count()) === 1);
 ok("EDRMS ADB opens its two workbook tables",
    (await page.locator("section.linksection").count()) === 2,
    String(await page.locator("section.linksection").count()));
 
-const heads = await page.locator("table.linktable").first().locator("thead th").allTextContents();
+// The Email Access header carries its own filter, so its label is read from
+// the label element rather than from the whole cell - otherwise the select's
+// option text would be read as part of the column name.
+const heads = await page.evaluate(() => {
+  const t = document.querySelector("table.linktable");
+  return [...t.querySelectorAll("thead th")].map((th) => {
+    const label = th.querySelector(".emaillabel");
+    return (label ? label.textContent : th.textContent).replace(/[\s↑↓]+$/, "").trim();
+  });
+});
 ok("the link table carries Site / Description / Email Access / Link",
-   JSON.stringify(heads.slice(0, 4).map((h) => h.replace(/[ ↑↓]+$/, "")))
-     === JSON.stringify(["Site", "Description", "Email Access", "Link"]),
+   JSON.stringify(heads.slice(0, 4)) === JSON.stringify(["Site", "Description", "Email Access", "Link"]),
    heads.join(" · "));
 
 // Per-section search: one box must not filter another table.
@@ -358,7 +367,7 @@ await page.waitForTimeout(200);
 // against an app that is behaving correctly.
 ok("a table you name appears", (await page.locator("#view").textContent()).includes("UAT links"));
 await page.reload({ waitUntil: "load" });
-await page.waitForSelector("table.cellgrid");
+await page.waitForSelector(".ptiles");
 await page.click('[data-pick="edrms-adb"]');
 await page.waitForTimeout(200);
 ok("the created table survives a reload", (await page.locator("#view").textContent()).includes("UAT links"));
