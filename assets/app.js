@@ -40,6 +40,8 @@
   }
 
   /* ---------- sortable table ---------- */
+  const ROWS_PER_PAGE = 10;
+
   function table(routeKey, cols, rows) {
     const s = state.sort[routeKey];
     let data = rows.slice();
@@ -52,12 +54,16 @@
     const head = cols.map((c) =>
       `<th data-sort="${c.key}">${esc(c.label)}${s && s.key === c.key ? (s.dir === "desc" ? " ↓" : " ↑") : ""}</th>`
     ).join("");
-    const body = data.map((r) =>
+    // Paged like every other table in the app, so a long log does not grow
+    // the page without limit.
+    const cur = window.TrackerUI.pageIndex(routeKey, data.length, ROWS_PER_PAGE);
+    const body = data.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE).map((r) =>
       `<tr>${cols.map((c) => `<td class="${c.wrap ? "wrap" : ""}">${c.render(r)}</td>`).join("")}</tr>`
     ).join("");
     return data.length
       ? `<div class="tablewrap"><table data-route="${routeKey}">
-           <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+           <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` +
+        window.TrackerUI.pager(routeKey, data.length, ROWS_PER_PAGE)
       : `<div class="empty">Nothing matches your search.</div>`;
   }
 
@@ -374,7 +380,6 @@
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((d) => {
       state.data = d;
-      $("#genStamp").textContent = "Data built " + d.generatedAt;
       render();
     })
     .catch((err) => {

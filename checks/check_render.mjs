@@ -47,7 +47,9 @@ await page.evaluate((n) => {
   const links = [];
   for (let i = 1; i <= n; i++) {
     links.push({ id: "p" + i, name: "Pinned link " + i, url: "https://example.test/" + i,
-                 project: "Google Drive", meta: "manual", verified: true });
+                 // Not "manual": that marker now files a link under the
+                 // separate "Links you added" table with its own pager.
+                 project: "Google Drive", meta: "document", verified: true });
   }
   localStorage.setItem("tracker.driveLinks", JSON.stringify(links));
 }, PINNED + 1);
@@ -400,6 +402,72 @@ await page.waitForTimeout(120);
 ok("the theme choice survives a reload", (await bg()) === dark);
 ok("the chosen segment is the pressed one",
    (await page.getAttribute('[data-theme-set="dark"]', "aria-pressed")) === "true");
+
+/* ---------------------------------------------------------------------------
+   The Drive page keeps files pinned from Drive and links typed in by hand in
+   SEPARATE tables. They used to share one list, which mixed two different
+   things under one heading.
+--------------------------------------------------------------------------- */
+await page.evaluate(() => localStorage.setItem("tracker.driveLinks", JSON.stringify([
+  { id: "d-file", name: "A pinned Drive file", url: "https://example.test/f",
+    project: "Google Drive", meta: "document" },
+  { id: "d-manual", name: "A link I typed in", url: "https://example.test/m",
+    project: "Google Drive", meta: "manual" },
+])));
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="drive"]');
+await page.waitForSelector("table.cellgrid");
+const driveHeads = await page.$$eval("#view h3.sec", (hs) => hs.map((h) => h.textContent.trim()));
+ok("the Drive page has a pinned-files table and an added-links table",
+   driveHeads.some((h) => /Pinned from Drive/i.test(h)) &&
+   driveHeads.some((h) => /Links you added/i.test(h)), driveHeads.join(" · "));
+const tables = page.locator("#view table.cellgrid");
+ok("there are two pinned tables", (await tables.count()) === 2, String(await tables.count()));
+const t0 = await tables.nth(0).textContent();
+const t1 = await tables.nth(1).textContent();
+ok("the pinned file is in the first table only",
+   t0.includes("A pinned Drive file") && !t1.includes("A pinned Drive file"));
+ok("the typed link is in the second table only",
+   t1.includes("A link I typed in") && !t0.includes("A link I typed in"));
+
+/* ---------------------------------------------------------------------------
+   A clicked task opens its OWN table of details, not a loose block.
+--------------------------------------------------------------------------- */
+await page.evaluate(() => localStorage.setItem("tracker.tasks", JSON.stringify([
+  { id: "t-detail", no: "1", name: "Named task", project: "GLASS",
+    description: "The long description of this task", due: "2020-01-01",
+    ref: "https://example.test/r", status: "To do", attachments: [] },
+])));
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="todo"]');
+await page.waitForSelector("tr.taskrow");
+ok("no detail table before the task is clicked",
+   (await page.locator("table.detailtable").count()) === 0);
+await page.click("tr.taskrow td:nth-child(2)");
+await page.waitForTimeout(300);
+// Asserted rather than waited for: a waitForSelector here would throw and
+// abort the whole suite instead of reporting which guard failed.
+ok("clicking the task opens a detail TABLE",
+   (await page.locator("table.detailtable").count()) === 1,
+   String(await page.locator("table.detailtable").count()));
+const labels = await page.$$eval("table.detailtable th", (ts) => ts.map((t) => t.textContent.trim()));
+for (const want of ["Task No.", "Name of task", "Project", "Description",
+                    "Task Given Date", "Due Date", "Reference link", "Status"]) {
+  ok(`the detail table lists "${want}"`, labels.includes(want), labels.join(" · "));
+}
+ok("the detail table shows the description",
+   (await page.locator("table.detailtable").textContent()).includes("The long description of this task"));
+await page.click("tr.taskrow td:nth-child(2)");
+await page.waitForTimeout(150);
+ok("clicking the row again closes the detail table",
+   (await page.locator("table.detailtable").count()) === 0);
+
+/* ---------------------------------------------------------------------------
+   The build stamp is gone.
+--------------------------------------------------------------------------- */
+ok("no #genStamp element remains", (await page.locator("#genStamp").count()) === 0);
+ok("no \"Data built\" text anywhere on the page",
+   !(await page.locator("body").textContent()).includes("Data built"));
 
 ok("no console or page errors", errors.length === 0, errors.join(" | "));
 

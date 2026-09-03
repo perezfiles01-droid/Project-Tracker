@@ -184,6 +184,7 @@
   }
 
   /* ---------- render ---------- */
+  const ROWS_PER_PAGE = 10;
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
   let openRow = null;   // the task expanded in place
 
@@ -212,18 +213,36 @@
   }
 
   /** The expanded detail shown when a row is clicked. */
+  /**
+   * The clicked task opens its OWN table of that task's details, one labelled
+   * row per field, rather than a loose block. Every field is listed even when
+   * empty, so what is missing is as visible as what is filled in.
+   */
   function detailRow(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
+    const dash = `<span class="tag dead">—</span>`;
+    const val = (v) => (v ? esc(v) : dash);
+    const rows = [
+      ["Task No.", val(t.no)],
+      ["Name of task", val(t.name)],
+      ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
+      ["Description", t.description
+        ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
+      ["Task Given Date", val(t.given)],
+      ["Due Date", t.due
+        ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
+      ["Reference link", t.ref
+        ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>` : dash],
+      ["Status", `<span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>`],
+      ["Assignee", val(t.assignee)],
+      ["Attachments", atts || dash],
+    ];
     return `<tr class="detail"><td colspan="${COLUMNS.length}">
         <div class="taskdetail">
-          <div class="m desc">${t.description ? esc(t.description) : "No description recorded."}</div>
-          <div class="row">
-            <span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>
-            ${t.assignee ? `<span class="tag">${esc(t.assignee)}</span>` : ""}
-            ${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : ""}
-            ${overdue(t) ? `<span class="tag warn">overdue</span>` : ""}
-          </div>
-          ${atts ? `<div class="row atts">${atts}</div>` : ""}
+          <div class="tablewrap"><table class="detailtable">
+            <tbody>${rows.map(([k, v]) =>
+              `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
+          </table></div>
           <div class="row">
             <button class="btn sm" data-edit="task:${esc(t.id)}">Edit</button>
             <button class="btn sm" data-remove="task:${esc(t.id)}">Remove</button>
@@ -254,6 +273,8 @@
     const rows = window.TrackerUI.sortRows("tasks",
       all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
     const late = rows.filter(overdue).length;
+    const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
+    const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
@@ -272,8 +293,8 @@
                ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[4])}
                <th>${COLUMNS[5]}</th>
              </tr></thead>
-             <tbody>${rows.map(taskRow).join("")}</tbody>
-           </table></div>`
+             <tbody>${slice.map(taskRow).join("")}</tbody>
+           </table></div>${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}`
         : `<div class="empty">No tasks yet.</div>`}`;
   }
 
@@ -288,11 +309,11 @@
     }
     const ed = e.target.closest('[data-edit^="task:"]');
     if (ed) {
-      const id = ed.dataset.edit.slice(5);
+      const id = window.TrackerUI.actionId(ed, "edit");
       return editTask(id === "new" ? null : id);
     }
     const rm = e.target.closest('[data-remove^="task:"]');
-    if (rm) return removeTask(rm.dataset.remove.slice(5));
+    if (rm) return removeTask(window.TrackerUI.actionId(rm, "remove"));
     const att = e.target.closest("[data-att]");
     if (att) return openAttachment(att.dataset.att);
   });
@@ -324,11 +345,11 @@
   document.addEventListener("click", (e) => {
     const ed = e.target.closest('[data-edit^="act:"]');
     if (ed) {
-      const id = ed.dataset.edit.slice(4);
+      const id = window.TrackerUI.actionId(ed, "edit");
       return logEdit(id === "new" ? null : id);
     }
     const rm = e.target.closest('[data-remove^="act:"]');
-    if (rm) return logRemove(rm.dataset.remove.slice(4));
+    if (rm) return logRemove(window.TrackerUI.actionId(rm, "remove"));
   });
 
   window.TrackerTasks = { view, load, editTask, markDone, STATUSES, COLUMNS,

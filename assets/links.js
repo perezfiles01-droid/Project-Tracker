@@ -437,21 +437,21 @@
     }
     const tre = e.target.closest('[data-edit^="table:"]');
     if (tre) {
-      const spec = tre.dataset.edit.slice(6);
+      const spec = window.TrackerUI.actionId(tre, "edit");
       const i = spec.lastIndexOf("|");
       return renamePrompt(spec.slice(0, i), spec.slice(i + 1));
     }
     const trd = e.target.closest('[data-remove^="table:"]');
     if (trd) {
-      const spec = trd.dataset.remove.slice(6);
+      const spec = window.TrackerUI.actionId(trd, "remove");
       const i = spec.lastIndexOf("|");
       return deletePrompt(spec.slice(0, i), spec.slice(i + 1));
     }
     const ed = e.target.closest('[data-edit^="link:"]');
-    if (ed) return edit(ed.dataset.edit.slice(5));
+    if (ed) return edit(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="link:"]');
     if (rm) {
-      const row = resolved().find((r) => r.id === rm.dataset.remove.slice(5));
+      const row = resolved().find((r) => r.id === window.TrackerUI.actionId(rm, "remove"));
       if (row) { removeRow(row); window.TrackerRender(); }
     }
   });

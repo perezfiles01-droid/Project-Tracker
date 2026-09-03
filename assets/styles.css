@@ -305,3 +305,13 @@ table.projtable .note2{
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow:hidden;font-size:12.5px;color:var(--muted);margin-top:3px;
 }
+
+/* ---------- task detail table ---------- */
+table.detailtable{min-width:0;width:100%}
+table.detailtable th[scope="row"]{
+  width:190px;text-transform:none;letter-spacing:0;font-size:12.5px;
+  color:var(--dim);background:transparent;position:static;cursor:default;
+  vertical-align:top;white-space:normal;
+}
+table.detailtable td{vertical-align:top}
+table.detailtable .detaildesc{white-space:pre-wrap}

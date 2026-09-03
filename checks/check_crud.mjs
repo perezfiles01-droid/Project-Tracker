@@ -72,6 +72,79 @@ for (const k of names) {
 }
 ok("tables are among the collections found", names.includes("table"), names.join(", "));
 
+/* ---------------------------------------------------------------------------
+   Structural pairing is not enough: a Remove button can exist and do nothing.
+
+   drive.js sliced "drive:<id>" by seven characters where the prefix is six,
+   so Remove passed a truncated id, matched no record and silently changed
+   nothing - while the check above, which only counts controls, stayed green.
+
+   So every removable kind found in the DOM is now actually clicked, and the
+   control must disappear. Kinds are discovered at runtime, so a collection
+   added later is exercised without being named here.
+--------------------------------------------------------------------------- */
+/** Quote an attribute value for a CSS selector. */
+const cssQuote = (v) => String(v).replace(/["\\]/g, "\\$&");
+
+async function removalWorks(kind) {
+  // Reload first: the picked project and the open task row are module state,
+  // so a second visit would TOGGLE them shut and hide the very controls this
+  // is looking for - which reads as "no Remove button" rather than a guard bug.
+  await page.reload({ waitUntil: "load" });
+  await page.waitForTimeout(300);
+
+  const sel = `[data-remove^="${kind}:"]`;
+  const routes = await page.$$eval("#nav button[data-route]", (bs) => bs.map((b) => b.dataset.route));
+  for (const r of routes) {
+    await page.click(`#nav button[data-route="${r}"]`);
+    await page.waitForTimeout(220);
+    if (!(await page.locator(sel).count())) {
+      const pick = page.locator("[data-pick]").first();
+      if (await pick.count()) { await pick.click(); await page.waitForTimeout(320); }
+    }
+    if (!(await page.locator(sel).count())) {
+      const row = page.locator("tr.taskrow").first();
+      if (await row.count()) { await row.click(); await page.waitForTimeout(220); }
+    }
+
+    const before = await page.locator(sel).count();
+    if (!before) continue;
+
+    // The attribute carries the identity, which a confirm dialog may ask for.
+    const spec = await page.locator(sel).first().getAttribute("data-remove");
+    page.once("dialog", (d) => d.accept());          // a native confirm, if any
+    await page.locator(sel).first().click();
+    await page.waitForTimeout(300);
+
+    // Deleting a table asks through the app's own dialog and requires the
+    // table name typed back; it then covers the page until it is answered.
+    const box = page.locator("#formDialog .box");
+    if (await box.count() && await box.isVisible()) {
+      const confirm = page.locator("#fd_confirm");
+      if (await confirm.count()) {
+        const name = spec.slice(spec.indexOf(":") + 1);
+        await confirm.fill(name.slice(name.lastIndexOf("|") + 1));
+      }
+      await page.locator('#formDialog [data-fd="save"]').click();
+      await page.waitForTimeout(350);
+    }
+    // Counted by the EXACT item, not by how many controls of this kind are
+    // left: deleting a project's last table leaves an empty fallback table
+    // behind it, so the count can hold at 1 while the delete worked fine.
+    const after = await page.locator(`[data-remove="${cssQuote(spec)}"]`).count();
+    return { before: 1, after, spec };
+  }
+  return null;
+}
+
+for (const k of names) {
+  if (!kinds[k].remove) continue;
+  const res = await removalWorks(k);
+  if (!res) { ok(`"${k}": a Remove control was reachable to click`, false, "none found on any route"); continue; }
+  ok(`"${k}": clicking Remove actually removes it`, res.after === 0,
+     res.after ? `${res.spec} is still on the page` : res.spec);
+}
+
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();
 console.log(failed ? `\n${failed} CRUD check(s) failed` : "\nPASS: every authored collection can be renamed and deleted");

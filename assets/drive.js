@@ -171,9 +171,9 @@
    * A table rather than a grid so the columns stay aligned as names vary in
    * length, and paged so the page does not grow without limit.
    */
-  function pinnedTable(list) {
-    if (!list.length) return `<div class="empty">Nothing pinned yet.</div>`;
-    const cur = clampPage("pinned", list.length, PINNED_PER_PAGE);
+  function pinnedTable(list, key = "pinned") {
+    if (!list.length) return `<div class="empty">Nothing here yet.</div>`;
+    const cur = clampPage(key, list.length, PINNED_PER_PAGE);
     const slice = list.slice(cur * PINNED_PER_PAGE, (cur + 1) * PINNED_PER_PAGE);
 
     const rows = [];
@@ -197,7 +197,7 @@
 
     return `<div class="tablewrap"><table class="cellgrid">
         <tbody>${rows.join("")}</tbody>
-      </table></div>${pager("pinned", list.length, PINNED_PER_PAGE)}`;
+      </table></div>${pager(key, list.length, PINNED_PER_PAGE)}`;
   }
 
   /**
@@ -232,6 +232,12 @@
     const list = saved().filter((l) => !q || JSON.stringify(l).toLowerCase().includes(q));
     const files = browsing.filter((f) => !q || f.name.toLowerCase().includes(q));
 
+    // Two tables rather than one: a file pinned from the Drive list and a link
+    // typed in by hand are different things and were previously mixed in one
+    // list. "manual" is the marker the add path already writes.
+    const fromDrive = list.filter((l) => l.meta !== "manual");
+    const added = list.filter((l) => l.meta === "manual");
+
     const setup = clientId
       ? ""
       : `<div class="note rich"><b>Not connected yet.</b> In the Google Cloud console open
@@ -258,8 +264,11 @@
         ${apiKey ? "" : `<span class="tag dead" style="align-self:center">No API key needed</span>`}
       </div>
 
-      <h3 class="sec">Pinned Drive links (${list.length})</h3>
-      ${pinnedTable(list)}
+      <h3 class="sec">Pinned from Drive (${fromDrive.length})</h3>
+      ${pinnedTable(fromDrive, "pinned")}
+
+      <h3 class="sec">Links you added (${added.length})</h3>
+      ${pinnedTable(added, "added")}
 
       ${token ? `<h3 class="sec">Your Drive — recent files (${files.length})</h3>
         ${filesTable(files)}` : ""}`;
@@ -275,9 +284,9 @@
     if (p) return pin(browsing.find((f) => f.id === p.dataset.pin) || {}, null);
 
     const ed = e.target.closest('[data-edit^="drive:"]');
-    if (ed) return editLink(ed.dataset.edit.slice(6));
+    if (ed) return editLink(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="drive:"]');
-    if (rm) return unpin(rm.dataset.remove.slice(7));
+    if (rm) return unpin(window.TrackerUI.actionId(rm, "remove"));
 
 
     if (e.target.id === "openDrive") return window.TrackerGo("drive");

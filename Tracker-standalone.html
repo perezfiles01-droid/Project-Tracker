@@ -316,6 +316,16 @@ table.projtable .note2{
   overflow:hidden;font-size:12.5px;color:var(--muted);margin-top:3px;
 }
 
+/* ---------- task detail table ---------- */
+table.detailtable{min-width:0;width:100%}
+table.detailtable th[scope="row"]{
+  width:190px;text-transform:none;letter-spacing:0;font-size:12.5px;
+  color:var(--dim);background:transparent;position:static;cursor:default;
+  vertical-align:top;white-space:normal;
+}
+table.detailtable td{vertical-align:top}
+table.detailtable .detaildesc{white-space:pre-wrap}
+
 </style>
 </head>
 <body>
@@ -329,7 +339,6 @@ table.projtable .note2{
     <div class="side-foot">
       <button id="openDrive">Google Drive</button>
       <button id="openSettings">Settings</button>
-      <div id="genStamp" style="margin-top:8px"></div>
     </div>
   </aside>
 
@@ -595,7 +604,22 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     window.TrackerRender();
   });
 
-  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows };
+  /**
+   * The id out of a data-edit / data-remove attribute.
+   *
+   * These are written "kind:id" and every handler used to slice off the
+   * prefix by a hand-counted length. drive.js had unpin(...slice(7)) where
+   * "drive:" is six characters, so Remove passed an id one character short,
+   * matched nothing, and did nothing at all - while Edit, on slice(6) one
+   * line above, worked. Ten sites counted; one was wrong. Nothing counts now.
+   */
+  const actionId = (el, kind) => {
+    const raw = (el && el.dataset ? el.dataset[kind] : "") || "";
+    const i = raw.indexOf(":");
+    return i === -1 ? raw : raw.slice(i + 1);
+  };
+
+  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId };
 })();
 
 </script>
@@ -786,6 +810,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
 
   /* ---------- render ---------- */
+  const ROWS_PER_PAGE = 10;
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
   let openRow = null;   // the task expanded in place
 
@@ -814,18 +839,36 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
 
   /** The expanded detail shown when a row is clicked. */
+  /**
+   * The clicked task opens its OWN table of that task's details, one labelled
+   * row per field, rather than a loose block. Every field is listed even when
+   * empty, so what is missing is as visible as what is filled in.
+   */
   function detailRow(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
+    const dash = `<span class="tag dead">—</span>`;
+    const val = (v) => (v ? esc(v) : dash);
+    const rows = [
+      ["Task No.", val(t.no)],
+      ["Name of task", val(t.name)],
+      ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
+      ["Description", t.description
+        ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
+      ["Task Given Date", val(t.given)],
+      ["Due Date", t.due
+        ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
+      ["Reference link", t.ref
+        ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>` : dash],
+      ["Status", `<span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>`],
+      ["Assignee", val(t.assignee)],
+      ["Attachments", atts || dash],
+    ];
     return `<tr class="detail"><td colspan="${COLUMNS.length}">
         <div class="taskdetail">
-          <div class="m desc">${t.description ? esc(t.description) : "No description recorded."}</div>
-          <div class="row">
-            <span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>
-            ${t.assignee ? `<span class="tag">${esc(t.assignee)}</span>` : ""}
-            ${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : ""}
-            ${overdue(t) ? `<span class="tag warn">overdue</span>` : ""}
-          </div>
-          ${atts ? `<div class="row atts">${atts}</div>` : ""}
+          <div class="tablewrap"><table class="detailtable">
+            <tbody>${rows.map(([k, v]) =>
+              `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
+          </table></div>
           <div class="row">
             <button class="btn sm" data-edit="task:${esc(t.id)}">Edit</button>
             <button class="btn sm" data-remove="task:${esc(t.id)}">Remove</button>
@@ -856,6 +899,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const rows = window.TrackerUI.sortRows("tasks",
       all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
     const late = rows.filter(overdue).length;
+    const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
+    const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
@@ -874,8 +919,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[4])}
                <th>${COLUMNS[5]}</th>
              </tr></thead>
-             <tbody>${rows.map(taskRow).join("")}</tbody>
-           </table></div>`
+             <tbody>${slice.map(taskRow).join("")}</tbody>
+           </table></div>${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}`
         : `<div class="empty">No tasks yet.</div>`}`;
   }
 
@@ -890,11 +935,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
     const ed = e.target.closest('[data-edit^="task:"]');
     if (ed) {
-      const id = ed.dataset.edit.slice(5);
+      const id = window.TrackerUI.actionId(ed, "edit");
       return editTask(id === "new" ? null : id);
     }
     const rm = e.target.closest('[data-remove^="task:"]');
-    if (rm) return removeTask(rm.dataset.remove.slice(5));
+    if (rm) return removeTask(window.TrackerUI.actionId(rm, "remove"));
     const att = e.target.closest("[data-att]");
     if (att) return openAttachment(att.dataset.att);
   });
@@ -926,11 +971,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   document.addEventListener("click", (e) => {
     const ed = e.target.closest('[data-edit^="act:"]');
     if (ed) {
-      const id = ed.dataset.edit.slice(4);
+      const id = window.TrackerUI.actionId(ed, "edit");
       return logEdit(id === "new" ? null : id);
     }
     const rm = e.target.closest('[data-remove^="act:"]');
-    if (rm) return logRemove(rm.dataset.remove.slice(4));
+    if (rm) return logRemove(window.TrackerUI.actionId(rm, "remove"));
   });
 
   window.TrackerTasks = { view, load, editTask, markDone, STATUSES, COLUMNS,
@@ -948,6 +993,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
  * this browser and the seed is never re-applied over your edits.
  */
 (() => {
+  const ROWS_PER_PAGE = 10;   // both project tables page like every other table
+  /** The slice of `rows` on the current page for `key`. */
+  const page = (key, rows) => {
+    const cur = window.TrackerUI.pageIndex(key, rows.length, ROWS_PER_PAGE);
+    return rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
+  };
+  const pager = (key, rows) => window.TrackerUI.pager(key, rows.length, ROWS_PER_PAGE);
+
   const ART = "tracker.artifacts";     // [ {id, project, name, type, status, owner, url, description} ]
   const TL = "tracker.timeline";       // [ {id, project, name, start, end, progress, status, notes} ]
   const SEEDED = "tracker.seeded";     // projects whose seed has already run
@@ -1093,7 +1146,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           <th class="namecol">Artifact</th><th class="phasecol">Type</th>
           <th class="statuscol">Status</th><th class="phasecol">Owner</th>
           <th class="datecol">Link</th><th class="actcol"></th>
-        </tr></thead><tbody>${rows.map((a) => `
+        </tr></thead><tbody>${page("art:" + p.id, rows).map((a) => `
           <tr>
             <td class="wrap"><span class="sitename">${esc(a.name)}</span>
               ${a.description ? `<div class="note2" title="${esc(a.description)}">${esc(a.description)}</div>` : ""}</td>
@@ -1105,7 +1158,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
               <button class="btn sm" data-edit="art:${esc(p.id)}|${esc(a.id)}">Edit</button>
               <button class="btn sm" data-remove="art:${esc(a.id)}">Remove</button>
             </span></td>
-          </tr>`).join("")}</tbody></table></div>`
+          </tr>`).join("")}</tbody></table></div>${pager("art:" + p.id, rows)}`
         : `<div class="empty">No artifacts yet.</div>`}
     </section>`;
   }
@@ -1128,7 +1181,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           <th class="namecol">Milestone</th><th class="phasecol">Phase</th>
           <th class="datecol">Start</th><th class="datecol">Target</th>
           <th class="progcol">Progress</th><th class="statuscol">Status</th><th class="actcol"></th>
-        </tr></thead><tbody>${rows.map((t) => `
+        </tr></thead><tbody>${page("tl:" + p.id, rows).map((t) => `
           <tr>
             <td class="wrap"><span class="sitename">${esc(t.name)}</span>
               ${t.notes ? `<div class="note2" title="${esc(t.notes)}">${esc(t.notes)}</div>` : ""}
@@ -1142,7 +1195,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
               <button class="btn sm" data-edit="tl:${esc(p.id)}|${esc(t.id)}">Edit</button>
               <button class="btn sm" data-remove="tl:${esc(t.id)}">Remove</button>
             </span></td>
-          </tr>`).join("")}</tbody></table></div>`
+          </tr>`).join("")}</tbody></table></div>${pager("tl:" + p.id, rows)}`
         : `<div class="empty">No milestones yet.</div>`}
     </section>`;
   }
@@ -1158,18 +1211,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   document.addEventListener("click", (e) => {
     const a = e.target.closest('[data-edit^="art:"]');
     if (a) {
-      const [pid, id] = a.dataset.edit.slice(4).split("|");
+      const [pid, id] = window.TrackerUI.actionId(a, "edit").split("|");
       return editArtifact(pid, id === "new" ? null : id);
     }
     const m = e.target.closest('[data-edit^="tl:"]');
     if (m) {
-      const [pid, id] = m.dataset.edit.slice(3).split("|");
+      const [pid, id] = window.TrackerUI.actionId(m, "edit").split("|");
       return editMilestone(pid, id === "new" ? null : id);
     }
     const ra = e.target.closest('[data-remove^="art:"]');
-    if (ra) return removeArtifact(ra.dataset.remove.slice(4));
+    if (ra) return removeArtifact(window.TrackerUI.actionId(ra, "remove"));
     const rm = e.target.closest('[data-remove^="tl:"]');
-    if (rm) return removeMilestone(rm.dataset.remove.slice(3));
+    if (rm) return removeMilestone(window.TrackerUI.actionId(rm, "remove"));
   });
 
   window.TrackerProjects = { view, artifactsOf, timelineOf, rollup };
@@ -1616,21 +1669,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
     const tre = e.target.closest('[data-edit^="table:"]');
     if (tre) {
-      const spec = tre.dataset.edit.slice(6);
+      const spec = window.TrackerUI.actionId(tre, "edit");
       const i = spec.lastIndexOf("|");
       return renamePrompt(spec.slice(0, i), spec.slice(i + 1));
     }
     const trd = e.target.closest('[data-remove^="table:"]');
     if (trd) {
-      const spec = trd.dataset.remove.slice(6);
+      const spec = window.TrackerUI.actionId(trd, "remove");
       const i = spec.lastIndexOf("|");
       return deletePrompt(spec.slice(0, i), spec.slice(i + 1));
     }
     const ed = e.target.closest('[data-edit^="link:"]');
-    if (ed) return edit(ed.dataset.edit.slice(5));
+    if (ed) return edit(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="link:"]');
     if (rm) {
-      const row = resolved().find((r) => r.id === rm.dataset.remove.slice(5));
+      const row = resolved().find((r) => r.id === window.TrackerUI.actionId(rm, "remove"));
       if (row) { removeRow(row); window.TrackerRender(); }
     }
   });
@@ -1735,6 +1788,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
 
   /* ---------- sortable table ---------- */
+  const ROWS_PER_PAGE = 10;
+
   function table(routeKey, cols, rows) {
     const s = state.sort[routeKey];
     let data = rows.slice();
@@ -1747,12 +1802,16 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const head = cols.map((c) =>
       `<th data-sort="${c.key}">${esc(c.label)}${s && s.key === c.key ? (s.dir === "desc" ? " ↓" : " ↑") : ""}</th>`
     ).join("");
-    const body = data.map((r) =>
+    // Paged like every other table in the app, so a long log does not grow
+    // the page without limit.
+    const cur = window.TrackerUI.pageIndex(routeKey, data.length, ROWS_PER_PAGE);
+    const body = data.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE).map((r) =>
       `<tr>${cols.map((c) => `<td class="${c.wrap ? "wrap" : ""}">${c.render(r)}</td>`).join("")}</tr>`
     ).join("");
     return data.length
       ? `<div class="tablewrap"><table data-route="${routeKey}">
-           <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+           <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` +
+        window.TrackerUI.pager(routeKey, data.length, ROWS_PER_PAGE)
       : `<div class="empty">Nothing matches your search.</div>`;
   }
 
@@ -2068,7 +2127,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   Promise.resolve(window.TRACKER_DATA)
     .then((d) => {
       state.data = d;
-      $("#genStamp").textContent = "Data built " + d.generatedAt;
       render();
     })
     .catch((err) => {
@@ -2253,9 +2311,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * A table rather than a grid so the columns stay aligned as names vary in
    * length, and paged so the page does not grow without limit.
    */
-  function pinnedTable(list) {
-    if (!list.length) return `<div class="empty">Nothing pinned yet.</div>`;
-    const cur = clampPage("pinned", list.length, PINNED_PER_PAGE);
+  function pinnedTable(list, key = "pinned") {
+    if (!list.length) return `<div class="empty">Nothing here yet.</div>`;
+    const cur = clampPage(key, list.length, PINNED_PER_PAGE);
     const slice = list.slice(cur * PINNED_PER_PAGE, (cur + 1) * PINNED_PER_PAGE);
 
     const rows = [];
@@ -2279,7 +2337,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
     return `<div class="tablewrap"><table class="cellgrid">
         <tbody>${rows.join("")}</tbody>
-      </table></div>${pager("pinned", list.length, PINNED_PER_PAGE)}`;
+      </table></div>${pager(key, list.length, PINNED_PER_PAGE)}`;
   }
 
   /**
@@ -2314,6 +2372,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const list = saved().filter((l) => !q || JSON.stringify(l).toLowerCase().includes(q));
     const files = browsing.filter((f) => !q || f.name.toLowerCase().includes(q));
 
+    // Two tables rather than one: a file pinned from the Drive list and a link
+    // typed in by hand are different things and were previously mixed in one
+    // list. "manual" is the marker the add path already writes.
+    const fromDrive = list.filter((l) => l.meta !== "manual");
+    const added = list.filter((l) => l.meta === "manual");
+
     const setup = clientId
       ? ""
       : `<div class="note rich"><b>Not connected yet.</b> In the Google Cloud console open
@@ -2340,8 +2404,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         ${apiKey ? "" : `<span class="tag dead" style="align-self:center">No API key needed</span>`}
       </div>
 
-      <h3 class="sec">Pinned Drive links (${list.length})</h3>
-      ${pinnedTable(list)}
+      <h3 class="sec">Pinned from Drive (${fromDrive.length})</h3>
+      ${pinnedTable(fromDrive, "pinned")}
+
+      <h3 class="sec">Links you added (${added.length})</h3>
+      ${pinnedTable(added, "added")}
 
       ${token ? `<h3 class="sec">Your Drive — recent files (${files.length})</h3>
         ${filesTable(files)}` : ""}`;
@@ -2357,9 +2424,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (p) return pin(browsing.find((f) => f.id === p.dataset.pin) || {}, null);
 
     const ed = e.target.closest('[data-edit^="drive:"]');
-    if (ed) return editLink(ed.dataset.edit.slice(6));
+    if (ed) return editLink(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="drive:"]');
-    if (rm) return unpin(rm.dataset.remove.slice(7));
+    if (rm) return unpin(window.TrackerUI.actionId(rm, "remove"));
 
 
     if (e.target.id === "openDrive") return window.TrackerGo("drive");

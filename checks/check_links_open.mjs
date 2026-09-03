@@ -107,6 +107,22 @@ for (const f of files) {
      `${blanks} blank vs ${rels} noopener`);
 }
 
+/* ---------------------------------------------------------------------------
+   No handler may slice a "kind:id" attribute by a hand-counted length.
+
+   drive.js carried unpin(...dataset.remove.slice(7)) where "drive:" is six
+   characters, so Remove passed a truncated id, matched nothing and silently
+   did nothing. Ten sites counted the prefix by hand and one was wrong; the
+   shared TrackerUI.actionId helper replaced all of them. Files are
+   enumerated at runtime, so a module added tomorrow is covered.
+--------------------------------------------------------------------------- */
+for (const f of files) {
+  const exec = code(readFileSync(join(assets, f), "utf8"));
+  const counted = [...exec.matchAll(/dataset\.(edit|remove|pick|open)\s*\.\s*slice\s*\(\s*\d+/g)];
+  ok(`${f}: no hand-counted prefix slice on a data attribute`, counted.length === 0,
+     counted.map((m) => m[0]).join(" | "));
+}
+
 // The stripper is machinery this check leans on, so it is tested directly
 // against the real files rather than only on synthetic snippets.
 for (const f of files) {

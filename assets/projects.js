@@ -7,6 +7,14 @@
  * this browser and the seed is never re-applied over your edits.
  */
 (() => {
+  const ROWS_PER_PAGE = 10;   // both project tables page like every other table
+  /** The slice of `rows` on the current page for `key`. */
+  const page = (key, rows) => {
+    const cur = window.TrackerUI.pageIndex(key, rows.length, ROWS_PER_PAGE);
+    return rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
+  };
+  const pager = (key, rows) => window.TrackerUI.pager(key, rows.length, ROWS_PER_PAGE);
+
   const ART = "tracker.artifacts";     // [ {id, project, name, type, status, owner, url, description} ]
   const TL = "tracker.timeline";       // [ {id, project, name, start, end, progress, status, notes} ]
   const SEEDED = "tracker.seeded";     // projects whose seed has already run
@@ -152,7 +160,7 @@
           <th class="namecol">Artifact</th><th class="phasecol">Type</th>
           <th class="statuscol">Status</th><th class="phasecol">Owner</th>
           <th class="datecol">Link</th><th class="actcol"></th>
-        </tr></thead><tbody>${rows.map((a) => `
+        </tr></thead><tbody>${page("art:" + p.id, rows).map((a) => `
           <tr>
             <td class="wrap"><span class="sitename">${esc(a.name)}</span>
               ${a.description ? `<div class="note2" title="${esc(a.description)}">${esc(a.description)}</div>` : ""}</td>
@@ -164,7 +172,7 @@
               <button class="btn sm" data-edit="art:${esc(p.id)}|${esc(a.id)}">Edit</button>
               <button class="btn sm" data-remove="art:${esc(a.id)}">Remove</button>
             </span></td>
-          </tr>`).join("")}</tbody></table></div>`
+          </tr>`).join("")}</tbody></table></div>${pager("art:" + p.id, rows)}`
         : `<div class="empty">No artifacts yet.</div>`}
     </section>`;
   }
@@ -187,7 +195,7 @@
           <th class="namecol">Milestone</th><th class="phasecol">Phase</th>
           <th class="datecol">Start</th><th class="datecol">Target</th>
           <th class="progcol">Progress</th><th class="statuscol">Status</th><th class="actcol"></th>
-        </tr></thead><tbody>${rows.map((t) => `
+        </tr></thead><tbody>${page("tl:" + p.id, rows).map((t) => `
           <tr>
             <td class="wrap"><span class="sitename">${esc(t.name)}</span>
               ${t.notes ? `<div class="note2" title="${esc(t.notes)}">${esc(t.notes)}</div>` : ""}
@@ -201,7 +209,7 @@
               <button class="btn sm" data-edit="tl:${esc(p.id)}|${esc(t.id)}">Edit</button>
               <button class="btn sm" data-remove="tl:${esc(t.id)}">Remove</button>
             </span></td>
-          </tr>`).join("")}</tbody></table></div>`
+          </tr>`).join("")}</tbody></table></div>${pager("tl:" + p.id, rows)}`
         : `<div class="empty">No milestones yet.</div>`}
     </section>`;
   }
@@ -217,18 +225,18 @@
   document.addEventListener("click", (e) => {
     const a = e.target.closest('[data-edit^="art:"]');
     if (a) {
-      const [pid, id] = a.dataset.edit.slice(4).split("|");
+      const [pid, id] = window.TrackerUI.actionId(a, "edit").split("|");
       return editArtifact(pid, id === "new" ? null : id);
     }
     const m = e.target.closest('[data-edit^="tl:"]');
     if (m) {
-      const [pid, id] = m.dataset.edit.slice(3).split("|");
+      const [pid, id] = window.TrackerUI.actionId(m, "edit").split("|");
       return editMilestone(pid, id === "new" ? null : id);
     }
     const ra = e.target.closest('[data-remove^="art:"]');
-    if (ra) return removeArtifact(ra.dataset.remove.slice(4));
+    if (ra) return removeArtifact(window.TrackerUI.actionId(ra, "remove"));
     const rm = e.target.closest('[data-remove^="tl:"]');
-    if (rm) return removeMilestone(rm.dataset.remove.slice(3));
+    if (rm) return removeMilestone(window.TrackerUI.actionId(rm, "remove"));
   });
 
   window.TrackerProjects = { view, artifactsOf, timelineOf, rollup };

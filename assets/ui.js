@@ -202,5 +202,20 @@
     window.TrackerRender();
   });
 
-  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows };
+  /**
+   * The id out of a data-edit / data-remove attribute.
+   *
+   * These are written "kind:id" and every handler used to slice off the
+   * prefix by a hand-counted length. drive.js had unpin(...slice(7)) where
+   * "drive:" is six characters, so Remove passed an id one character short,
+   * matched nothing, and did nothing at all - while Edit, on slice(6) one
+   * line above, worked. Ten sites counted; one was wrong. Nothing counts now.
+   */
+  const actionId = (el, kind) => {
+    const raw = (el && el.dataset ? el.dataset[kind] : "") || "";
+    const i = raw.indexOf(":");
+    return i === -1 ? raw : raw.slice(i + 1);
+  };
+
+  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId };
 })();
