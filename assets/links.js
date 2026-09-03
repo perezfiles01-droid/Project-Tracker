@@ -277,9 +277,11 @@
 
     return `<section class="linksection">
         <div class="sectionhead">
-          <h3 class="sec">${esc(tableName)} (${rows.length})</h3>
-          <div class="sectiontools">
+          <div class="sectionleft">
+            <h3 class="sec">${esc(tableName)} (${rows.length})</h3>
             ${searchBox(key, "Search site or description…")}
+          </div>
+          <div class="sectiontools">
             ${emails.length ? emailPicker : ""}
             <button class="btn sm" data-addto="${esc(projectName)}|${esc(tableName)}">Add link</button>
           </div>

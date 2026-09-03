@@ -31,3 +31,5 @@ jobs:
         run: node checks/check_emails.mjs
       - name: Every page owns a working search
         run: node checks/check_search.mjs
+      - name: Table searches sit on the left
+        run: node checks/check_layout.mjs

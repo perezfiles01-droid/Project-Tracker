@@ -273,3 +273,7 @@ table.linktable th:nth-child(3), table.linktable td:nth-child(3){min-width:230px
 /* Page-level tools row: search on the LEFT, actions after it. */
 .pagetools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
 .pagetools .search{flex:0 1 320px;min-width:200px}
+
+/* The search belongs beside the table it filters, not across the page from it. */
+.sectionleft{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+.sectionleft h3.sec{margin:22px 0 10px;white-space:nowrap}
