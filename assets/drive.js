@@ -18,6 +18,10 @@
   let browsing = [];         // last fetched file list
   let notice = "";
 
+  // Opened from disk there is no usable web origin, so name the hosted site instead.
+  const originHint = () =>
+    location.protocol.startsWith("http") ? location.origin : "https://perezfiles01-droid.github.io";
+
   const cfg = () => ({
     clientId: localStorage.getItem("tracker.clientId") || (window.TRACKER_CONFIG?.googleClientId || ""),
     apiKey: localStorage.getItem("tracker.apiKey") || (window.TRACKER_CONFIG?.googleApiKey || ""),
@@ -119,10 +123,11 @@
 
     const setup = clientId
       ? ""
-      : `<div class="note rich"><b>Not connected yet.</b> Create a Google OAuth client
-           (Google Cloud console → APIs &amp; Services → Credentials), enable the
-           <b>Google Drive API</b>, add this site's URL as an authorised JavaScript origin,
-           then paste the Client ID under <b>Settings</b>. Full walkthrough in the repository README.</div>`;
+      : `<div class="note rich"><b>Not connected yet.</b> In the Google Cloud console open
+           <b>Google Auth Platform → Clients</b>, create a <b>Web application</b> client with
+           <code>${esc(originHint())}</code> as an authorised JavaScript origin, enable the
+           <b>Google Drive API</b>, then paste the Client ID under <b>Settings</b> below.
+           Full walkthrough in the repository README.</div>`;
 
     return `
       <h2 class="page">Google Drive</h2>
