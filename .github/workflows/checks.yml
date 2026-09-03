@@ -20,6 +20,8 @@ jobs:
         run: node checks/check_views_selftest.mjs
       - name: Views produce balanced markup
         run: node checks/check_views.mjs
+      - name: Links open as tabs, not popup windows
+        run: node checks/check_links_open.mjs
       - name: Paged tables behave
         run: |
           npm install --no-save playwright@1

@@ -169,62 +169,96 @@ ok("LHUB has left the sidebar", !flat.includes("LHUB"), flat.join(" · "));
 ok("Communications has left the sidebar", !flat.includes("Communications"));
 
 /* ---------------------------------------------------------------------------
-   Tasks: a full add -> reload -> edit -> reload -> delete round trip, because
-   a task that does not survive a refresh is worse than no task list at all.
+   The To Do List is a table now: five named columns, every field optional,
+   and a row that expands in place to show its description.
 --------------------------------------------------------------------------- */
 await page.click('button[data-route="todo"]');
-await page.waitForSelector(".taskboard");
-ok("To Do List renders a column per status",
-   (await page.locator(".taskcol").count()) === 4, String(await page.locator(".taskcol").count()));
-
+await page.waitForSelector("#view");
 await page.click('[data-edit="task:new"]');
 await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_title", "Draft the release note");
-await page.fill("#fd_description", "Summarise 2026.2 for the BA pack.");
-await page.fill("#fd_deadline", "2020-01-01");   // in the past, to prove the overdue flag
-await page.fill("#fd_assignee", "Me");
+await page.fill("#fd_description", "Draft the release note");
+await page.fill("#fd_due", "2020-01-01");            // past, to prove the overdue flag
+await page.fill("#fd_ref", "https://example.test/ref");
 await page.click('[data-fd="save"]');
-await page.waitForSelector(".card.task");
-ok("a new task appears on the board", (await page.locator(".card.task").count()) === 1);
-ok("a past deadline is flagged overdue", (await page.locator(".card.task.late").count()) === 1);
+await page.waitForSelector("table.tasktable");
 
-await page.reload({ waitUntil: "load" });
-await page.click('button[data-route="todo"]');
-await page.waitForSelector(".card.task");
-ok("the task survives a reload",
-   (await page.locator(".card.task .t").first().textContent()).includes("Draft the release note"));
+const taskHeads = await page.locator("table.tasktable thead th").allTextContents();
+const wantTasks = ["Task No.", "Description of the Task", "Task Given Date", "Due Date", "Reference link"];
+ok("the task table carries exactly the five named columns",
+   JSON.stringify(taskHeads.map((h) => h.replace(/[ ↑↓]+$/, ""))) === JSON.stringify(wantTasks),
+   taskHeads.join(" · "));
+ok("a new task appears as a row", (await page.locator("tr.taskrow").count()) === 1);
+ok("a past due date is flagged overdue", (await page.locator("tr.taskrow .tag.warn").count()) === 1);
+ok("the reference link opens in a tab",
+   (await page.getAttribute('tr.taskrow a.btn', "target")) === "_blank");
 
-await page.click(".card.task [data-edit]");
+// Every field optional: a task with nothing filled in must still save.
+await page.click('[data-edit="task:new"]');
 await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_title", "Draft the release note (v2)");
 await page.click('[data-fd="save"]');
 await page.waitForTimeout(150);
+ok("a task saves with every field left blank", (await page.locator("tr.taskrow").count()) === 2);
+ok("Task No. is filled in for you",
+   (await page.locator("tr.taskrow td").first().textContent()).trim() !== "—");
+
+// Clicking a row shows the description.
+ok("no detail is shown before a row is clicked", (await page.locator("tr.detail").count()) === 0);
+await page.click("tr.taskrow td:nth-child(2)");
+await page.waitForTimeout(120);
+ok("clicking a row reveals its description",
+   (await page.locator("tr.detail").innerText()).includes("Draft the release note"));
+
+// Sorting, from the shared helper.
+await page.click('table.tasktable th[data-sortfield="no"]');
+await page.waitForTimeout(120);
+const firstAsc = (await page.locator("tr.taskrow td").first().textContent()).trim();
+await page.click('table.tasktable th[data-sortfield="no"]');
+await page.waitForTimeout(120);
+const firstDesc = (await page.locator("tr.taskrow td").first().textContent()).trim();
+ok("a column header sorts and reverses", firstAsc !== firstDesc, `${firstAsc} then ${firstDesc}`);
+
 await page.reload({ waitUntil: "load" });
 await page.click('button[data-route="todo"]');
-await page.waitForSelector(".card.task");
-ok("an edited title survives a reload",
-   (await page.locator(".card.task .t").first().textContent()).includes("(v2)"));
+await page.waitForSelector("table.tasktable");
+ok("tasks survive a reload", (await page.locator("tr.taskrow").count()) === 2);
 
-// An attachment must survive a reload too: the bytes go to IndexedDB while the
-// task record goes to localStorage, and a mismatch between the two loses files.
-await page.click(".card.task [data-edit]");
-await page.waitForSelector("#formDialog .box");
-await page.setInputFiles("#fd_files", {
-  name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("attachment body"),
-});
-await page.click('[data-fd="save"]');
-await page.waitForSelector(".card.task .attchip");
-await page.reload({ waitUntil: "load" });
+/* ---------------------------------------------------------------------------
+   Daily activity is a log: empty to start, and fed by finishing a task.
+--------------------------------------------------------------------------- */
+await page.click('button[data-route="daily"]');
+await page.waitForSelector("#view");
+ok("Daily activity starts empty — the 34 workbook rows are gone",
+   (await page.locator("#view table tbody tr").count()) === 0,
+   (await page.locator("#view").innerText()).slice(0, 80));
+
 await page.click('button[data-route="todo"]');
-await page.waitForSelector(".card.task");
-ok("an attachment survives a reload",
-   (await page.locator(".card.task .attchip").count()) === 1);
-ok("the attachment keeps its filename",
-   (await page.locator(".card.task .attchip").first().textContent()).includes("note.txt"));
-
-await page.click(".card.task [data-remove]");
+await page.waitForSelector("table.tasktable");
+await page.click("tr.taskrow td:nth-child(2)");
+await page.waitForSelector("[data-done]");
+await page.click("[data-done]");
 await page.waitForTimeout(150);
-ok("a deleted task is gone", (await page.locator(".card.task").count()) === 0);
+await page.click('button[data-route="daily"]');
+await page.waitForTimeout(150);
+ok("finishing a task logs exactly one activity",
+   (await page.locator("#view table tbody tr").count()) === 1,
+   String(await page.locator("#view table tbody tr").count()));
+ok("the entry names the task",
+   (await page.locator("#view table").innerText()).includes("Draft the release note"));
+
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="daily"]');
+await page.waitForTimeout(200);
+ok("the activity entry survives a reload",
+   (await page.locator("#view table tbody tr").count()) === 1);
+
+// A manual entry, for work that never was a task.
+await page.click('[data-edit="act:new"]');
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_task", "Something I did by hand");
+await page.click('[data-fd="save"]');
+await page.waitForTimeout(150);
+ok("a manual entry can be logged",
+   (await page.locator("#view table").innerText()).includes("Something I did by hand"));
 
 /* ---------------------------------------------------------------------------
    Renaming a pinned link, the thing that used to cost a delete and a re-add.
@@ -243,90 +277,97 @@ ok("a renamed pinned link survives a reload",
    (await page.locator("table.cellgrid").innerText()).includes("Renamed without re-adding"));
 
 /* ---------------------------------------------------------------------------
-   Overview is project cards now, and each opens a paginated four-column table.
+   Projects: a paginated table three across, with the picked project's tables
+   opening UNDERNEATH rather than replacing the tiles.
 --------------------------------------------------------------------------- */
 await page.click('button[data-route="overview"]');
-await page.waitForSelector(".grid.cards");
+await page.waitForSelector("table.cellgrid");
+ok("the page is headed Projects",
+   (await page.locator("h2.page").first().textContent()).trim() === "Projects");
 ok("Overview shows no KPI stat row", (await page.locator(".stats").count()) === 0);
-ok("Overview shows no flat link grid",
-   (await page.locator(".card:not(.groupcard)").count()) === 0);
-const cards = await page.locator(".card.groupcard").count();
-ok("Overview shows one card per project group", cards === 3, `saw ${cards}`);
 
-await page.click('.card.groupcard[data-route="g:edrms-adb"]');
+const projCols = Number(readFileSync(join(root, "assets/links.js"), "utf8")
+  .match(/PROJ_COLS\s*=\s*(\d+)/)[1]);
+const wide = await page.evaluate(() =>
+  Math.max(...[...document.querySelectorAll("#view table.cellgrid tbody tr")]
+    .map((r) => r.children.length)));
+ok(`the projects table is ${projCols} across`, wide === projCols, `saw ${wide}`);
+ok("Google Drive is not a project tile",
+   !(await page.locator("#view table.cellgrid").innerText()).includes("Google Drive"));
+
+ok("no link table is open before a project is picked",
+   (await page.locator("table.linktable").count()) === 0);
+await page.click('[data-pick="edrms-adb"]');
 await page.waitForSelector("table.linktable");
-const heads = await page.locator("table.linktable thead th").allTextContents();
-ok("the table carries exactly Site / Description / Email Access / Link",
-   JSON.stringify(heads.slice(0, 4)) === JSON.stringify(["Site", "Description", "Email Access", "Link"]),
+ok("the projects table is still on screen with the tables open",
+   (await page.locator("#view table.cellgrid").count()) === 1);
+ok("EDRMS ADB opens its two workbook tables",
+   (await page.locator("section.linksection").count()) === 2,
+   String(await page.locator("section.linksection").count()));
+
+const heads = await page.locator("table.linktable").first().locator("thead th").allTextContents();
+ok("the link table carries Site / Description / Email Access / Link",
+   JSON.stringify(heads.slice(0, 4).map((h) => h.replace(/[ ↑↓]+$/, "")))
+     === JSON.stringify(["Site", "Description", "Email Access", "Link"]),
    heads.join(" · "));
 
-const PER = Number(readFileSync(join(root, "assets/links.js"), "utf8")
-  .match(/ROWS_PER_PAGE\s*=\s*(\d+)/)[1]);
-ok(`the table pages ${PER} rows at a time`,
-   (await page.locator("table.linktable tbody tr").count()) === PER,
-   String(await page.locator("table.linktable tbody tr").count()));
+// Per-section search: one box must not filter another table.
+const firstSection = page.locator("section.linksection").first();
+const before = await firstSection.locator("tbody tr").count();
+const otherBefore = await page.locator("section.linksection").nth(1).locator("tbody tr").count();
+await firstSection.locator("[data-search]").fill("zzz-no-such-site");
+await page.waitForTimeout(200);
+ok("a section search filters its own table",
+   (await page.locator("section.linksection").first().locator("tbody tr").count()) < before);
+ok("a section search leaves the other table alone",
+   (await page.locator("section.linksection").nth(1).locator("tbody tr").count()) === otherBefore);
+await page.locator("section.linksection").first().locator("[data-search]").fill("");
+await page.waitForTimeout(200);
 
-let total = await page.locator("table.linktable tbody tr").count();
-let guard = 0;
-while (!(await page.locator('[data-page^="links:"][data-page$=":next"]').isDisabled()) && guard++ < 20) {
-  await page.click('[data-page^="links:"][data-page$=":next"]');
-  await page.waitForTimeout(90);
-  const n = await page.locator("table.linktable tbody tr").count();
-  ok(`a later page never exceeds ${PER} rows`, n <= PER, String(n));
-  total += n;
-}
-ok("paging reaches all 38 EDRMS links", total === 38, `counted ${total}`);
+// The Email Access dropdown offers exactly the accounts present.
+const picker = page.locator("section.linksection").first().locator("[data-account]");
+const offered = (await picker.locator("option").allTextContents()).slice(1);
+const present = await page.evaluate(() => [...new Set(
+  [...document.querySelectorAll("section.linksection")[0].querySelectorAll("tbody tr td:nth-child(3)")]
+    .map((td) => td.textContent.trim()).filter((t) => t && t !== "—"))]);
+ok("the dropdown offers only accounts that are present",
+   offered.every((o) => present.includes(o)), `${offered.length} offered`);
 
-// Every row must open directly, and be correctable in place.
-await page.click('[data-page^="links:"][data-page$=":prev"]');
-await page.waitForTimeout(90);
-ok("rows offer a direct open link",
-   (await page.locator('table.linktable a.btn[target="_blank"]').count()) > 0);
-
-await page.click("table.linktable tbody tr [data-edit]");
-await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_description", "Written by hand, not from the workbook");
-await page.fill("#fd_account", "someone@example.test");
-await page.click('[data-fd="save"]');
+// Sorting Site alphabetically.
+await page.click('section.linksection:first-of-type table.linktable th[data-sortfield="name"]');
 await page.waitForTimeout(150);
-ok("a typed description appears in the table",
-   (await page.locator("table.linktable").innerText()).includes("Written by hand"));
+const asc = await page.locator("section.linksection").first().locator("tbody tr td:first-child").first().textContent();
+await page.click('section.linksection:first-of-type table.linktable th[data-sortfield="name"]');
+await page.waitForTimeout(150);
+const desc = await page.locator("section.linksection").first().locator("tbody tr td:first-child").first().textContent();
+ok("Site sorts and reverses alphabetically", asc.trim() !== desc.trim(), `${asc.trim()} then ${desc.trim()}`);
 
-// The reload lands straight back on #g:edrms-adb — the group route is a real
-// deep link, so there is no card to click here.
+// A table you name yourself, and a link moved into it.
+await page.click("[data-newtable]");
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_name", "UAT links");
+await page.click('[data-fd="save"]');
+await page.waitForTimeout(200);
+// textContent, not innerText: h3.sec is text-transform:uppercase, so innerText
+// reports the RENDERED casing ("UAT LINKS") and a case-sensitive compare fails
+// against an app that is behaving correctly.
+ok("a table you name appears", (await page.locator("#view").textContent()).includes("UAT links"));
 await page.reload({ waitUntil: "load" });
-await page.waitForSelector("table.linktable");
-ok("the group route survives a reload as a deep link",
-   (await page.locator("h2.page").textContent()).trim() === "EDRMS ADB");
-// Search rather than read page 1: paging resets on reload and the edited row
-// sits on a later page, so a page-1 read would fail for the wrong reason.
-await page.fill("#q", "Written by hand");
-await page.waitForTimeout(150);
-const after = await page.locator("table.linktable").innerText();
-ok("the description survives a reload", after.includes("Written by hand"));
-ok("the email access survives a reload", after.includes("someone@example.test"));
-await page.fill("#q", "");
-await page.waitForTimeout(150);
+await page.waitForSelector("table.cellgrid");
+await page.click('[data-pick="edrms-adb"]');
+await page.waitForTimeout(200);
+ok("the created table survives a reload", (await page.locator("#view").textContent()).includes("UAT links"));
 
-// Adding a link, and removing one.
-const before = await page.locator("table.linktable tbody tr").count();
-await page.click("[data-addlink]");
+const uat = page.locator("section.linksection").filter({ hasText: "UAT links" }).first();
+await uat.locator("[data-addto]").click();
 await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_name", "A link I added myself");
-await page.fill("#fd_url", "https://example.test/mine");
+await page.fill("#fd_name", "A UAT site");
+await page.fill("#fd_url", "https://example.test/uat");
 await page.click('[data-fd="save"]');
-await page.waitForTimeout(150);
-await page.fill("#q", "A link I added myself");
-await page.waitForTimeout(150);
-ok("an added link appears", (await page.locator("table.linktable").innerText()).includes("A link I added"));
-await page.click("table.linktable tbody tr [data-remove]");
-await page.waitForTimeout(150);
-ok("a removed link goes away",
-   !(await page.locator("#view").innerText()).includes("A link I added myself"));
-await page.fill("#q", "");
-await page.waitForTimeout(150);
-ok("removing a workbook row does not disturb the rest",
-   (await page.locator("table.linktable tbody tr").count()) === before);
+await page.waitForTimeout(200);
+ok("a link added to that table lands in it",
+   (await page.locator("section.linksection").filter({ hasText: "UAT links" }).first().innerText())
+     .includes("A UAT site"));
 
 /* ---------------------------------------------------------------------------
    Theme. System had nothing to follow before: the stylesheet carried no

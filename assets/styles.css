@@ -221,14 +221,22 @@ td .namecell{display:block;word-break:break-word}
 .attchip{cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-family:inherit}
 .attchip:hover{border-color:var(--accent);color:var(--text)}
 
-/* ---------- overview project cards ---------- */
-.grid.cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
-.card.groupcard{
-  text-align:left;font:inherit;color:inherit;cursor:pointer;
-  border:1px solid var(--line);background:var(--panel);
+/* ---------- projects table + opened tables ---------- */
+table.cellgrid td.picked{box-shadow:inset 3px 0 0 var(--accent);background:var(--panel-2)}
+.opened{margin-top:26px;border-top:1px solid var(--line);padding-top:6px}
+h2.page.sub{font-size:19px;margin-top:14px}
+.sectionhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.sectionhead h3.sec{margin:22px 0 10px}
+.sectiontools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.search.sectionsearch{flex:0 1 260px;min-width:180px}
+.search.sectionsearch input{padding:8px 11px 8px 32px;border-radius:9px}
+.search.sectionsearch::before{top:6px;left:11px;font-size:15px}
+.accountpick{
+  background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  padding:8px 10px;outline:none;max-width:230px;
 }
-.card.groupcard:hover{border-color:var(--accent);transform:translateY(-2px)}
-.card.groupcard .t{font-size:16px}
+.accountpick:focus{border-color:var(--accent)}
+.linksection{margin-bottom:10px}
 
 /* ---------- link table ---------- */
 table.linktable{min-width:820px}
@@ -236,3 +244,14 @@ table.linktable td.wrap{max-width:340px}
 table.linktable .sitename{font-weight:600}
 table.linktable td.actions{white-space:nowrap;display:flex;gap:6px}
 table.linktable a.btn{display:inline-block;text-decoration:none}
+
+/* ---------- task table ---------- */
+table.tasktable{min-width:760px}
+table.tasktable tr.taskrow{cursor:pointer}
+table.tasktable tr.taskrow.open{background:var(--panel-2)}
+table.tasktable tr.taskrow.done td{color:var(--dim)}
+table.tasktable tr.detail td{background:var(--panel-2)}
+.taskdetail{display:flex;flex-direction:column;gap:9px;padding:4px 2px}
+.taskdetail .desc{white-space:pre-wrap;color:var(--text)}
+.taskdetail .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+td .actions,span.actions{display:inline-flex;gap:6px;white-space:nowrap}

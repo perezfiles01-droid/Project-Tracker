@@ -56,7 +56,7 @@ for js in sorted((root / "assets").glob("*.js")):
                          "check the script-tag replacement")
 if 'src="assets' in html or 'src="config.js"' in html:
     raise SystemExit("build_standalone: a script tag was left unreplaced")
-html = html.replace("<title>Tracker —", "<title>Tracker (standalone) —")
+html = html.replace("<title>Project Tracker —", "<title>Project Tracker (standalone) —")
 
 dest = root / "Tracker-standalone.html"
 dest.write_text(html)

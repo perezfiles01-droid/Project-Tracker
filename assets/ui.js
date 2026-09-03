@@ -160,5 +160,36 @@
     window.TrackerRender();
   });
 
-  window.TrackerUI = { formDialog, pager, pageIndex };
+  /* ---------- shared column sorting ----------
+     app.js had a sortable-header mechanism the link table never called, so
+     its columns could not be sorted at all. One helper here instead, keyed
+     per table, so every table gets it and the next one inherits it. */
+  const sorts = {};
+
+  /** Header cell that reports and toggles its own direction. */
+  const sortHeader = (key, field, label) => {
+    const s2 = sorts[key];
+    const arrow = s2 && s2.field === field ? (s2.dir === "desc" ? " ↓" : " ↑") : "";
+    return `<th data-sortkey="${key}" data-sortfield="${field}">${label}${arrow}</th>`;
+  };
+
+  /** Apply the current sort for `key`. Alphabetical, numbers read as numbers. */
+  const sortRows = (key, rows) => {
+    const s2 = sorts[key];
+    if (!s2) return rows;
+    return rows.slice().sort((a, b) =>
+      String(a[s2.field] ?? "").localeCompare(String(b[s2.field] ?? ""),
+        undefined, { numeric: true, sensitivity: "base" }) * (s2.dir === "desc" ? -1 : 1));
+  };
+
+  document.addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-sortfield]");
+    if (!th) return;
+    const key = th.dataset.sortkey, field = th.dataset.sortfield;
+    const cur = sorts[key];
+    sorts[key] = { field, dir: cur && cur.field === field && cur.dir === "asc" ? "desc" : "asc" };
+    window.TrackerRender();
+  });
+
+  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows };
 })();

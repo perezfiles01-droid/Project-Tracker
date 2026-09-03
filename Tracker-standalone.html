@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tracker (standalone) — BA project links &amp; documents</title>
+<title>Project Tracker (standalone) — BA project links &amp; documents</title>
 <meta name="robots" content="noindex,nofollow,noarchive">
 <meta name="description" content="Central index of tracking links, sites and documents for the GLASS and EDRMS ADB projects.">
 
@@ -231,14 +231,22 @@ td .namecell{display:block;word-break:break-word}
 .attchip{cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-family:inherit}
 .attchip:hover{border-color:var(--accent);color:var(--text)}
 
-/* ---------- overview project cards ---------- */
-.grid.cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
-.card.groupcard{
-  text-align:left;font:inherit;color:inherit;cursor:pointer;
-  border:1px solid var(--line);background:var(--panel);
+/* ---------- projects table + opened tables ---------- */
+table.cellgrid td.picked{box-shadow:inset 3px 0 0 var(--accent);background:var(--panel-2)}
+.opened{margin-top:26px;border-top:1px solid var(--line);padding-top:6px}
+h2.page.sub{font-size:19px;margin-top:14px}
+.sectionhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.sectionhead h3.sec{margin:22px 0 10px}
+.sectiontools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.search.sectionsearch{flex:0 1 260px;min-width:180px}
+.search.sectionsearch input{padding:8px 11px 8px 32px;border-radius:9px}
+.search.sectionsearch::before{top:6px;left:11px;font-size:15px}
+.accountpick{
+  background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  padding:8px 10px;outline:none;max-width:230px;
 }
-.card.groupcard:hover{border-color:var(--accent);transform:translateY(-2px)}
-.card.groupcard .t{font-size:16px}
+.accountpick:focus{border-color:var(--accent)}
+.linksection{margin-bottom:10px}
 
 /* ---------- link table ---------- */
 table.linktable{min-width:820px}
@@ -247,6 +255,17 @@ table.linktable .sitename{font-weight:600}
 table.linktable td.actions{white-space:nowrap;display:flex;gap:6px}
 table.linktable a.btn{display:inline-block;text-decoration:none}
 
+/* ---------- task table ---------- */
+table.tasktable{min-width:760px}
+table.tasktable tr.taskrow{cursor:pointer}
+table.tasktable tr.taskrow.open{background:var(--panel-2)}
+table.tasktable tr.taskrow.done td{color:var(--dim)}
+table.tasktable tr.detail td{background:var(--panel-2)}
+.taskdetail{display:flex;flex-direction:column;gap:9px;padding:4px 2px}
+.taskdetail .desc{white-space:pre-wrap;color:var(--text)}
+.taskdetail .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+td .actions,span.actions{display:inline-flex;gap:6px;white-space:nowrap}
+
 </style>
 </head>
 <body>
@@ -254,7 +273,7 @@ table.linktable a.btn{display:inline-block;text-decoration:none}
   <aside class="sidebar">
     <div class="brand">
       <div class="dot">T</div>
-      <h1>Tracker<span id="brandSub">BA master index</span></h1>
+      <h1>Project Tracker<span id="brandSub">BA master index</span></h1>
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
@@ -322,7 +341,7 @@ window.TRACKER_CONFIG = {
   driveFolderId: ""
 };
 
-window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Master_Tracker.xlsx", "projects": [{"id": "glass", "name": "GLASS", "full": "GRA GLASS (AvePoint internal)", "blurb": "Change requests, UAT cases and reference files for the GLASS engagement.", "sections": [{"title": "Reference links", "type": "links", "items": [{"name": "GLASS master reference document", "url": "https://avepointcrm.sharepoint.com/sites/Jim'sSite/_layouts/15/doc.aspx?sourcedoc=%7bf49f8f5f-f004-424f-a712-2547442fdf2e%7d&action=edit", "group": "Key document", "verified": true}, {"name": "Test System", "url": "https://avepointcrm.sharepoint.com/:x:/s/Prj_GRAGLASS_Internal/IQDFjRA5c8WNQ7ci2-mkEkI0AdnBRhA8dhu5PfZg4an4E6A?e=l7mbcK&isSPOFile=1&xsdata=MDV8MDJ8fDRkYzRkZGE1ZjlmNjQ3YzRkMDMwMDhkZWIwYTU5MzMyfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDI0MjIzMTg4NjIzODR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EWTBOVFF6TURjNU53PT18OWM5ODQ5MzYyY2UwNGNlZTNlMDYwOGRlYjBhNTkzMzJ8ODhmZjc2MWY4M2ZlNDk0OWFjOTU0OTNmN2FiY2FlZDE%3D&sdata=VkhHYlUzWjVGNWxNUEFrTTNwR0dtYXExcnk5eURHeE9EclZQS0FoV2xHST0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "Personnel & Environment.xlsx"}, {"name": "Change Request (CR)", "url": "https://avepointcrm.sharepoint.com/:b:/s/Prj_GRAGLASS_Internal/IQBQPJ8qFuu5TLhu8ap1h90NAfSPLnhlnQbkN2f_gVbss6c?e=ZD1sny&isSPOFile=1&xsdata=MDV8MDJ8fDdmY2I4MzU4MjBlNzQ1ZWU4NjlhMDhkZWFmYzE1MmNmfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDE0NDE5ODYwNzAxNzB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EVTBOek01TnpneE1RPT18ZDkxZDk1MjdmYjgxNDM3YWVmOWUwOGRlYWZjMTUyY2V8MjEyZTc1ZTAyZGRjNDU4Zjg5NzZlZDY1ZTg3ZWY2ZWM%3D&sdata=NFNRNmYrR1pEV0IvRTZSYWJzUzdYMEtyV3dPcWNCVUJiT25NZis1OVNtcz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "GLASS AI FS_v1.1_final.pdf"}, {"name": "User Guide", "url": "https://avepointcrm.sharepoint.com/:f:/s/Prj_GRAGLASS_Internal/IgAXrPls7asTRKzpsO7GK66jAaVvqzKRP32nJmnIYW8XxbQ?e=OIQgVj&xsdata=MDV8MDJ8fDBhYTAwMjFlNjI2OTQzZmE2YzIwMDhkZWFmYzEwYTU1fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDE0NDA3NzAxMDg0NDh8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EVTBOekkzTmpNMU1BPT18MWI5Mjk0YzRjYmM1NGVlNGNmM2YwOGRlYWZjMTBhNTR8OGNhNWUxMTkwOWNhNGZmODg4MjQyMzdjMjA4Y2NlZDQ%3D&sdata=YndoNit3YitHakVzaGgzUytOYS9vRFFXT1VISUhER0JlNWhxTEw1OWEyQT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "User Guide"}, {"name": "Master Data", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Jim'sSite/_layouts/15/Doc.aspx?sourcedoc=%7BF49F8F5F-F004-424F-A712-2547442FDF2E%7D&file=Glass.xlsx&action=default&mobileredirect=true&or=EXCEL-WEB.BODY.NT&ct=1779326050110", "verified": true, "group": "Reference file", "note": null}, {"name": "CR01 UAT Case", "url": "https://avepointcrm.sharepoint.com/sites/Prj_GRAGLASS_Internal/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FPrj%5FGRAGLASS%5FInternal%2FShared%20Documents%2F08%20QA%20Documents%2FCR01%2FCR01%20UAT%20Case&viewid=89979c23%2D400e%2D4421%2Db153%2D5b8f1df3a9b7&csf=1&CID=907a8291%2D61e3%2D4320%2D9440%2D42df156b3093&FolderCTID=0x012000E555ACCF94075D428B0810A5578D03E2&TeamsCID=36fa310f%2Db2b4%2D42d0%2D8597%2De17b62f53d11&OR=Teams%2DHL&CT=1782385484718", "verified": true, "group": "Reference file", "note": null}, {"name": "CR02 ppt assessment file", "url": "https://avepointcrm.sharepoint.com/:p:/s/Prj_GRAGLASS_Internal/IQAFpODllq5lS4oB27LyhQD8Adn1TfYXVJlcvdp-mICDh8o?wdExp=TEAMS-TREATMENT&web=1&TeamsCID=2200f586-e2a4-4726-8388-30720882e702", "verified": true, "group": "Reference file", "note": null}, {"name": "CR02 dev effort list", "url": "https://avepointcrm.sharepoint.com/:x:/s/Prj_GRAGLASS_Internal/IQCTVjUYAytAQJDAQJUM2I2BASjrBwDgbThjn3xBf5DeTno?e=E0uvRb&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&TeamsCID=cb655636-dac4-4781-b701-ee09ffedb1de&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA3MDIxNTcxMSJ9&linkOpenTime=1785134656165", "verified": true, "group": "Reference file", "note": null}]}]}, {"id": "edrms", "name": "EDRMS ADB", "full": "Asian Development Bank \u2014 EDRMS / DRM implementation", "blurb": "Sites, backlogs, test environments and release artefacts for the ADB EDRMS programme.", "sections": [{"title": "Sites & source links", "type": "sites", "items": [{"sn": "1", "name": "ADB SharePoint Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "2", "name": "UAT Test Sites(Traditional)", "label": "link (demo)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_demo/SitePages/Home.aspx?xsdata=MDV8MDJ8fDZhZjlkMWI4ZjRjYjRhYTljODkwMDhkZTU3YmZmOWE0fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2NzkxNzE4ODUyMDB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hNVEUyTmpJenw3MzAyYjU4MDg2NjU0YzVmMGNlMTA4ZGU1N2JmZjlhNHw1Zjg4MzM3NTViYjc0NmY2YWQwOWNlYmM5NWVkN2E4YQ%3D%3D&sdata=ejV4NFNnY0I1Y1Z4ODRaRFRtN2p0eURrbWttcWtvWnVBL1pDTkxma241bz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "2", "name": "UAT Test Sites(Traditional) (link (people))", "label": "link (people)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_people?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1Njk1MTN8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=RjV4UjJKN1oybnpsUndtWDczWGlIbkJhQXk2ZFlCSHMvMjVsRVd3M0VxND0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "2", "name": "UAT Test Sites(Traditional) (link (admin))", "label": "link (admin)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_admin?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1ODI4Mzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=bXg5ZlJGT3pvU2k0eFRDYlRrMWtXb2ZqSW4zVWxNb0thNTRoK2lvQzV0WT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "3", "name": "Internal Environment Site (Trad)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/org_csd_1.4testsite/AnnualMeet/Forms/All%20Files.aspx?id=%2Fsites%2Forg%5Fcsd%5F1%2E4testsite%2FAnnualMeet%2FADB%C2%A0EDRMS%C2%A0R2026%2E1%20%E2%80%8B%2D%E2%80%8B%C2%A0UAT%C2%A0Test%C2%A0Cases%C2%A0%E2%80%8C%E2%80%91%E2%80%8C%C2%A0Records%C2%A0Declaration%20%285%29&viewid=a9f94689%2D5713%2D4ae7%2Dbddd%2Daf18c8b01c3d&CT=1768817656351&OR=OWA%2DNT%2DMail&CID=23a30351%2D69b4%2Df998%2D1c9d%2D04c482e715af&xsdata=MDV8MDJ8fDVhOWNjZTIyOGNjYjQ3ZDg3YWQwMDhkZTU3NDNiOTAzfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQxNDU1MTE2Mjc0NzJ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9ERTNOelV3T0RjeHw5OWNmYjYyZmJjYjk0Mjg5ZGRlMTA4ZGU1NzQzYjkwMnxhMDg0N2E4MjQxNTk0ZjM5OTFlM2YxNWYxOTk2OTYyNA%3D%3D&sdata=cTFNNFMxMXZhaE0xTlpCd0p5Um9kZ1dxL3NzMFFpREMyNE5HV3VXcGZHWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "ji\u2026@7rkd12.onmicrosoft.com"}, {"sn": "3.1", "name": "Internal Environment Site (Proj)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite01/SitePages/Home.aspx?xsdata=MDV8MDJ8fGQ5YTJmYTI3OWY0ZDRkYTMyMzg5MDhkZTc5ZDE0NTRifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODIxMzY4NTA4NzA5MDR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pBMVpEQmhNamMyTFdFeE5EZ3RORFJsT1MxaU56STJMVGRpWm1FMllUTTBNV1ZqTlY4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qWXhOamc0TkRRMU5BPT18MjYyZmMxY2QwZDkxNGE2NDk1YjUwOGRlNzlkMTQ1NGF8N2RkMDM4ZGM4MTdkNDM2OGE5YTY1ZTg0YzdiNzcyMWE%3D&sdata=UzcwYnd2SHdDaVpQN2t4bFBOYklsNjhKM2d2czBJOWRUdFJHZ2VKZTZvaz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "ji\u2026@7rkd12.onmicrosoft.com"}, {"sn": "4", "name": "Sanity Test Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "5", "name": "Product Backlog", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FProduct%20Backlog&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "6", "name": "uat Retention Label Mapping", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data_uat/Lists/Retention%20Label%20Mapping/AllItems.aspx", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "7", "name": "ADO Site", "label": "link", "url": "https://dev.azure.com/asiandevbank/itd-itop-drm/_workitems/recentlyupdated/", "verified": true, "account": "No Access (borrow)"}, {"sn": "8", "name": "ADB EDRMS Task", "label": "link", "url": "https://to-do.office.com/tasks/AAMkADY5MmQ2ZGFiLTZhNWYtNGU0Yi1iYzM1LTQwYTRhMTFjZWRjZAAuAAAAAACKet_wR4ydQLB_GtDzqNibAQC_lAXdlzSxQafFCX5gDemAAACquu0yAAA=", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "9", "name": "Man-days Consumption", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true&DefaultItemOpen=1", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "10", "name": "Centralized - Project Site 1(no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite01?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MDU4OTV8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=ZDNLTUZmYVpFZllYeHc1MzRjb2RJNzVkUU5Tak5YWkM5aXlXVkNkaFBNUT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "11", "name": "Centralized - Project Site 2 (no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite02?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MzAwNzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=SjhZS0R0V0kyWVFoVC9vUzcvK3M4d1pmVUVpVUlKZGNLZGVOeHZUT2todz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "12", "name": "Centralized - Project Site 3 (no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite03?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4NTAxNjZ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=UGN5dlJCTHo0OWxjSHNSOU1pN3FUSEVvV1BBNE41NEtGMVZEOFR5S3pkOD0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "13", "name": "Database Design", "label": "link", "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B50C34E07-CFDA-4C29-991F-2EB421A2FDC5%7D&file=Database%20Design%2012.03.xlsx&action=default&mobileredirect=true", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "14", "name": "Internal Action List", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BCDAC895B-37B4-4F63-AE68-A0A475FA0D57%7D&file=Internal%20Action%20List.xlsx&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&action=default&mobileredirect=true", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "15", "name": "DRM Workflow", "label": "link", "url": "https://avepointcrm.sharepoint.com/:u:/r/sites/Gen_ADB_DRM_Internal/Shared%20Documents/General/04.%20Requirement%20Materials/To-Be/To-Be%20DRM%20Workflows.vsdx?d=wbd33d559870e48c2af833f5c2d79fdf0&csf=1&web=1&e=c9Zhdw", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "16", "name": "Microsoft To Do", "label": "link", "url": "https://to-do.office.com/tasks/sharing?InvitationToken=vmhSCzlTBi3G_ehDOb3K_QRCCeYnCf_rWHcReG2YDPW0H2IdOC3D3ahIdc6LmWo7A", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "17", "name": "High Level Solution Design (R2026.2)", "label": "link", "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B96FC56F0-8E43-42AE-8C7A-A28DE752E61D%7D&file=EDRMS%20R2026.1%20High-Level%20Solution%20Design%20(HLSD).docx&action=default&mobileredirect=true", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "18", "name": "Test Outline (R2026.2)", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BDF3F8A12-1909-4AD3-B45C-06F5AA52AAF0%7D&file=Test%20Case%20Outline.xlsx&action=default&mobileredirect=true", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "19", "name": "Centralized Project Sites - UAT", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-uat", "verified": true, "account": null}, {"sn": "20", "name": "Centralized Project Sites - dev", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-dev", "verified": true, "account": null}, {"sn": "21", "name": "Centralized Project Sites - sanity", "label": "link", "url": null, "verified": true, "account": null}, {"sn": "22", "name": "UAT Checklist", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BA8741029-B763-47D5-BA26-A0FED0B3CAD7%7D&file=EDRMS%20UAT%20Checklist.xlsx&action=default&mobileredirect=true&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjAyMTIxNTExNiIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "23", "name": "UAT Test Case Outline", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7B08ECF062-3D96-4EC6-BDB6-AF8641F2102C%7D&file=ADB%20EDRMS%20R2026.2%20UAT%20Test%20Cases%20-%20Centralized%20Records%20Declaration.xlsx&action=default&mobileredirect=true&isSPOFile=1&xsdata=MDV8MDJ8fDc5ZjQxYmE5OWE2MjRmNjVjZmNmMDhkZTc5OTZkODJifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODE4ODU5MTE5OTQzMTl8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pSaVlqVm1NRFE1TFRNeFpUVXROREk1TnkwNFlqQTNMV1JoWTJVeU56RTJOR016Wmw4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qVTVNVGM1TURReE5nPT18NDg5OWQ4NjI1NTcxNDRlODIzNWYwOGRlNzk5NmQ4MmJ8NmZlYTk3ZTY4Njk4NDQ3NmI2Nzg3OTJkZjMwNzM0NzM%3D&sdata=UlNFamYwRWFWSFZvaE9FS0dmY1ViRzNNUmpxYnB0cExScnJRNFNEaEFNWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": null}, {"sn": "24", "name": "Internal Avepoint Site", "label": "link", "url": "https://avepointcrm.sharepoint.com/sites/Gen_ADB_DRM_Internal/Shared%20Documents/Forms/AllItems.aspx", "verified": true, "account": null}, {"sn": "25", "name": "Internal Bugs and Issues", "label": "link", "url": "https://avepointcrm.sharepoint.com/sites/Gen_ADB_DRM_Internal/_layouts/15/doc.aspx?sourcedoc=%7b8baa3a21-fc23-415c-af9b-d882674a6f21%7d&action=edit", "verified": true, "account": null}, {"sn": "26", "name": "Sanity Project Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-sanity?xsdata=MDV8MDJ8fGE2NDk2MzkwMjkxYjQyYzIxMWE3MDhkZThiZjkyYjUyfDk0OTVkNmJiNDFjMjRjNTg4NDhmOTJlNTJjZjNkNjQwfDB8MHw2MzkxMDIwOTk0MjMxMDU0NDd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T21ZNU9ERmhObVV3TW1Vd056Um1ZekJoTnpsak5tRXdNakZpWTJZM016YzFRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpjME5qRXpNVFF4TXprNHwyZTE4OTBiNDdmNTQ0OTJiNzRhOTA4ZGU4YmY5MmI1MXwzYjMxMDJkOTRkM2E0M2EyYTZkNzUyZmUyMzc2MjNkOQ%3D%3D&sdata=bmw4YnhYQytxbkw4aUhVOHJoNmlWaHppdFQxdW9zamtCdWJYaVRLT01Ddz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": null}, {"sn": "27", "name": "Prod Retention Label Mapping", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data/SitePages/Home.aspx", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "28", "name": "ADB DRM Leave tracker", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BEEEB0698-4851-4300-87B8-777159DB19E6%7D&file=DRM%20-%20Leave%20Roster%20in%20Dec%20and%20Jan.xlsx&action=default&mobileredirect=true&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA0MDQwMTcxOCJ9&linkOpenTime=1777362706008", "verified": true, "account": "ji\u2026@avepoint.com"}]}, {"title": "Release 2026.2 \u2014 issues & concerns", "type": "concerns", "items": [{"sn": "1", "concern": "Attached File Naming", "description": "The current attachment file naming convention is:\nSuccess_JobID_SiteName_LibraryName or Failed_JobID_SiteName_LibraryName.\n\nClarification is required on whether LibraryName should be replaced with the Folder Name.", "source": "Product Backlog > Email Templates Sheet > Remarks", "reason": "Given that, under centralized records management, all file records are stored in the Final Documents library, using the library name may not be meaningful. It is recommended to replace LibraryName with the destination folder path within the Final Documents library.", "status": "In Progress"}]}, {"title": "EDRMS release phases", "type": "phases", "items": [{"title": "Phase 1: Workshop Requirements Gathering Activities", "steps": [{"sn": "1", "name": "Workshop deck", "description": "The workshop deck is used to guide the workshop sessions and present the key topics, processes, and ideas needed for discussion. It helps ensure the workshop stays focused and that all required areas are covered in a clear and structured way.", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FRelease%202026%2E2&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true}, {"sn": "2", "name": "Workshop Requirements Confirmation", "description": "The workshop requirements confirmation is done after the workshop sessions to reconfirm and finalize the captured requirements. This step ensures that all discussed items are correctly understood and agreed upon, and it formally signals the start of product backlog creation.", "url": "https://avepointcrm.sharepoint.com/:b:/r/sites/Jim%27sSite/Shared%20Documents/ADB%20Project/workshop%20email%20confirmation.pdf?csf=1&web=1&e=xSNP1w", "verified": true}]}, {"title": "Phase 2: Product Backlog Creation Activities", "steps": [{"sn": "1", "name": "Product Backlog", "description": "Creation of the product backlog based on the confirmed requirements, detailing features, user stories, and scope items to be delivered.", "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B3899D5DC-E0F9-4033-BFD2-381A710C7FC9%7D&file=EDRMS%20Product%20Backlog%20-%20V2.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "2", "name": "Product Backlog Email Confirmation", "description": "Formal confirmation via email to validate and approve the created product backlog.", "url": null, "verified": true}, {"sn": "3", "name": "Dev/QA Effort Estimates", "description": "Estimation of development and testing effort required for each backlog item to support planning and scheduling.", "url": null, "verified": true}]}, {"title": "Phase 3: System Integration Testing (SIT) Activities", "steps": [{"sn": "1", "name": "Internal QA/AP Testing", "description": "Internal testing to verify system functionality and integration before external testing.", "url": null, "verified": true}, {"sn": "2", "name": "Endorsement Email for SIT", "description": "Formal endorsement to confirm readiness to proceed with SIT.", "url": null, "verified": true}, {"sn": "3", "name": "TCS QA Testing", "description": "Execution of formal system integration testing by the QA team.", "url": null, "verified": true}, {"sn": "4", "name": "Signed Off Email for SIT", "description": "Formal sign-off confirming SIT completion and approval to proceed to UAT.", "url": null, "verified": true}]}, {"title": "Phase 4: User Acceptance Testing (UAT) Activities", "steps": [{"sn": "1", "name": "Endorsement Email for UAT", "description": "Formal endorsement confirming readiness to start UAT.", "url": null, "verified": true}, {"sn": "2", "name": "Prepare Defect Log and other UAT Pre-artifacts", "description": "Preparation of defect tracking and supporting materials required for UAT.", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F08%20%2D%20UAT&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=3896aa97%2D64ad%2D455f%2D8b87%2Db36d998ac04b&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&pageCorrelationId=0268efa1%2D30c6%2D5000%2D852f%2Dc546546a3623&timeStamp=1769073098023", "verified": true}, {"sn": "3", "name": "UAT Briefing and Demonstration", "description": "Walkthrough and demonstration of the system to guide users before testing.", "url": "https://asiandevbank.sharepoint.com/:p:/r/teams/prj_3yrc_drm_implem/Docs/08%20-%20UAT/Release%202026.1%20-%20Multiple%20Records%20Declaration/EDRMS%20R2026.1%20UAT%20Briefing.pptx?d=w6fb502ef21474b75b07eb5a8f4390302&csf=1&web=1&e=fXp5Sw", "verified": true}, {"sn": "4", "name": "UAT Completion Report", "description": "Documentation summarizing UAT results, findings, and final acceptance.", "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/Docs/08%20-%20UAT/Release%202026.1%20-%20Multiple%20Records%20Declaration/03%20UAT%20Sign%20Off/EDRMS%20R2026.1%20UAT%20Completion%20Report.docx?d=wdc3f0f7445e047da84f0973eeec67d2b&csf=1&web=1&e=NEfJs4", "verified": true}]}, {"title": "Phase 5: Deployment and Sanity Testing Activities", "steps": [{"sn": "1", "name": "Sanity Testing", "description": "High-level verification performed after deployment to confirm that critical functionalities are working as expected.", "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx", "verified": true}]}]}]}, {"id": "lhub", "name": "LHUB", "full": "LHUB \u2014 Vitae for LXP (VITAELXP) Jira intake", "blurb": "BA role reference: how signed-off FSDs become Jira epics, stories and sub-tasks.", "sections": [{"title": "Links & references", "type": "links", "items": [{"name": "Sample Jira ticket (VITAELXP-22170)", "url": "https://jirapro.avepoint.net/browse/VITAELXP-22170", "verified": true, "group": "Working link"}, {"name": "LHUB JIRA creation Teams group chat", "url": "https://teams.microsoft.com/l/chat/19:1b4ded8973f543009fe7954a5abb52c5@thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D", "verified": true, "group": "Working link"}, {"name": "FSD timeline (SharePoint)", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/ExtCst_MVPTLhubProject/_layouts/15/Doc.aspx?sourcedoc=%7B7BE2055C-50D7-4BB2-8D00-F0EB78E5B709%7D&file=UAT2%20dev%26qa%20timeline%20(2).xlsx&action=default&mobileredirect=true&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1768281674824&web=1", "verified": true, "group": "Working link"}, {"name": "Jira Tracker", "url": "https://avepointcrm-my.sharepoint.com/:x:/r/personal/michael_gascon_avepoint_com/_layouts/15/doc2.aspx?sourcedoc=%7B0FB0DD6F-F87E-495D-8F1F-9C4B0769A1F6%7D&file=LHUB_JiraUpdateTracker_April2025.xlsx&action=default&mobileredirect=true", "verified": true, "group": "Reference"}, {"name": "Internal SharePoint Site where all FSDs uploaded", "url": "https://avepointcrm.sharepoint.com/MaivenPoint/Shared%20Documents/Forms/AllItems.aspx?viewid=ed6e7899%2D177a%2D46a0%2D9037%2D7651a5b4b40f&FolderCTID=0x012000C967E7A149636F4DA701355DA771B368", "verified": false, "group": "Reference"}]}, {"title": "Clarification checklist for the remote BA", "type": "list", "items": ["1. May I request the link to the reviewed FSD uploaded in the internal SharePoint site?", "2. May I request the link to the Hi-Fi design for this FSD?", "3. Which sections of the FSD have been fully signed off and are ready for development?", "4. Who is the assigned developer for this FSD?"], "note": "Note: When the Project Manager asks for the number of tasks created, this refers to the number of FSD sections that have been reviewed and converted into Jira tickets. To determine this, count the total number of tickets listed under \u201cIssues in Epic\u201d on the Jira web page. This total represents the number of Jira tasks created."}, {"title": "Jira ticket creation steps", "type": "list", "items": ["1. Connect to the AvePoint (SG) VPN.", "2. Open the Jira web application.", "3. Click Create.", "4. In the Create Issue screen, set the following for the Epic:\n- Project: Vitae for LXP (VITAELXP)\n- Issue Type: Epic\n- Priority: Normal / Major\n- Summary Format: [Pillar #] FSD Name\n(If no Pillar is specified, use the FSD name only \u2014 do not include brackets.)\n- Assignee: Assigned Developer for the FSD\nDescription Format:\nKindly refer to the following links:\n\nFSD: [FSD link]\nHi-Fi Design: [Hi-Fi Design link]", "5. Click Create to save the Epic.", "6. Once the Epic is created, click the \u201c+\u201d icon next to Issues in Epic to create tasks.", "7. For each Story under the Epic:\n- Issue Type: Story\n- Summary Format: [Pillar #] [FSD Name] FSD Section\n- Assignee: Assigned Developer\n- Description:\nUse the same format as the Epic description.", "8. If a Sub-task is required:\n- Open the relevant Story from the Issues in Epic list.\n- Click More (next to Assign).\n- Select Create Sub-task.", "9. For the Sub-task, use the following Summary Format:\n- [Pillar #] [FSD Name] [FSD Section] FSD sub-section\n- Assign the sub-task to the appropriate developer.\n- Follow the same description format used in the Epic and Story."]}], "active": false}], "daily": [{"sn": "1", "date": "2026-01-22", "task": "Azure DevOps (ADO) Ticket Creation for Release 2026.2 \u2013 Centralized Records Declaration", "category": "Documentation", "project": "ADB", "source": "WeCom", "status": "Completed", "remarks": null, "url": "https://dev.azure.com/asiandevbank/itd-itop-drm/_backlogs/backlog/itd-itop-drm%20Team/Features?showParents=true", "verified": true}, {"sn": "2", "date": "2026-01-22", "task": "Inputting the logged ADO ticket numbers into the Product Backlog for tracking and reference.", "category": "Documentation", "project": "ADB", "source": "Self", "status": "Completed", "remarks": null, "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FProduct%20Backlog&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true}, {"sn": "3", "date": "2026-01-23", "task": "Closing all ADO User Stories logged Items for Release 2026.1", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": "https://dev.azure.com/asiandevbank/itd-itop-drm/_backlogs/backlog/itd-itop-drm%20Team/Features?showParents=true&workitem=1253515", "verified": true}, {"sn": "4", "date": "2026-01-23", "task": "Adding of Test results to ADO bug item list", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": "https://dev.azure.com/asiandevbank/itd-itop-drm/_backlogs/backlog/itd-itop-drm%20Team/Features?showParents=true&workitem=1275908", "verified": true}, {"sn": "5", "date": "2026-01-23", "task": "Adding and cross checking of pbl effort estimates for Centralized", "category": "Follow-up", "project": "ADB", "source": "WeCom", "status": "Completed", "remarks": null, "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "6", "date": "2026-01-26", "task": "Create a deck presentation for the functional walkthrough for R2026.2 - Centralized Records Declaration", "category": "Support", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7BE0BF5E3F-7AA1-4B30-90CF-5B34D3F7502C%7D&file=EDRMS%20R2026.2%20Functional%20Walkthrough.pptx&action=edit&mobileredirect=true&CT=1769475299015&OR=ItemsView", "verified": true}, {"sn": "7", "date": "2026-01-28", "task": "Walkthrough confirmation of R2026.2 - Centralized Records Declaration", "category": "Meeting", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FRelease%202026%2E2%20Centralized%20Records&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true}, {"sn": "8", "date": "2026-01-28", "task": "LHUB jira creation for the fsd: [Pillar 1.3] [38_1_Certificate-Accredify Setup]", "category": "Documentation", "project": "LHUB", "source": "Teams", "status": "Completed", "remarks": null, "url": "https://jirapro.avepoint.net/browse/VITAELXP-22801", "verified": true}, {"sn": "9", "date": "2026-01-29", "task": "R2026.3 initial deck creation", "category": "Documentation", "project": "ADB", "source": "Self", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "10", "date": "2026-01-30", "task": "R2026.3 continuation", "category": "Documentation", "project": "ADB", "source": "Self", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "11", "date": "2026-02-02", "task": "PBL: update acceptance criteria and added the log for the versioning of every successful declared file. Every successful declaration, the record adds up to one.", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "12", "date": "2026-02-03", "task": "Jira ticket creation for the bug fixes", "category": "Documentation", "project": "ADB", "source": "Meeting", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "13", "date": "2026-02-03", "task": "Centralized Declaration - follow-up update on devs for the ff enhancements on Thur (2/5/2026): \n1. No retention label mapping error (OOTB created sites)\n2. Major Versioning enhancement for successful declaration", "category": "Follow-up", "project": "ADB", "source": "Meeting", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "14", "date": "2026-02-03", "task": "Create jira tickets for the R2026.2 user stories", "category": "Documentation", "project": "ADB", "source": "Self", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "15", "date": "2026-02-03", "task": "Jira ticket creation pending. FSD to be signed off on Feb 16; [Pillar 3] 07_LHUB_FSD_My Purchase", "category": "Follow-up", "project": "LHUB", "source": "WeCom", "status": "Completed", "remarks": "care of remote ba: Phoenix Chen", "url": "https://jirapro.avepoint.net/browse/VITAELXP-23386", "verified": true}, {"sn": "16", "date": "2026-02-03", "task": "jira ticket creation for fsd 42_LHUB_FSD_SCTP", "category": "Follow-up", "project": "LHUB", "source": "Teams", "status": "Completed", "remarks": "care of remote ba: Satthiya, Tianqi", "url": "https://jirapro.avepoint.net/browse/VITAELXP-22455", "verified": true}, {"sn": "17", "date": "2026-02-03", "task": "jira ticket creation for fsd 38_2_LHUB_FSD_Accredify Certificate Issuance (no greenlight given yet for deployment)", "category": "Follow-up", "project": "LHUB", "source": "Teams", "status": "In Progress", "remarks": "care of remote ba: Kevin Deng", "url": null, "verified": true}, {"sn": "18", "date": "2026-02-04", "task": "To check with Savannah, AP QA on the mandays required for the added US in R2026.2", "category": "Follow-up", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "19", "date": "2026-02-04", "task": "Centralized Declaration - Confirmation of FDL folder list to be a dropdown for this list but hardcoded", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "20", "date": "2026-02-05", "task": "Centralized Declaration - Updated manday consumption after the additional US in the PBL", "category": "Documentation", "project": "ADB", "source": "WeCom", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "21", "date": "2026-02-06", "task": "Assist in deployment to prod / answering queries from the tcs qa:\nquestion about declaring multiple files while the upload still not complete + user has slow internet connection", "category": "Testing", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "22", "date": "2026-02-09", "task": "Physical Records - Discovery session workshop 1", "category": "Meeting", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "23", "date": "2026-02-09", "task": "Physical Records - To confirm from the devs:\n- anything that comes from certain departments or libraries, is it possible that it will automatically be marked as \"valid physical counterpart\" without RAC no longer checking it manually (auto change of status for certain files)\n- is it easy enough to change the value of the retention type; short term change from <10 years to <15 years for example ; backend change ; change from database level and/to sharepoint level if changing old records retention type ; issue those records that have already been declared, configuration and script change ; would be beneficial to define short term and long term now that records are still manageable rather than change it for later.\n- validity check for long term for example so that RAC will no longer have to manually check if it is required for submission and will automatically change the status \n- repeat notification for opus linking; rac receives email to notify them for opus linking after user submits the physical counterpart\n- postgres to store the list of all records with physical counterparts", "category": "Follow-up", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "24", "date": "2026-02-09", "task": "Physical Records - Email confirmation of the requirements", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "25", "date": "2026-02-10", "task": "Physical Records - Feasibility Check of the Requirements\n\nconfirmed throw out an error, sharepoint does not support disabling \ncreate UI - custom ui table in a page for physical counterpart management and retrieved data from database \nauto change of status depending on which library it is possible\n\ndo we have records with physical counterpart - ask adb to double check", "category": "Meeting", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "26", "date": "2026-02-12", "task": "Centralized Records - ADO update after devs are done updating the status of each US", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "27", "date": "2026-02-12", "task": "Lhub jira creation for the fsd: 03_2_LHUB_FSD_PSEA Claims and Reconciliation", "category": "Documentation", "project": "LHUB", "source": "WeCom", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "28", "date": "2026-02-13", "task": "Physical Records - To update the deck for workshop session 2", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "29", "date": "2026-02-13", "task": "Physical Records - Send an email containing all the consolidated key items that need ADB confirmation", "category": "Follow-up", "project": "ADB", "source": "Meeting", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "30", "date": "2026-02-13", "task": "Physical Records - Update ADO for US that have already been completed its development", "category": "Documentation", "project": "ADB", "source": "WeCom", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "31", "date": "2026-02-13", "task": "Physical Records - Create ADO ticket after sending email to ADB on the follow up confirmation of requirements", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "In Progress", "remarks": null, "url": null, "verified": true}, {"sn": "32", "date": "2026-02-19", "task": "Physical Records - Continuation of the deck for workshop", "category": "Support", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "33", "date": "2026-02-27", "task": "Centralized - DRM Workflow", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "Completed", "remarks": null, "url": null, "verified": true}, {"sn": "34", "date": "2026-03-03", "task": "Centralized - ADO and PBL Update\n\nnot done yet\nUS 41, 14,12,8,5,4,3,2, 42-47\n\nUpdate backlog 34,33,32,30,29,20 (AC), 19 (AC), 18 (AC), 17 (AC), 10 (AC), \n\nFor 42-47: update to provide the correct major versioning. Include sample in the description.\n\nUpdate: This User Story is created for regression testing purposes and is not part of the Centralized Records Declaration. Its purpose is to ensure that all existing functionalities related to Single File Records Declaration continue to work correctly after the recent system enhancements. The objective is to validate that there are no unintended impacts on previously delivered features.\n\nAs part of this validation, it also includes checking and confirming that the Major Versioning is incrementing correctly, to ensure that the system maintains accurate version control and behaves as expected.", "category": "Documentation", "project": "ADB", "source": "Teams", "status": "In Progress", "remarks": null, "url": null, "verified": true}], "communications": [{"sn": "1", "date": "2026-01-23", "platform": "WeCom", "sender": "Kiana", "summary": "Cross check and update the effor estimates", "area": "PBL for Centralized Records Declaration", "actionRequired": "Yes", "owner": "Myself", "due": "2026-01-23", "status": "Completed", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "2", "date": "2026-01-27", "platform": "Personal", "sender": "Myself", "summary": "To check and confirm the CSV File naming for R2026.2 Multiple Centralized Records Declaration", "area": "PBL for Centralized Records Declaration", "actionRequired": "Yes", "owner": "Edfe/Willie", "due": null, "status": "Pending", "url": null, "verified": true}, {"sn": "3", "date": "2026-01-27", "platform": "Teams", "sender": "Myself", "summary": "To confirm that Move feature in centralized will follow the multiple records declaration workflow of validating it first before moving it to the final documents library", "area": "R2026.2 logic", "actionRequired": "No", "owner": "Mihal", "due": null, "status": "Completed", "url": null, "verified": true}, {"sn": "4", "date": "2026-01-28", "platform": "Teams", "sender": "ADB", "summary": "Change prompt of the successful declared email", "area": "R2026.4 logic", "actionRequired": "Yes", "owner": "Lorella", "due": "check ITD/Avepoint Tech team gc (1/28/2026)\n\nassigned to: Leah", "status": "Pending", "url": null, "verified": true}, {"sn": "5", "date": "2026-01-28", "platform": "Teams", "sender": "ADB", "summary": "To clarify that no folder creation and search function for Centralized final documents library", "area": "Deck for requirements and functional walkthrough", "actionRequired": "Yes", "owner": "Edfe/Ferds", "due": null, "status": "Completed", "url": null, "verified": true}, {"sn": "6", "date": "2026-02-19", "platform": "Teams", "sender": "ADB", "summary": "Physical Records - No RAC intervention for short term. To require report generation for monitoring purposes", "area": "Short Term Logic", "actionRequired": "Yes", "owner": "Kylee/RAC", "due": null, "status": null, "url": null, "verified": true}]};
+window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Master_Tracker.xlsx", "projects": [{"id": "glass", "name": "GLASS", "full": "GRA GLASS (AvePoint internal)", "blurb": "Change requests, UAT cases and reference files for the GLASS engagement.", "sections": [{"title": "Reference links", "type": "links", "items": [{"name": "GLASS master reference document", "url": "https://avepointcrm.sharepoint.com/sites/Jim'sSite/_layouts/15/doc.aspx?sourcedoc=%7bf49f8f5f-f004-424f-a712-2547442fdf2e%7d&action=edit", "group": "Key document", "verified": true}, {"name": "Test System", "url": "https://avepointcrm.sharepoint.com/:x:/s/Prj_GRAGLASS_Internal/IQDFjRA5c8WNQ7ci2-mkEkI0AdnBRhA8dhu5PfZg4an4E6A?e=l7mbcK&isSPOFile=1&xsdata=MDV8MDJ8fDRkYzRkZGE1ZjlmNjQ3YzRkMDMwMDhkZWIwYTU5MzMyfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDI0MjIzMTg4NjIzODR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EWTBOVFF6TURjNU53PT18OWM5ODQ5MzYyY2UwNGNlZTNlMDYwOGRlYjBhNTkzMzJ8ODhmZjc2MWY4M2ZlNDk0OWFjOTU0OTNmN2FiY2FlZDE%3D&sdata=VkhHYlUzWjVGNWxNUEFrTTNwR0dtYXExcnk5eURHeE9EclZQS0FoV2xHST0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "Personnel & Environment.xlsx"}, {"name": "Change Request (CR)", "url": "https://avepointcrm.sharepoint.com/:b:/s/Prj_GRAGLASS_Internal/IQBQPJ8qFuu5TLhu8ap1h90NAfSPLnhlnQbkN2f_gVbss6c?e=ZD1sny&isSPOFile=1&xsdata=MDV8MDJ8fDdmY2I4MzU4MjBlNzQ1ZWU4NjlhMDhkZWFmYzE1MmNmfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDE0NDE5ODYwNzAxNzB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EVTBOek01TnpneE1RPT18ZDkxZDk1MjdmYjgxNDM3YWVmOWUwOGRlYWZjMTUyY2V8MjEyZTc1ZTAyZGRjNDU4Zjg5NzZlZDY1ZTg3ZWY2ZWM%3D&sdata=NFNRNmYrR1pEV0IvRTZSYWJzUzdYMEtyV3dPcWNCVUJiT25NZis1OVNtcz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "GLASS AI FS_v1.1_final.pdf"}, {"name": "User Guide", "url": "https://avepointcrm.sharepoint.com/:f:/s/Prj_GRAGLASS_Internal/IgAXrPls7asTRKzpsO7GK66jAaVvqzKRP32nJmnIYW8XxbQ?e=OIQgVj&xsdata=MDV8MDJ8fDBhYTAwMjFlNjI2OTQzZmE2YzIwMDhkZWFmYzEwYTU1fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDE0NDA3NzAxMDg0NDh8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EVTBOekkzTmpNMU1BPT18MWI5Mjk0YzRjYmM1NGVlNGNmM2YwOGRlYWZjMTBhNTR8OGNhNWUxMTkwOWNhNGZmODg4MjQyMzdjMjA4Y2NlZDQ%3D&sdata=YndoNit3YitHakVzaGgzUytOYS9vRFFXT1VISUhER0JlNWhxTEw1OWEyQT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "User Guide"}, {"name": "Master Data", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Jim'sSite/_layouts/15/Doc.aspx?sourcedoc=%7BF49F8F5F-F004-424F-A712-2547442FDF2E%7D&file=Glass.xlsx&action=default&mobileredirect=true&or=EXCEL-WEB.BODY.NT&ct=1779326050110", "verified": true, "group": "Reference file", "note": null}, {"name": "CR01 UAT Case", "url": "https://avepointcrm.sharepoint.com/sites/Prj_GRAGLASS_Internal/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FPrj%5FGRAGLASS%5FInternal%2FShared%20Documents%2F08%20QA%20Documents%2FCR01%2FCR01%20UAT%20Case&viewid=89979c23%2D400e%2D4421%2Db153%2D5b8f1df3a9b7&csf=1&CID=907a8291%2D61e3%2D4320%2D9440%2D42df156b3093&FolderCTID=0x012000E555ACCF94075D428B0810A5578D03E2&TeamsCID=36fa310f%2Db2b4%2D42d0%2D8597%2De17b62f53d11&OR=Teams%2DHL&CT=1782385484718", "verified": true, "group": "Reference file", "note": null}, {"name": "CR02 ppt assessment file", "url": "https://avepointcrm.sharepoint.com/:p:/s/Prj_GRAGLASS_Internal/IQAFpODllq5lS4oB27LyhQD8Adn1TfYXVJlcvdp-mICDh8o?wdExp=TEAMS-TREATMENT&web=1&TeamsCID=2200f586-e2a4-4726-8388-30720882e702", "verified": true, "group": "Reference file", "note": null}, {"name": "CR02 dev effort list", "url": "https://avepointcrm.sharepoint.com/:x:/s/Prj_GRAGLASS_Internal/IQCTVjUYAytAQJDAQJUM2I2BASjrBwDgbThjn3xBf5DeTno?e=E0uvRb&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&TeamsCID=cb655636-dac4-4781-b701-ee09ffedb1de&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA3MDIxNTcxMSJ9&linkOpenTime=1785134656165", "verified": true, "group": "Reference file", "note": null}]}]}, {"id": "edrms", "name": "EDRMS ADB", "full": "Asian Development Bank \u2014 EDRMS / DRM implementation", "blurb": "Sites, backlogs, test environments and release artefacts for the ADB EDRMS programme.", "sections": [{"title": "Sites & source links", "type": "sites", "items": [{"sn": "1", "name": "ADB SharePoint Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "2", "name": "UAT Test Sites(Traditional)", "label": "link (demo)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_demo/SitePages/Home.aspx?xsdata=MDV8MDJ8fDZhZjlkMWI4ZjRjYjRhYTljODkwMDhkZTU3YmZmOWE0fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2NzkxNzE4ODUyMDB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hNVEUyTmpJenw3MzAyYjU4MDg2NjU0YzVmMGNlMTA4ZGU1N2JmZjlhNHw1Zjg4MzM3NTViYjc0NmY2YWQwOWNlYmM5NWVkN2E4YQ%3D%3D&sdata=ejV4NFNnY0I1Y1Z4ODRaRFRtN2p0eURrbWttcWtvWnVBL1pDTkxma241bz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "2", "name": "UAT Test Sites(Traditional) (link (people))", "label": "link (people)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_people?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1Njk1MTN8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=RjV4UjJKN1oybnpsUndtWDczWGlIbkJhQXk2ZFlCSHMvMjVsRVd3M0VxND0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "2", "name": "UAT Test Sites(Traditional) (link (admin))", "label": "link (admin)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_admin?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1ODI4Mzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=bXg5ZlJGT3pvU2k0eFRDYlRrMWtXb2ZqSW4zVWxNb0thNTRoK2lvQzV0WT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "3", "name": "Internal Environment Site (Trad)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/org_csd_1.4testsite/AnnualMeet/Forms/All%20Files.aspx?id=%2Fsites%2Forg%5Fcsd%5F1%2E4testsite%2FAnnualMeet%2FADB%C2%A0EDRMS%C2%A0R2026%2E1%20%E2%80%8B%2D%E2%80%8B%C2%A0UAT%C2%A0Test%C2%A0Cases%C2%A0%E2%80%8C%E2%80%91%E2%80%8C%C2%A0Records%C2%A0Declaration%20%285%29&viewid=a9f94689%2D5713%2D4ae7%2Dbddd%2Daf18c8b01c3d&CT=1768817656351&OR=OWA%2DNT%2DMail&CID=23a30351%2D69b4%2Df998%2D1c9d%2D04c482e715af&xsdata=MDV8MDJ8fDVhOWNjZTIyOGNjYjQ3ZDg3YWQwMDhkZTU3NDNiOTAzfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQxNDU1MTE2Mjc0NzJ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9ERTNOelV3T0RjeHw5OWNmYjYyZmJjYjk0Mjg5ZGRlMTA4ZGU1NzQzYjkwMnxhMDg0N2E4MjQxNTk0ZjM5OTFlM2YxNWYxOTk2OTYyNA%3D%3D&sdata=cTFNNFMxMXZhaE0xTlpCd0p5Um9kZ1dxL3NzMFFpREMyNE5HV3VXcGZHWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "ji\u2026@7rkd12.onmicrosoft.com"}, {"sn": "3.1", "name": "Internal Environment Site (Proj)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite01/SitePages/Home.aspx?xsdata=MDV8MDJ8fGQ5YTJmYTI3OWY0ZDRkYTMyMzg5MDhkZTc5ZDE0NTRifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODIxMzY4NTA4NzA5MDR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pBMVpEQmhNamMyTFdFeE5EZ3RORFJsT1MxaU56STJMVGRpWm1FMllUTTBNV1ZqTlY4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qWXhOamc0TkRRMU5BPT18MjYyZmMxY2QwZDkxNGE2NDk1YjUwOGRlNzlkMTQ1NGF8N2RkMDM4ZGM4MTdkNDM2OGE5YTY1ZTg0YzdiNzcyMWE%3D&sdata=UzcwYnd2SHdDaVpQN2t4bFBOYklsNjhKM2d2czBJOWRUdFJHZ2VKZTZvaz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "ji\u2026@7rkd12.onmicrosoft.com"}, {"sn": "4", "name": "Sanity Test Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "5", "name": "Product Backlog", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FProduct%20Backlog&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "6", "name": "uat Retention Label Mapping", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data_uat/Lists/Retention%20Label%20Mapping/AllItems.aspx", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "7", "name": "ADO Site", "label": "link", "url": "https://dev.azure.com/asiandevbank/itd-itop-drm/_workitems/recentlyupdated/", "verified": true, "account": "No Access (borrow)"}, {"sn": "8", "name": "ADB EDRMS Task", "label": "link", "url": "https://to-do.office.com/tasks/AAMkADY5MmQ2ZGFiLTZhNWYtNGU0Yi1iYzM1LTQwYTRhMTFjZWRjZAAuAAAAAACKet_wR4ydQLB_GtDzqNibAQC_lAXdlzSxQafFCX5gDemAAACquu0yAAA=", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "9", "name": "Man-days Consumption", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true&DefaultItemOpen=1", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "10", "name": "Centralized - Project Site 1(no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite01?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MDU4OTV8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=ZDNLTUZmYVpFZllYeHc1MzRjb2RJNzVkUU5Tak5YWkM5aXlXVkNkaFBNUT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "11", "name": "Centralized - Project Site 2 (no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite02?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MzAwNzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=SjhZS0R0V0kyWVFoVC9vUzcvK3M4d1pmVUVpVUlKZGNLZGVOeHZUT2todz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "12", "name": "Centralized - Project Site 3 (no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite03?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4NTAxNjZ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=UGN5dlJCTHo0OWxjSHNSOU1pN3FUSEVvV1BBNE41NEtGMVZEOFR5S3pkOD0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "13", "name": "Database Design", "label": "link", "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B50C34E07-CFDA-4C29-991F-2EB421A2FDC5%7D&file=Database%20Design%2012.03.xlsx&action=default&mobileredirect=true", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "14", "name": "Internal Action List", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BCDAC895B-37B4-4F63-AE68-A0A475FA0D57%7D&file=Internal%20Action%20List.xlsx&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&action=default&mobileredirect=true", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "15", "name": "DRM Workflow", "label": "link", "url": "https://avepointcrm.sharepoint.com/:u:/r/sites/Gen_ADB_DRM_Internal/Shared%20Documents/General/04.%20Requirement%20Materials/To-Be/To-Be%20DRM%20Workflows.vsdx?d=wbd33d559870e48c2af833f5c2d79fdf0&csf=1&web=1&e=c9Zhdw", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "16", "name": "Microsoft To Do", "label": "link", "url": "https://to-do.office.com/tasks/sharing?InvitationToken=vmhSCzlTBi3G_ehDOb3K_QRCCeYnCf_rWHcReG2YDPW0H2IdOC3D3ahIdc6LmWo7A", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "17", "name": "High Level Solution Design (R2026.2)", "label": "link", "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B96FC56F0-8E43-42AE-8C7A-A28DE752E61D%7D&file=EDRMS%20R2026.1%20High-Level%20Solution%20Design%20(HLSD).docx&action=default&mobileredirect=true", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "18", "name": "Test Outline (R2026.2)", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BDF3F8A12-1909-4AD3-B45C-06F5AA52AAF0%7D&file=Test%20Case%20Outline.xlsx&action=default&mobileredirect=true", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "19", "name": "Centralized Project Sites - UAT", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-uat", "verified": true, "account": null}, {"sn": "20", "name": "Centralized Project Sites - dev", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-dev", "verified": true, "account": null}, {"sn": "21", "name": "Centralized Project Sites - sanity", "label": "link", "url": null, "verified": true, "account": null}, {"sn": "22", "name": "UAT Checklist", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BA8741029-B763-47D5-BA26-A0FED0B3CAD7%7D&file=EDRMS%20UAT%20Checklist.xlsx&action=default&mobileredirect=true&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjAyMTIxNTExNiIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D", "verified": true, "account": "ji\u2026@avepoint.com"}, {"sn": "23", "name": "UAT Test Case Outline", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7B08ECF062-3D96-4EC6-BDB6-AF8641F2102C%7D&file=ADB%20EDRMS%20R2026.2%20UAT%20Test%20Cases%20-%20Centralized%20Records%20Declaration.xlsx&action=default&mobileredirect=true&isSPOFile=1&xsdata=MDV8MDJ8fDc5ZjQxYmE5OWE2MjRmNjVjZmNmMDhkZTc5OTZkODJifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODE4ODU5MTE5OTQzMTl8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pSaVlqVm1NRFE1TFRNeFpUVXROREk1TnkwNFlqQTNMV1JoWTJVeU56RTJOR016Wmw4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qVTVNVGM1TURReE5nPT18NDg5OWQ4NjI1NTcxNDRlODIzNWYwOGRlNzk5NmQ4MmJ8NmZlYTk3ZTY4Njk4NDQ3NmI2Nzg3OTJkZjMwNzM0NzM%3D&sdata=UlNFamYwRWFWSFZvaE9FS0dmY1ViRzNNUmpxYnB0cExScnJRNFNEaEFNWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": null}, {"sn": "24", "name": "Internal Avepoint Site", "label": "link", "url": "https://avepointcrm.sharepoint.com/sites/Gen_ADB_DRM_Internal/Shared%20Documents/Forms/AllItems.aspx", "verified": true, "account": null}, {"sn": "25", "name": "Internal Bugs and Issues", "label": "link", "url": "https://avepointcrm.sharepoint.com/sites/Gen_ADB_DRM_Internal/_layouts/15/doc.aspx?sourcedoc=%7b8baa3a21-fc23-415c-af9b-d882674a6f21%7d&action=edit", "verified": true, "account": null}, {"sn": "26", "name": "Sanity Project Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-sanity?xsdata=MDV8MDJ8fGE2NDk2MzkwMjkxYjQyYzIxMWE3MDhkZThiZjkyYjUyfDk0OTVkNmJiNDFjMjRjNTg4NDhmOTJlNTJjZjNkNjQwfDB8MHw2MzkxMDIwOTk0MjMxMDU0NDd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T21ZNU9ERmhObVV3TW1Vd056Um1ZekJoTnpsak5tRXdNakZpWTJZM016YzFRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpjME5qRXpNVFF4TXprNHwyZTE4OTBiNDdmNTQ0OTJiNzRhOTA4ZGU4YmY5MmI1MXwzYjMxMDJkOTRkM2E0M2EyYTZkNzUyZmUyMzc2MjNkOQ%3D%3D&sdata=bmw4YnhYQytxbkw4aUhVOHJoNmlWaHppdFQxdW9zamtCdWJYaVRLT01Ddz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": null}, {"sn": "27", "name": "Prod Retention Label Mapping", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data/SitePages/Home.aspx", "verified": true, "account": "jp\u2026@contractor.adb.org"}, {"sn": "28", "name": "ADB DRM Leave tracker", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BEEEB0698-4851-4300-87B8-777159DB19E6%7D&file=DRM%20-%20Leave%20Roster%20in%20Dec%20and%20Jan.xlsx&action=default&mobileredirect=true&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA0MDQwMTcxOCJ9&linkOpenTime=1777362706008", "verified": true, "account": "ji\u2026@avepoint.com"}]}, {"title": "Release 2026.2 \u2014 issues & concerns", "type": "concerns", "items": [{"sn": "1", "concern": "Attached File Naming", "description": "The current attachment file naming convention is:\nSuccess_JobID_SiteName_LibraryName or Failed_JobID_SiteName_LibraryName.\n\nClarification is required on whether LibraryName should be replaced with the Folder Name.", "source": "Product Backlog > Email Templates Sheet > Remarks", "reason": "Given that, under centralized records management, all file records are stored in the Final Documents library, using the library name may not be meaningful. It is recommended to replace LibraryName with the destination folder path within the Final Documents library.", "status": "In Progress"}]}, {"title": "EDRMS release phases", "type": "phases", "items": [{"title": "Phase 1: Workshop Requirements Gathering Activities", "steps": [{"sn": "1", "name": "Workshop deck", "description": "The workshop deck is used to guide the workshop sessions and present the key topics, processes, and ideas needed for discussion. It helps ensure the workshop stays focused and that all required areas are covered in a clear and structured way.", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FRelease%202026%2E2&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true}, {"sn": "2", "name": "Workshop Requirements Confirmation", "description": "The workshop requirements confirmation is done after the workshop sessions to reconfirm and finalize the captured requirements. This step ensures that all discussed items are correctly understood and agreed upon, and it formally signals the start of product backlog creation.", "url": "https://avepointcrm.sharepoint.com/:b:/r/sites/Jim%27sSite/Shared%20Documents/ADB%20Project/workshop%20email%20confirmation.pdf?csf=1&web=1&e=xSNP1w", "verified": true}]}, {"title": "Phase 2: Product Backlog Creation Activities", "steps": [{"sn": "1", "name": "Product Backlog", "description": "Creation of the product backlog based on the confirmed requirements, detailing features, user stories, and scope items to be delivered.", "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B3899D5DC-E0F9-4033-BFD2-381A710C7FC9%7D&file=EDRMS%20Product%20Backlog%20-%20V2.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "2", "name": "Product Backlog Email Confirmation", "description": "Formal confirmation via email to validate and approve the created product backlog.", "url": null, "verified": true}, {"sn": "3", "name": "Dev/QA Effort Estimates", "description": "Estimation of development and testing effort required for each backlog item to support planning and scheduling.", "url": null, "verified": true}]}, {"title": "Phase 3: System Integration Testing (SIT) Activities", "steps": [{"sn": "1", "name": "Internal QA/AP Testing", "description": "Internal testing to verify system functionality and integration before external testing.", "url": null, "verified": true}, {"sn": "2", "name": "Endorsement Email for SIT", "description": "Formal endorsement to confirm readiness to proceed with SIT.", "url": null, "verified": true}, {"sn": "3", "name": "TCS QA Testing", "description": "Execution of formal system integration testing by the QA team.", "url": null, "verified": true}, {"sn": "4", "name": "Signed Off Email for SIT", "description": "Formal sign-off confirming SIT completion and approval to proceed to UAT.", "url": null, "verified": true}]}, {"title": "Phase 4: User Acceptance Testing (UAT) Activities", "steps": [{"sn": "1", "name": "Endorsement Email for UAT", "description": "Formal endorsement confirming readiness to start UAT.", "url": null, "verified": true}, {"sn": "2", "name": "Prepare Defect Log and other UAT Pre-artifacts", "description": "Preparation of defect tracking and supporting materials required for UAT.", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F08%20%2D%20UAT&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=3896aa97%2D64ad%2D455f%2D8b87%2Db36d998ac04b&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&pageCorrelationId=0268efa1%2D30c6%2D5000%2D852f%2Dc546546a3623&timeStamp=1769073098023", "verified": true}, {"sn": "3", "name": "UAT Briefing and Demonstration", "description": "Walkthrough and demonstration of the system to guide users before testing.", "url": "https://asiandevbank.sharepoint.com/:p:/r/teams/prj_3yrc_drm_implem/Docs/08%20-%20UAT/Release%202026.1%20-%20Multiple%20Records%20Declaration/EDRMS%20R2026.1%20UAT%20Briefing.pptx?d=w6fb502ef21474b75b07eb5a8f4390302&csf=1&web=1&e=fXp5Sw", "verified": true}, {"sn": "4", "name": "UAT Completion Report", "description": "Documentation summarizing UAT results, findings, and final acceptance.", "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/Docs/08%20-%20UAT/Release%202026.1%20-%20Multiple%20Records%20Declaration/03%20UAT%20Sign%20Off/EDRMS%20R2026.1%20UAT%20Completion%20Report.docx?d=wdc3f0f7445e047da84f0973eeec67d2b&csf=1&web=1&e=NEfJs4", "verified": true}]}, {"title": "Phase 5: Deployment and Sanity Testing Activities", "steps": [{"sn": "1", "name": "Sanity Testing", "description": "High-level verification performed after deployment to confirm that critical functionalities are working as expected.", "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx", "verified": true}]}]}]}, {"id": "lhub", "name": "LHUB", "full": "LHUB \u2014 Vitae for LXP (VITAELXP) Jira intake", "blurb": "BA role reference: how signed-off FSDs become Jira epics, stories and sub-tasks.", "sections": [{"title": "Links & references", "type": "links", "items": [{"name": "Sample Jira ticket (VITAELXP-22170)", "url": "https://jirapro.avepoint.net/browse/VITAELXP-22170", "verified": true, "group": "Working link"}, {"name": "LHUB JIRA creation Teams group chat", "url": "https://teams.microsoft.com/l/chat/19:1b4ded8973f543009fe7954a5abb52c5@thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D", "verified": true, "group": "Working link"}, {"name": "FSD timeline (SharePoint)", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/ExtCst_MVPTLhubProject/_layouts/15/Doc.aspx?sourcedoc=%7B7BE2055C-50D7-4BB2-8D00-F0EB78E5B709%7D&file=UAT2%20dev%26qa%20timeline%20(2).xlsx&action=default&mobileredirect=true&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1768281674824&web=1", "verified": true, "group": "Working link"}, {"name": "Jira Tracker", "url": "https://avepointcrm-my.sharepoint.com/:x:/r/personal/michael_gascon_avepoint_com/_layouts/15/doc2.aspx?sourcedoc=%7B0FB0DD6F-F87E-495D-8F1F-9C4B0769A1F6%7D&file=LHUB_JiraUpdateTracker_April2025.xlsx&action=default&mobileredirect=true", "verified": true, "group": "Reference"}, {"name": "Internal SharePoint Site where all FSDs uploaded", "url": "https://avepointcrm.sharepoint.com/MaivenPoint/Shared%20Documents/Forms/AllItems.aspx?viewid=ed6e7899%2D177a%2D46a0%2D9037%2D7651a5b4b40f&FolderCTID=0x012000C967E7A149636F4DA701355DA771B368", "verified": false, "group": "Reference"}]}, {"title": "Clarification checklist for the remote BA", "type": "list", "items": ["1. May I request the link to the reviewed FSD uploaded in the internal SharePoint site?", "2. May I request the link to the Hi-Fi design for this FSD?", "3. Which sections of the FSD have been fully signed off and are ready for development?", "4. Who is the assigned developer for this FSD?"], "note": "Note: When the Project Manager asks for the number of tasks created, this refers to the number of FSD sections that have been reviewed and converted into Jira tickets. To determine this, count the total number of tickets listed under \u201cIssues in Epic\u201d on the Jira web page. This total represents the number of Jira tasks created."}, {"title": "Jira ticket creation steps", "type": "list", "items": ["1. Connect to the AvePoint (SG) VPN.", "2. Open the Jira web application.", "3. Click Create.", "4. In the Create Issue screen, set the following for the Epic:\n- Project: Vitae for LXP (VITAELXP)\n- Issue Type: Epic\n- Priority: Normal / Major\n- Summary Format: [Pillar #] FSD Name\n(If no Pillar is specified, use the FSD name only \u2014 do not include brackets.)\n- Assignee: Assigned Developer for the FSD\nDescription Format:\nKindly refer to the following links:\n\nFSD: [FSD link]\nHi-Fi Design: [Hi-Fi Design link]", "5. Click Create to save the Epic.", "6. Once the Epic is created, click the \u201c+\u201d icon next to Issues in Epic to create tasks.", "7. For each Story under the Epic:\n- Issue Type: Story\n- Summary Format: [Pillar #] [FSD Name] FSD Section\n- Assignee: Assigned Developer\n- Description:\nUse the same format as the Epic description.", "8. If a Sub-task is required:\n- Open the relevant Story from the Issues in Epic list.\n- Click More (next to Assign).\n- Select Create Sub-task.", "9. For the Sub-task, use the following Summary Format:\n- [Pillar #] [FSD Name] [FSD Section] FSD sub-section\n- Assign the sub-task to the appropriate developer.\n- Follow the same description format used in the Epic and Story."]}], "active": false}], "daily": [], "communications": [{"sn": "1", "date": "2026-01-23", "platform": "WeCom", "sender": "Kiana", "summary": "Cross check and update the effor estimates", "area": "PBL for Centralized Records Declaration", "actionRequired": "Yes", "owner": "Myself", "due": "2026-01-23", "status": "Completed", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "2", "date": "2026-01-27", "platform": "Personal", "sender": "Myself", "summary": "To check and confirm the CSV File naming for R2026.2 Multiple Centralized Records Declaration", "area": "PBL for Centralized Records Declaration", "actionRequired": "Yes", "owner": "Edfe/Willie", "due": null, "status": "Pending", "url": null, "verified": true}, {"sn": "3", "date": "2026-01-27", "platform": "Teams", "sender": "Myself", "summary": "To confirm that Move feature in centralized will follow the multiple records declaration workflow of validating it first before moving it to the final documents library", "area": "R2026.2 logic", "actionRequired": "No", "owner": "Mihal", "due": null, "status": "Completed", "url": null, "verified": true}, {"sn": "4", "date": "2026-01-28", "platform": "Teams", "sender": "ADB", "summary": "Change prompt of the successful declared email", "area": "R2026.4 logic", "actionRequired": "Yes", "owner": "Lorella", "due": "check ITD/Avepoint Tech team gc (1/28/2026)\n\nassigned to: Leah", "status": "Pending", "url": null, "verified": true}, {"sn": "5", "date": "2026-01-28", "platform": "Teams", "sender": "ADB", "summary": "To clarify that no folder creation and search function for Centralized final documents library", "area": "Deck for requirements and functional walkthrough", "actionRequired": "Yes", "owner": "Edfe/Ferds", "due": null, "status": "Completed", "url": null, "verified": true}, {"sn": "6", "date": "2026-02-19", "platform": "Teams", "sender": "ADB", "summary": "Physical Records - No RAC intervention for short term. To require report generation for monitoring purposes", "area": "Short Term Logic", "actionRequired": "Yes", "owner": "Kylee/RAC", "due": null, "status": null, "url": null, "verified": true}]};
 </script>
 <script>
 /* Shared form dialog.
@@ -487,7 +506,38 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     window.TrackerRender();
   });
 
-  window.TrackerUI = { formDialog, pager, pageIndex };
+  /* ---------- shared column sorting ----------
+     app.js had a sortable-header mechanism the link table never called, so
+     its columns could not be sorted at all. One helper here instead, keyed
+     per table, so every table gets it and the next one inherits it. */
+  const sorts = {};
+
+  /** Header cell that reports and toggles its own direction. */
+  const sortHeader = (key, field, label) => {
+    const s2 = sorts[key];
+    const arrow = s2 && s2.field === field ? (s2.dir === "desc" ? " ↓" : " ↑") : "";
+    return `<th data-sortkey="${key}" data-sortfield="${field}">${label}${arrow}</th>`;
+  };
+
+  /** Apply the current sort for `key`. Alphabetical, numbers read as numbers. */
+  const sortRows = (key, rows) => {
+    const s2 = sorts[key];
+    if (!s2) return rows;
+    return rows.slice().sort((a, b) =>
+      String(a[s2.field] ?? "").localeCompare(String(b[s2.field] ?? ""),
+        undefined, { numeric: true, sensitivity: "base" }) * (s2.dir === "desc" ? -1 : 1));
+  };
+
+  document.addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-sortfield]");
+    if (!th) return;
+    const key = th.dataset.sortkey, field = th.dataset.sortfield;
+    const cur = sorts[key];
+    sorts[key] = { field, dir: cur && cur.field === field && cur.dir === "asc" ? "desc" : "asc" };
+    window.TrackerRender();
+  });
+
+  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows };
 })();
 
 </script>
@@ -507,7 +557,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  const LOG = "tracker.activity";
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const logRead = () => { try { return JSON.parse(localStorage.getItem(LOG) || "[]"); } catch { return []; } };
+  const logWrite = (a) => localStorage.setItem(LOG, JSON.stringify(a));
   const save = (list) => localStorage.setItem(KEY, JSON.stringify(list));
   window.TrackerTasks = { load };
 
@@ -545,10 +598,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
 
   /* ---------- dates ---------- */
   const today = () => new Date().toISOString().slice(0, 10);
-  const overdue = (t) => t.deadline && t.status !== "Done" && t.deadline < today();
+  const overdue = (t) => t.due && t.status !== "Done" && t.due < today();
   const dueSoon = (t) => {
-    if (!t.deadline || t.status === "Done" || overdue(t)) return false;
-    const d = new Date(t.deadline + "T00:00:00"), n = new Date(today() + "T00:00:00");
+    if (!t.due || t.status === "Done" || overdue(t)) return false;
+    const d = new Date(t.due + "T00:00:00"), n = new Date(today() + "T00:00:00");
     return (d - n) / 86400000 <= 2;
   };
 
@@ -558,43 +611,41 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     const cur = id ? list.find((t) => t.id === id) : null;
     if (id && !cur) return;
     const projects = (window.TrackerProjectNames ? window.TrackerProjectNames() : []);
+    // Every field is optional: a task with nothing but a number is valid, so
+    // the only thing that stops a save is cancelling the dialog.
+    const nextNo = String(list.reduce((n, t) => Math.max(n, Number(t.no) || 0), 0) + 1);
     const values = await window.TrackerUI.formDialog({
       title: cur ? "Edit task" : "New task",
       submitLabel: cur ? "Save changes" : "Add task",
       fields: [
-        { name: "title", label: "Task", value: cur ? cur.title : "", placeholder: "What needs doing" },
-        { name: "description", label: "Description", type: "textarea",
-          value: cur ? cur.description : "", placeholder: "Detail, context, links…" },
-        { name: "status", label: "Status", type: "select", options: STATUSES, value: cur ? cur.status : STATUSES[0] },
-        { name: "deadline", label: "Deadline", type: "date", value: cur ? cur.deadline : "" },
-        { name: "assignee", label: "Assignee", value: cur ? cur.assignee : "", placeholder: "Who owns it" },
+        { name: "no", label: "Task No.", value: cur ? cur.no : nextNo,
+          help: "Numbered for you; change it if you keep your own numbering." },
+        { name: "description", label: "Description of the Task", type: "textarea", rows: 4,
+          value: cur ? cur.description : "", placeholder: "What needs doing" },
+        { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
+        { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
+        { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
+        { name: "status", label: "Status", type: "select", options: STATUSES,
+          value: cur ? cur.status : STATUSES[0] },
+        { name: "assignee", label: "Assignee", value: cur ? cur.assignee : "" },
         { name: "project", label: "Project", type: "select",
           options: ["", ...projects, "Other"], value: cur ? cur.project : "" },
-        { name: "linkUrl", label: "Attach a link", value: "",
-          placeholder: "https://… (Drive, SharePoint, anything)",
-          help: "Optional. Added alongside any files you upload." },
-        { name: "files", label: "Attachments", type: "attachments", value: cur ? cur.attachments || [] : [],
+        { name: "linkUrl", label: "Attach a link", value: "", placeholder: "https://…" },
+        { name: "files", label: "Attachments", type: "attachments",
+          value: cur ? cur.attachments || [] : [],
           help: "Files are stored in this browser only." },
       ],
     });
     if (!values) return;
-    if (!values.title) return;
 
-    const target = cur || {
-      id: "t-" + Date.now(),
-      created: today(),
-      attachments: [],
-    };
+    const wasDone = cur ? cur.status === "Done" : false;
+    const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
     Object.assign(target, {
-      title: values.title,
-      description: values.description,
-      status: values.status || STATUSES[0],
-      deadline: values.deadline,
-      assignee: values.assignee,
-      project: values.project,
+      no: values.no, description: values.description, given: values.given,
+      due: values.due, ref: values.ref, status: values.status || STATUSES[0],
+      assignee: values.assignee, project: values.project,
     });
 
-    // Attachments: drop what was unticked, keep the rest, add the new.
     const kept = (target.attachments || []).filter((a) => values.files.keep.includes(a.id));
     for (const gone of (target.attachments || []).filter((a) => !kept.includes(a) && a.kind !== "link")) {
       await dropBlob(gone.id);
@@ -611,6 +662,32 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
 
     if (!cur) list.push(target);
     save(list);
+    if (!wasDone && target.status === "Done") logDone(target);
+    window.TrackerRender();
+  }
+
+  /**
+   * A finished task becomes an activity entry. Guarded on the task id so
+   * editing a task that is already Done cannot log it twice.
+   */
+  function logDone(t) {
+    const log = logRead();
+    if (log.some((e) => e.taskId === t.id)) return;
+    log.push({
+      id: "a-" + Date.now(), taskId: t.id, date: today(),
+      task: t.description || ("Task " + (t.no || "")),
+      status: "Completed", url: t.ref || "", origin: "task",
+    });
+    logWrite(log);
+  }
+
+  function markDone(id) {
+    const list = load();
+    const t = list.find((x) => x.id === id);
+    if (!t || t.status === "Done") return;
+    t.status = "Done";
+    save(list);
+    logDone(t);
     window.TrackerRender();
   }
 
@@ -623,68 +700,112 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     window.TrackerRender();
   }
 
-  /** Open an attachment held in IndexedDB in a new tab. */
+  /**
+   * Open an attachment held in IndexedDB in a new TAB.
+   *
+   * This used to call window.open(url, "_blank", "noopener"). Passing a third
+   * windowFeatures argument makes browsers open a stripped-down popup WINDOW
+   * rather than a tab in the window you are already in. A synthetic anchor
+   * click is an ordinary target="_blank" navigation, which every other link
+   * in the app already uses.
+   */
   async function openAttachment(id) {
     const blob = await getBlob(id);
     if (!blob) return;
     const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener");
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   /* ---------- render ---------- */
+  const COLUMNS = ["Task No.", "Description of the Task", "Task Given Date", "Due Date", "Reference link"];
+  let openRow = null;   // the task expanded in place
+
   function attachmentChip(a) {
     return a.kind === "link"
       ? `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">link</a>`
       : `<button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">${esc(a.name)}</button>`;
   }
 
-  function taskCard(t) {
-    const flag = overdue(t) ? `<span class="tag warn">overdue</span>`
-      : dueSoon(t) ? `<span class="tag info">due soon</span>` : "";
+  /** The expanded detail shown when a row is clicked. */
+  function detailRow(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
-    return `<div class="card task${overdue(t) ? " late" : ""}">
-        <div class="t">${esc(t.title)}</div>
-        ${t.description ? `<div class="m desc">${esc(t.description)}</div>` : ""}
-        <div class="row">
-          ${t.deadline ? `<span class="tag">due ${esc(t.deadline)}</span>` : ""}
-          ${flag}
-          ${t.assignee ? `<span class="tag">${esc(t.assignee)}</span>` : ""}
-          ${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : ""}
+    return `<tr class="detail"><td colspan="${COLUMNS.length}">
+        <div class="taskdetail">
+          <div class="m desc">${t.description ? esc(t.description) : "No description recorded."}</div>
+          <div class="row">
+            <span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>
+            ${t.assignee ? `<span class="tag">${esc(t.assignee)}</span>` : ""}
+            ${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : ""}
+            ${overdue(t) ? `<span class="tag warn">overdue</span>` : ""}
+          </div>
+          ${atts ? `<div class="row atts">${atts}</div>` : ""}
+          <div class="row">
+            <button class="btn sm" data-edit="task:${esc(t.id)}">Edit</button>
+            <button class="btn sm" data-remove="task:${esc(t.id)}">Remove</button>
+            ${t.status === "Done" ? "" :
+              `<button class="btn sm" data-done="${esc(t.id)}">Mark done</button>`}
+          </div>
         </div>
-        ${atts ? `<div class="row atts">${atts}</div>` : ""}
-        <div class="row">
-          <button class="btn sm" data-edit="task:${esc(t.id)}">Edit</button>
-          <button class="btn sm" data-remove="task:${esc(t.id)}">Remove</button>
-        </div>
-      </div>`;
+      </td></tr>`;
   }
 
-  function column(status, tasks) {
-    return `<section class="taskcol">
-        <h3 class="sec">${esc(status)} (${tasks.length})</h3>
-        <div class="taskstack">${tasks.map(taskCard).join("") ||
-          `<div class="empty">Nothing here.</div>`}</div>
-      </section>`;
+  function taskRow(t) {
+    const dash = `<span class="tag dead">—</span>`;
+    const short = (t.description || "").split("\n")[0].slice(0, 90);
+    return `<tr class="taskrow${t.status === "Done" ? " done" : ""}${openRow === t.id ? " open" : ""}"
+                data-open="${esc(t.id)}">
+        <td>${t.no ? esc(t.no) : dash}</td>
+        <td class="wrap">${short ? esc(short) : dash}</td>
+        <td>${t.given ? esc(t.given) : dash}</td>
+        <td>${t.due ? esc(t.due) : dash}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
+        <td>${t.ref
+          ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>`
+          : dash}</td>
+      </tr>${openRow === t.id ? detailRow(t) : ""}`;
   }
 
   function view(q) {
     const all = load();
-    const list = all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q));
-    const late = list.filter(overdue).length;
+    const rows = window.TrackerUI.sortRows("tasks",
+      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
+    const late = rows.filter(overdue).length;
     return `
       <h2 class="page">To Do List</h2>
-      <p class="lede">${list.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Tasks are stored in this browser only.</p>
+      <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
+        Click a row to see its description. Tasks are stored in this browser only.</p>
       <div class="chips">
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
-      <div class="taskboard">${STATUSES.map((s) =>
-        column(s, list.filter((t) => (t.status || STATUSES[0]) === s))).join("")}</div>`;
+      ${rows.length
+        ? `<div class="tablewrap"><table class="tasktable">
+             <thead><tr>
+               ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
+               ${window.TrackerUI.sortHeader("tasks", "description", COLUMNS[1])}
+               ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[2])}
+               ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[3])}
+               <th>${COLUMNS[4]}</th>
+             </tr></thead>
+             <tbody>${rows.map(taskRow).join("")}</tbody>
+           </table></div>`
+        : `<div class="empty">No tasks yet.</div>`}`;
   }
 
   /* ---------- wiring ---------- */
   document.addEventListener("click", (e) => {
+    const dn = e.target.closest("[data-done]");
+    if (dn) return markDone(dn.dataset.done);
+    const row = e.target.closest("[data-open]");
+    if (row && !e.target.closest("a,button")) {
+      openRow = openRow === row.dataset.open ? null : row.dataset.open;
+      return window.TrackerRender();
+    }
     const ed = e.target.closest('[data-edit^="task:"]');
     if (ed) {
       const id = ed.dataset.edit.slice(5);
@@ -696,7 +817,42 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     if (att) return openAttachment(att.dataset.att);
   });
 
-  window.TrackerTasks = { view, load, editTask, STATUSES };
+  /* ---------- activity log, rendered by the Daily activity page ---------- */
+  function logAll() { return logRead(); }
+  function logRemove(id) { logWrite(logRead().filter((e) => e.id !== id)); window.TrackerRender(); }
+  async function logEdit(id) {
+    const log = logRead();
+    const cur = id ? log.find((e) => e.id === id) : null;
+    const v = await window.TrackerUI.formDialog({
+      title: cur ? "Edit activity" : "Log an activity",
+      submitLabel: cur ? "Save changes" : "Add entry",
+      fields: [
+        { name: "date", label: "Date", type: "date", value: cur ? cur.date : today() },
+        { name: "task", label: "Activity", type: "textarea", rows: 3, value: cur ? cur.task : "" },
+        { name: "status", label: "Status", type: "select",
+          options: ["Completed", "In Progress", "Pending"], value: cur ? cur.status : "Completed" },
+        { name: "url", label: "Reference link", value: cur ? cur.url : "", placeholder: "https://…" },
+      ],
+    });
+    if (!v) return;
+    if (cur) Object.assign(cur, v);
+    else log.push({ id: "m-" + Date.now(), origin: "manual", ...v });
+    logWrite(log);
+    window.TrackerRender();
+  }
+
+  document.addEventListener("click", (e) => {
+    const ed = e.target.closest('[data-edit^="act:"]');
+    if (ed) {
+      const id = ed.dataset.edit.slice(4);
+      return logEdit(id === "new" ? null : id);
+    }
+    const rm = e.target.closest('[data-remove^="act:"]');
+    if (rm) return logRemove(rm.dataset.remove.slice(4));
+  });
+
+  window.TrackerTasks = { view, load, editTask, markDone, STATUSES, COLUMNS,
+                          logAll, logEdit, logRemove };
 })();
 
 </script>
@@ -717,6 +873,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
   const EDITS = "tracker.linkEdits";   // { id: {name,description,account,url,removed} }
   const ADDED = "tracker.userLinks";   // [ {id,project,name,description,account,url} ]
   const DRIVE = "tracker.driveLinks";  // owned by drive.js; shared shape
+  const TABLES = "tracker.linkTables"; // [ {id,project,name} ] tables you name yourself
 
   const read = (key, fallback) => {
     try { return JSON.parse(localStorage.getItem(key) || fallback); } catch { return JSON.parse(fallback); }
@@ -727,6 +884,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
   const writeEdits = (o) => localStorage.setItem(EDITS, JSON.stringify(o));
   const writeAdded = (a) => localStorage.setItem(ADDED, JSON.stringify(a));
   const writeDrive = (a) => localStorage.setItem(DRIVE, JSON.stringify(a));
+  const customTables = () => read(TABLES, "[]");
+  const writeTables = (a) => localStorage.setItem(TABLES, JSON.stringify(a));
 
   const slug = (s) => String(s ?? "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "x";
@@ -766,7 +925,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
           for (const i of sec.items) {
             push({ id: `${base}:${slug(i.name)}`, name: i.name, url: i.url,
                    description: i.note || "", account: "", verified: i.verified,
-                   project: p.name, origin: "workbook" });
+                   project: p.name, table: sec.title, origin: "workbook" });
           }
         } else if (sec.type === "sites") {
           for (const i of sec.items) {
@@ -774,7 +933,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
             // description. Left empty so the column reads as fillable.
             push({ id: `${base}:${slug(i.name)}`, name: i.name, url: i.url,
                    description: "", account: i.account || "", verified: i.verified,
-                   project: p.name, origin: "workbook" });
+                   project: p.name, table: sec.title, origin: "workbook" });
           }
         } else if (sec.type === "phases") {
           for (const ph of sec.items) {
@@ -782,38 +941,54 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
               if (!st.url) continue;
               push({ id: `${base}:${slug(st.name)}`, name: st.name, url: st.url,
                      description: st.description || ph.title, account: "",
-                     verified: st.verified, project: p.name, origin: "workbook" });
+                     verified: st.verified, project: p.name, table: sec.title,
+                     origin: "workbook" });
             }
           }
         }
       }
     }
 
-    for (const d of drive()) {
-      push({ id: d.id, name: d.name, url: d.url, description: d.description || "",
-             account: d.account || "", verified: true,
-             project: d.project || DRIVE_GROUP, origin: "drive" });
-    }
+    // Pinned Drive files are not a project, so they no longer appear in the
+    // Projects section. They keep their own page, which is where they belong.
     for (const u of added()) {
       push({ id: u.id, name: u.name, url: u.url, description: u.description || "",
              account: u.account || "", verified: true,
-             project: u.project || DRIVE_GROUP, origin: "user" });
+             project: u.project || DRIVE_GROUP, table: u.table || "",
+             origin: "user" });
     }
     return out;
   }
 
-  /** One card per project, plus the Drive group, in workbook order. */
+  /** One tile per project. Google Drive is not a project and is not here. */
   function groups() {
     const rows = resolved();
     const order = window.TrackerState.data.projects
       .filter((p) => p.active !== false).map((p) => p.name);
-    if (!order.includes(DRIVE_GROUP)) order.push(DRIVE_GROUP);
-    for (const r of rows) if (!order.includes(r.project)) order.push(r.project);
+    for (const r of rows) if (r.project && !order.includes(r.project)) order.push(r.project);
     return order.map((name) => {
       const items = rows.filter((r) => r.project === name);
       return { key: slug(name), name, count: items.length,
+               tables: tablesFor(name).length,
                undescribed: items.filter((r) => !r.description).length };
-    }).filter((g) => g.count || g.name === DRIVE_GROUP);
+    });
+  }
+
+  /**
+   * The tables inside a project: the workbook's own sections, which are a
+   * real categorisation already (EDRMS ADB arrives as "Sites & source links"
+   * and "EDRMS release phases"), plus any you have named yourself.
+   */
+  function tablesFor(projectName) {
+    const names = [];
+    for (const r of resolved()) {
+      if (r.project === projectName && r.table && !names.includes(r.table)) names.push(r.table);
+    }
+    for (const t of customTables()) {
+      if (t.project === projectName && !names.includes(t.name)) names.push(t.name);
+    }
+    if (!names.length) names.push("Links");
+    return names;
   }
 
   const groupByKey = (key) => groups().find((g) => g.key === key);
@@ -821,13 +996,16 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     const g = groupByKey(key);
     return g ? resolved().filter((r) => r.project === g.name) : [];
   };
+  const rowsIn = (projectName, tableName) => resolved().filter((r) =>
+    r.project === projectName && (r.table || tablesFor(projectName)[0]) === tableName);
 
   /* ---------- writes ---------- */
   function saveRow(row, values) {
     if (row.origin === "workbook") {
       const ov = edits();
       ov[row.id] = { ...(ov[row.id] || {}), name: values.name, url: values.url,
-                     description: values.description, account: values.account };
+                     description: values.description, account: values.account,
+                     table: values.table || row.table };
       writeEdits(ov);
     } else if (row.origin === "drive") {
       const list = drive();
@@ -847,6 +1025,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     writeAdded(list);
   }
 
+  function addTable(projectName, name) {
+    const list = customTables();
+    if (list.some((t) => t.project === projectName && t.name === name)) return;
+    list.push({ id: "tb-" + Date.now(), project: projectName, name });
+    writeTables(list);
+  }
+
   function removeRow(row) {
     if (row.origin === "workbook") {
       const ov = edits();
@@ -864,35 +1049,67 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
   /* ---------- views ---------- */
   const esc = (s2) => String(s2 ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const ROWS_PER_PAGE = 10;
-  const match = (r, q) => !q || JSON.stringify(r).toLowerCase().includes(q);
 
-  /** Overview: one card per project, plus the Drive group. */
-  function overview(q) {
-    const gs = groups().filter((g) => !q || g.name.toLowerCase().includes(q) ||
-      rowsFor(g.key).some((r) => match(r, q)));
-    return `
-      <h2 class="page">Overview</h2>
-      <p class="lede">Open a project to see its links, add your own, and write
-        the description for each one.</p>
-      <div class="grid cards">${gs.map((g) => `
-        <button class="card groupcard" data-route="g:${esc(g.key)}">
-          <div class="t">${esc(g.name)}</div>
-          <div class="m">${g.count} link${g.count === 1 ? "" : "s"}${
-            g.undescribed ? ` · ${g.undescribed} without a description` : ""}</div>
-          <div class="row"><span class="tag accent">Open</span></div>
-        </button>`).join("") || `<div class="empty">Nothing matches your search.</div>`}
-      </div>`;
+  const PROJ_COLS = 3, PROJ_ROWS = 2;               // 3 projects a row
+  const PROJ_PER_PAGE = PROJ_COLS * PROJ_ROWS;
+  const ROWS_PER_PAGE = 10;
+
+  // Per-section state. Each search box and each account filter is its own,
+  // so filtering one table never disturbs another.
+  const find = {};        // { "projects": q, "links:<proj>:<table>": q }
+  let selected = null;    // the project whose tables are open underneath
+  const account = {};     // { "<proj>:<table>": chosen email }
+
+  const has = (r, q) => !q ||
+    (String(r.name || "") + " " + String(r.description || "")).toLowerCase().includes(q);
+
+  const searchBox = (key, placeholder) => `<div class="search sectionsearch">
+      <input type="search" data-search="${esc(key)}" value="${esc(find[key] || "")}"
+             placeholder="${esc(placeholder)}" autocomplete="off">
+    </div>`;
+
+  /** Projects: three a row, paginated, exactly like the Drive page's grid. */
+  function projectsTable() {
+    const q = (find.projects || "").toLowerCase();
+    const list = groups().filter((g) => !q || g.name.toLowerCase().includes(q));
+    if (!list.length) return `<div class="empty">No project matches that search.</div>`;
+    const cur = window.TrackerUI.pageIndex("projects", list.length, PROJ_PER_PAGE);
+    const slice = list.slice(cur * PROJ_PER_PAGE, (cur + 1) * PROJ_PER_PAGE);
+
+    const rows = [];
+    for (let r = 0; r < PROJ_ROWS; r++) {
+      const cells = slice.slice(r * PROJ_COLS, (r + 1) * PROJ_COLS);
+      if (!cells.length) break;
+      while (cells.length < PROJ_COLS) cells.push(null);
+      rows.push(`<tr>${cells.map((g) => g
+        ? `<td class="${selected === g.key ? "picked" : ""}">
+             <div class="t">${esc(g.name)}</div>
+             <div class="m">${g.count} link${g.count === 1 ? "" : "s"} in
+               ${g.tables} table${g.tables === 1 ? "" : "s"}${
+                 g.undescribed ? ` · ${g.undescribed} without a description` : ""}</div>
+             <div class="row">
+               <button class="btn sm" data-pick="${esc(g.key)}">${
+                 selected === g.key ? "Hide tables" : "Open tables"}</button>
+             </div>
+           </td>`
+        : `<td class="pad"></td>`).join("")}</tr>`);
+    }
+    return `<div class="tablewrap"><table class="cellgrid">
+        <tbody>${rows.join("")}</tbody>
+      </table></div>${window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE)}`;
   }
 
-  /** One group's links: Site, Description, Email Access, Link — paginated. */
-  function tableView(key, q) {
-    const g = groupByKey(key);
-    if (!g) return `<div class="empty">Unknown project.</div>`;
-    const all = rowsFor(key);
-    const rows = all.filter((r) => match(r, q));
-    const pkey = "links:" + key;
-    const cur = window.TrackerUI.pageIndex(pkey, rows.length, ROWS_PER_PAGE);
+  /** One named table inside a project. */
+  function linkTable(projectName, tableName) {
+    const key = `links:${slug(projectName)}:${slug(tableName)}`;
+    const all = rowsIn(projectName, tableName);
+    const emails = [...new Set(all.map((r) => r.account).filter(Boolean))].sort();
+    const chosen = account[key] || "";
+    let rows = all.filter((r) => has(r, (find[key] || "").toLowerCase()));
+    if (chosen) rows = rows.filter((r) => r.account === chosen);
+    rows = window.TrackerUI.sortRows(key, rows);
+
+    const cur = window.TrackerUI.pageIndex(key, rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
     const dash = `<span class="tag dead">—</span>`;
 
@@ -909,71 +1126,145 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
         </td>
       </tr>`).join("");
 
+    const emailPicker = `<select class="accountpick" data-account="${esc(key)}">
+        <option value="">All email access</option>
+        ${emails.map((a) => `<option value="${esc(a)}"${a === chosen ? " selected" : ""}>${esc(a)}</option>`).join("")}
+      </select>`;
+
+    return `<section class="linksection">
+        <div class="sectionhead">
+          <h3 class="sec">${esc(tableName)} (${rows.length})</h3>
+          <div class="sectiontools">
+            ${searchBox(key, "Search site or description…")}
+            ${emails.length ? emailPicker : ""}
+            <button class="btn sm" data-addto="${esc(projectName)}|${esc(tableName)}">Add link</button>
+          </div>
+        </div>
+        ${rows.length
+          ? `<div class="tablewrap"><table class="linktable">
+               <thead><tr>
+                 ${window.TrackerUI.sortHeader(key, "name", "Site")}
+                 ${window.TrackerUI.sortHeader(key, "description", "Description")}
+                 <th>Email Access</th><th>Link</th><th></th>
+               </tr></thead>
+               <tbody>${body}</tbody>
+             </table></div>${window.TrackerUI.pager(key, rows.length, ROWS_PER_PAGE)}`
+          : `<div class="empty">Nothing in this table yet.</div>`}
+      </section>`;
+  }
+
+  /** Overview: the Projects table, and the picked project's tables beneath it. */
+  function overview() {
+    const g = selected ? groupByKey(selected) : null;
     return `
-      <h2 class="page">${esc(g.name)}</h2>
-      <p class="lede">${rows.length} of ${all.length} links.</p>
-      <div class="chips">
-        <button class="btn" data-route="overview">‹ All projects</button>
-        <button class="btn primary" data-addlink="${esc(key)}">Add link</button>
-      </div>
-      ${rows.length
-        ? `<div class="tablewrap"><table class="linktable">
-             <thead><tr>
-               <th>Site</th><th>Description</th><th>Email Access</th><th>Link</th><th></th>
-             </tr></thead>
-             <tbody>${body}</tbody>
-           </table></div>${window.TrackerUI.pager(pkey, rows.length, ROWS_PER_PAGE)}`
-        : `<div class="empty">Nothing matches your search.</div>`}`;
+      <h2 class="page">Projects</h2>
+      <p class="lede">Open a project to see its tables. Add your own tables to
+        group links however you need.</p>
+      <div class="sectiontools">${searchBox("projects", "Search projects…")}</div>
+      ${projectsTable()}
+      ${g ? `
+        <div class="opened">
+          <div class="sectionhead">
+            <h2 class="page sub">Link tables in ${esc(g.name)}</h2>
+            <button class="btn sm" data-newtable="${esc(g.name)}">New table</button>
+          </div>
+          ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
+        </div>` : ""}`;
+  }
+
+  /** Kept so an existing #g:<project> bookmark still opens that project. */
+  function tableView(key) {
+    if (groupByKey(key)) selected = key;
+    return overview();
   }
 
   /* ---------- wiring ---------- */
-  const fields = (r) => [
+  const fields = (r, projectName, tableName) => [
     { name: "name", label: "Site", value: r ? r.name : "", placeholder: "What this link is" },
     { name: "description", label: "Description", type: "textarea", rows: 3,
       value: r ? r.description : "", placeholder: "What it is for, in your own words" },
     { name: "account", label: "Email Access", value: r ? r.account : "",
       placeholder: "Which account opens it" },
     { name: "url", label: "Link", value: r ? r.url : "", placeholder: "https://…" },
+    { name: "table", label: "Table", type: "select",
+      options: tablesFor(projectName), value: r ? (r.table || tableName) : tableName,
+      help: "Move this link into another table in the same project." },
   ];
 
   async function edit(id) {
     const row = resolved().find((r) => r.id === id);
     if (!row) return;
     const v = await window.TrackerUI.formDialog({
-      title: "Edit link", submitLabel: "Save changes", fields: fields(row),
+      title: "Edit link", submitLabel: "Save changes",
+      fields: fields(row, row.project, row.table),
     });
     if (!v) return;
     saveRow(row, v);
     window.TrackerRender();
   }
 
-  async function add(key) {
-    const g = groupByKey(key);
-    if (!g) return;
+  async function add(projectName, tableName) {
     const v = await window.TrackerUI.formDialog({
-      title: "Add link to " + g.name, submitLabel: "Add link", fields: fields(null),
+      title: `Add link to ${tableName}`, submitLabel: "Add link",
+      fields: fields(null, projectName, tableName),
     });
     if (!v || (!v.name && !v.url)) return;
-    addRow(g.name, { ...v, name: v.name || v.url });
+    addRow(projectName, { ...v, name: v.name || v.url, table: v.table || tableName });
+    window.TrackerRender();
+  }
+
+  async function newTable(projectName) {
+    const v = await window.TrackerUI.formDialog({
+      title: "New table in " + projectName, submitLabel: "Create table",
+      fields: [{ name: "name", label: "Table name", value: "",
+                 placeholder: "UAT links, CR links, anything" }],
+    });
+    if (!v || !v.name) return;
+    addTable(projectName, v.name);
     window.TrackerRender();
   }
 
   document.addEventListener("click", (e) => {
+    const pick = e.target.closest("[data-pick]");
+    if (pick) {
+      selected = selected === pick.dataset.pick ? null : pick.dataset.pick;
+      return window.TrackerRender();
+    }
+    const nt = e.target.closest("[data-newtable]");
+    if (nt) return newTable(nt.dataset.newtable);
+    const at = e.target.closest("[data-addto]");
+    if (at) {
+      const i = at.dataset.addto.lastIndexOf("|");
+      return add(at.dataset.addto.slice(0, i), at.dataset.addto.slice(i + 1));
+    }
     const ed = e.target.closest('[data-edit^="link:"]');
     if (ed) return edit(ed.dataset.edit.slice(5));
     const rm = e.target.closest('[data-remove^="link:"]');
     if (rm) {
       const row = resolved().find((r) => r.id === rm.dataset.remove.slice(5));
       if (row) { removeRow(row); window.TrackerRender(); }
+    }
+  });
+
+  // Re-rendering replaces the inputs, so focus and caret are restored by hand;
+  // without this a section search loses focus after every keystroke.
+  document.addEventListener("input", (e) => {
+    const box = e.target.closest("[data-search]");
+    if (box) {
+      const key = box.dataset.search;
+      find[key] = box.value.trim();
+      window.TrackerRender();
+      const again = document.querySelector(`[data-search="${CSS.escape(key)}"]`);
+      if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); }
       return;
     }
-    const ad = e.target.closest("[data-addlink]");
-    if (ad) return add(ad.dataset.addlink);
+    const sel = e.target.closest("[data-account]");
+    if (sel) { account[sel.dataset.account] = sel.value; window.TrackerRender(); }
   });
 
   window.TrackerLinks = {
-    resolved, groups, groupByKey, rowsFor, saveRow, addRow, removeRow, slug, DRIVE_GROUP,
-    overview, tableView, ROWS_PER_PAGE,
+    resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, saveRow, addRow, addTable,
+    removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,
   };
 })();
 
@@ -1095,7 +1386,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
 
   /* ---------- views ---------- */
   const views = {
-    overview() { return window.TrackerLinks.overview(state.query); },
+    overview() { return window.TrackerLinks.overview(); },
 
     project(p) {
       const q = state.query;
@@ -1146,23 +1437,27 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
 
     daily() {
       const q = state.query;
-      const projects = [...new Set(state.data.daily.map((d) => d.project).filter(Boolean))];
-      const f = state.filters.daily;
-      const rows = state.data.daily
-        .filter((d) => matches(d, q))
-        .filter((d) => !f || f === "All" || d.project === f);
+      const all = window.TrackerTasks.logAll();
+      const rows = all.filter((d) => matches(d, q));
       return `
-        <h2 class="page">Daily activity log</h2>
-        <p class="lede">${rows.length} of ${state.data.daily.length} logged activities.</p>
-        ${chips("daily", projects, f)}
+        <h2 class="page">Daily activity</h2>
+        <p class="lede">${rows.length} of ${all.length} logged activities. A task
+          marked done is logged here automatically; you can also add entries by hand.</p>
+        <div class="chips">
+          <button class="btn primary" data-edit="act:new">Log an activity</button>
+        </div>
         ${table("daily", [
           { key: "date", label: "Date", render: (r) => esc(r.date) },
           { key: "task", label: "Activity", wrap: true, render: (r) => esc(r.task) },
-          { key: "category", label: "Category", render: (r) => r.category ? `<span class="tag">${esc(r.category)}</span>` : "" },
-          { key: "project", label: "Project", render: (r) => r.project ? `<span class="tag accent">${esc(r.project)}</span>` : "" },
-          { key: "source", label: "Source", render: (r) => esc(r.source) },
           { key: "status", label: "Status", render: (r) => statusTag(r.status) },
+          { key: "origin", label: "Source", render: (r) =>
+              `<span class="tag">${r.origin === "task" ? "task completed" : "manual"}</span>` },
           { key: "url", label: "Link", render: linkCell },
+          { key: "id", label: "", render: (r) =>
+              `<span class="actions">
+                 <button class="btn sm" data-edit="act:${esc(r.id)}">Edit</button>
+                 <button class="btn sm" data-remove="act:${esc(r.id)}">Remove</button>
+               </span>` },
         ], rows)}`;
     },
 
@@ -1209,7 +1504,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
     { title: "Projects", items: activeProjects().map((p) => [`p:${p.id}`, p.name, null]) },
     { title: "Task", items: [
       ["todo", "To Do List", window.TrackerTasks.load().length],
-      ["daily", "Daily activity", state.data.daily.length],
+      ["daily", "Daily activity", window.TrackerTasks.logAll().length],
     ] },
     { title: "Drive", items: [["drive", "Google Drive", driveLinks().length]] },
   ];
@@ -1232,7 +1527,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 02:11 UTC", "source": "BA_Mast
       const p = state.data.projects.find((x) => x.id === state.route.slice(2));
       html = p ? views.project(p) : `<div class="empty">Unknown project.</div>`;
     } else if (state.route.startsWith("g:")) {
-      html = window.TrackerLinks.tableView(state.route.slice(2), state.query);
+      html = window.TrackerLinks.tableView(state.route.slice(2));
     } else {
       html = (views[state.route] || views.overview)();
     }

@@ -47,14 +47,15 @@ ok("real ui.js: did not swallow the file", uiHtml.length > 300 && uiHtml.length 
 
 const links = readFileSync(join(root, "assets/links.js"), "utf8");
 const linksHtml = templateText(links);
-ok("real links.js: keeps the project card markup", linksHtml.includes('class="card groupcard"'));
+ok("real links.js: keeps the projects grid markup", linksHtml.includes('class="cellgrid"'));
+ok("real links.js: keeps the section search markup", linksHtml.includes('class="search sectionsearch"'));
 ok("real links.js: keeps the link table markup", linksHtml.includes('class="linktable"'));
 ok("real links.js: did not swallow the file", linksHtml.length > 300 && linksHtml.length < links.length,
    `extracted ${linksHtml.length} of ${links.length} chars`);
 
 const tasks = readFileSync(join(root, "assets/tasks.js"), "utf8");
 const tasksHtml = templateText(tasks);
-ok("real tasks.js: keeps the task card markup", tasksHtml.includes('class="card task'));
+ok("real tasks.js: keeps the task table markup", tasksHtml.includes('class="tasktable"'));
 ok("real tasks.js: did not swallow the file", tasksHtml.length > 300 && tasksHtml.length < tasks.length,
    `extracted ${tasksHtml.length} of ${tasks.length} chars`);
 

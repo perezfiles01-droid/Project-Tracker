@@ -114,7 +114,7 @@
 
   /* ---------- views ---------- */
   const views = {
-    overview() { return window.TrackerLinks.overview(state.query); },
+    overview() { return window.TrackerLinks.overview(); },
 
     project(p) {
       const q = state.query;
@@ -165,23 +165,27 @@
 
     daily() {
       const q = state.query;
-      const projects = [...new Set(state.data.daily.map((d) => d.project).filter(Boolean))];
-      const f = state.filters.daily;
-      const rows = state.data.daily
-        .filter((d) => matches(d, q))
-        .filter((d) => !f || f === "All" || d.project === f);
+      const all = window.TrackerTasks.logAll();
+      const rows = all.filter((d) => matches(d, q));
       return `
-        <h2 class="page">Daily activity log</h2>
-        <p class="lede">${rows.length} of ${state.data.daily.length} logged activities.</p>
-        ${chips("daily", projects, f)}
+        <h2 class="page">Daily activity</h2>
+        <p class="lede">${rows.length} of ${all.length} logged activities. A task
+          marked done is logged here automatically; you can also add entries by hand.</p>
+        <div class="chips">
+          <button class="btn primary" data-edit="act:new">Log an activity</button>
+        </div>
         ${table("daily", [
           { key: "date", label: "Date", render: (r) => esc(r.date) },
           { key: "task", label: "Activity", wrap: true, render: (r) => esc(r.task) },
-          { key: "category", label: "Category", render: (r) => r.category ? `<span class="tag">${esc(r.category)}</span>` : "" },
-          { key: "project", label: "Project", render: (r) => r.project ? `<span class="tag accent">${esc(r.project)}</span>` : "" },
-          { key: "source", label: "Source", render: (r) => esc(r.source) },
           { key: "status", label: "Status", render: (r) => statusTag(r.status) },
+          { key: "origin", label: "Source", render: (r) =>
+              `<span class="tag">${r.origin === "task" ? "task completed" : "manual"}</span>` },
           { key: "url", label: "Link", render: linkCell },
+          { key: "id", label: "", render: (r) =>
+              `<span class="actions">
+                 <button class="btn sm" data-edit="act:${esc(r.id)}">Edit</button>
+                 <button class="btn sm" data-remove="act:${esc(r.id)}">Remove</button>
+               </span>` },
         ], rows)}`;
     },
 
@@ -228,7 +232,7 @@
     { title: "Projects", items: activeProjects().map((p) => [`p:${p.id}`, p.name, null]) },
     { title: "Task", items: [
       ["todo", "To Do List", window.TrackerTasks.load().length],
-      ["daily", "Daily activity", state.data.daily.length],
+      ["daily", "Daily activity", window.TrackerTasks.logAll().length],
     ] },
     { title: "Drive", items: [["drive", "Google Drive", driveLinks().length]] },
   ];
@@ -251,7 +255,7 @@
       const p = state.data.projects.find((x) => x.id === state.route.slice(2));
       html = p ? views.project(p) : `<div class="empty">Unknown project.</div>`;
     } else if (state.route.startsWith("g:")) {
-      html = window.TrackerLinks.tableView(state.route.slice(2), state.query);
+      html = window.TrackerLinks.tableView(state.route.slice(2));
     } else {
       html = (views[state.route] || views.overview)();
     }
