@@ -131,7 +131,9 @@
           html += table(`${p.id}-sites`, [
             { key: "sn", label: "#", render: (r) => esc(r.sn) },
             { key: "name", label: "Site / document", wrap: true, render: (r) => esc(r.name) },
-            { key: "account", label: "Account used", render: (r) => r.account ? esc(r.account) : `<span class="tag dead">—</span>` },
+            { key: "account", label: "Account used", render: (r) => r.account
+                ? `<button class="acctcell" data-copy="${esc(r.account)}" title="Click to copy ${esc(r.account)}">${esc(r.account)}</button>`
+                : `<span class="tag dead">—</span>` },
             { key: "url", label: "Link", render: linkCell },
           ], items);
         } else if (sec.type === "concerns") {
@@ -273,6 +275,21 @@
 
   /* ---------- events ---------- */
   document.addEventListener("click", (e) => {
+    // Any account cell copies its full address and says so briefly.
+    const copy = e.target.closest("[data-copy]");
+    if (copy) {
+      const value = copy.dataset.copy;
+      const done = () => {
+        copy.classList.add("copied");
+        const was = copy.textContent;
+        copy.textContent = "copied ✓";
+        setTimeout(() => { copy.textContent = was; copy.classList.remove("copied"); }, 900);
+      };
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(value).then(done, done);
+      else done();
+      return;
+    }
+
     const nav = e.target.closest("[data-route]");
     if (nav && nav.tagName === "BUTTON") return go(nav.dataset.route);
 

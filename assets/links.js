@@ -257,7 +257,10 @@
     const body = slice.map((r) => `<tr>
         <td class="wrap"><span class="sitename">${esc(r.name)}</span></td>
         <td class="wrap">${r.description ? esc(r.description) : dash}</td>
-        <td>${r.account ? esc(r.account) : dash}</td>
+        <td class="acct">${r.account
+          ? `<button class="acctcell" data-copy="${esc(r.account)}"
+                     title="Click to copy ${esc(r.account)}">${esc(r.account)}</button>`
+          : dash}</td>
         <td>${r.url
           ? `<a class="btn sm" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>`
           : dash}</td>

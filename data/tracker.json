@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-03 02:11 UTC",
+ "generatedAt": "2026-09-03 05:25 UTC",
  "source": "BA_Master_Tracker.xlsx",
  "projects": [
   {
@@ -87,7 +87,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "2",
@@ -95,7 +95,7 @@
        "label": "link (demo)",
        "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_demo/SitePages/Home.aspx?xsdata=MDV8MDJ8fDZhZjlkMWI4ZjRjYjRhYTljODkwMDhkZTU3YmZmOWE0fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2NzkxNzE4ODUyMDB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hNVEUyTmpJenw3MzAyYjU4MDg2NjU0YzVmMGNlMTA4ZGU1N2JmZjlhNHw1Zjg4MzM3NTViYjc0NmY2YWQwOWNlYmM5NWVkN2E4YQ%3D%3D&sdata=ejV4NFNnY0I1Y1Z4ODRaRFRtN2p0eURrbWttcWtvWnVBL1pDTkxma241bz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "2",
@@ -103,7 +103,7 @@
        "label": "link (people)",
        "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_people?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1Njk1MTN8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=RjV4UjJKN1oybnpsUndtWDczWGlIbkJhQXk2ZFlCSHMvMjVsRVd3M0VxND0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "2",
@@ -111,7 +111,7 @@
        "label": "link (admin)",
        "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_admin?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1ODI4Mzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=bXg5ZlJGT3pvU2k0eFRDYlRrMWtXb2ZqSW4zVWxNb0thNTRoK2lvQzV0WT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "3",
@@ -119,7 +119,7 @@
        "label": "link",
        "url": "https://7rkd12.sharepoint.com/sites/org_csd_1.4testsite/AnnualMeet/Forms/All%20Files.aspx?id=%2Fsites%2Forg%5Fcsd%5F1%2E4testsite%2FAnnualMeet%2FADB%C2%A0EDRMS%C2%A0R2026%2E1%20%E2%80%8B%2D%E2%80%8B%C2%A0UAT%C2%A0Test%C2%A0Cases%C2%A0%E2%80%8C%E2%80%91%E2%80%8C%C2%A0Records%C2%A0Declaration%20%285%29&viewid=a9f94689%2D5713%2D4ae7%2Dbddd%2Daf18c8b01c3d&CT=1768817656351&OR=OWA%2DNT%2DMail&CID=23a30351%2D69b4%2Df998%2D1c9d%2D04c482e715af&xsdata=MDV8MDJ8fDVhOWNjZTIyOGNjYjQ3ZDg3YWQwMDhkZTU3NDNiOTAzfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQxNDU1MTE2Mjc0NzJ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9ERTNOelV3T0RjeHw5OWNmYjYyZmJjYjk0Mjg5ZGRlMTA4ZGU1NzQzYjkwMnxhMDg0N2E4MjQxNTk0ZjM5OTFlM2YxNWYxOTk2OTYyNA%3D%3D&sdata=cTFNNFMxMXZhaE0xTlpCd0p5Um9kZ1dxL3NzMFFpREMyNE5HV3VXcGZHWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "ji…@7rkd12.onmicrosoft.com"
+       "account": "jimtest@7rkd12.onmicrosoft.com"
       },
       {
        "sn": "3.1",
@@ -127,7 +127,7 @@
        "label": "link",
        "url": "https://7rkd12.sharepoint.com/sites/projectsite01/SitePages/Home.aspx?xsdata=MDV8MDJ8fGQ5YTJmYTI3OWY0ZDRkYTMyMzg5MDhkZTc5ZDE0NTRifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODIxMzY4NTA4NzA5MDR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pBMVpEQmhNamMyTFdFeE5EZ3RORFJsT1MxaU56STJMVGRpWm1FMllUTTBNV1ZqTlY4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qWXhOamc0TkRRMU5BPT18MjYyZmMxY2QwZDkxNGE2NDk1YjUwOGRlNzlkMTQ1NGF8N2RkMDM4ZGM4MTdkNDM2OGE5YTY1ZTg0YzdiNzcyMWE%3D&sdata=UzcwYnd2SHdDaVpQN2t4bFBOYklsNjhKM2d2czBJOWRUdFJHZ2VKZTZvaz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "ji…@7rkd12.onmicrosoft.com"
+       "account": "jimtest@7rkd12.onmicrosoft.com"
       },
       {
        "sn": "4",
@@ -135,7 +135,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "5",
@@ -143,7 +143,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FProduct%20Backlog&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "6",
@@ -151,7 +151,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data_uat/Lists/Retention%20Label%20Mapping/AllItems.aspx",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "7",
@@ -167,7 +167,7 @@
        "label": "link",
        "url": "https://to-do.office.com/tasks/AAMkADY5MmQ2ZGFiLTZhNWYtNGU0Yi1iYzM1LTQwYTRhMTFjZWRjZAAuAAAAAACKet_wR4ydQLB_GtDzqNibAQC_lAXdlzSxQafFCX5gDemAAACquu0yAAA=",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "9",
@@ -175,7 +175,7 @@
        "label": "link",
        "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true&DefaultItemOpen=1",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "10",
@@ -183,7 +183,7 @@
        "label": "link",
        "url": "https://7rkd12.sharepoint.com/sites/projectsite01?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MDU4OTV8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=ZDNLTUZmYVpFZllYeHc1MzRjb2RJNzVkUU5Tak5YWkM5aXlXVkNkaFBNUT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "11",
@@ -191,7 +191,7 @@
        "label": "link",
        "url": "https://7rkd12.sharepoint.com/sites/projectsite02?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MzAwNzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=SjhZS0R0V0kyWVFoVC9vUzcvK3M4d1pmVUVpVUlKZGNLZGVOeHZUT2todz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "12",
@@ -199,7 +199,7 @@
        "label": "link",
        "url": "https://7rkd12.sharepoint.com/sites/projectsite03?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4NTAxNjZ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=UGN5dlJCTHo0OWxjSHNSOU1pN3FUSEVvV1BBNE41NEtGMVZEOFR5S3pkOD0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "13",
@@ -207,7 +207,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B50C34E07-CFDA-4C29-991F-2EB421A2FDC5%7D&file=Database%20Design%2012.03.xlsx&action=default&mobileredirect=true",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "14",
@@ -215,7 +215,7 @@
        "label": "link",
        "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BCDAC895B-37B4-4F63-AE68-A0A475FA0D57%7D&file=Internal%20Action%20List.xlsx&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&action=default&mobileredirect=true",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "15",
@@ -223,7 +223,7 @@
        "label": "link",
        "url": "https://avepointcrm.sharepoint.com/:u:/r/sites/Gen_ADB_DRM_Internal/Shared%20Documents/General/04.%20Requirement%20Materials/To-Be/To-Be%20DRM%20Workflows.vsdx?d=wbd33d559870e48c2af833f5c2d79fdf0&csf=1&web=1&e=c9Zhdw",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "16",
@@ -231,7 +231,7 @@
        "label": "link",
        "url": "https://to-do.office.com/tasks/sharing?InvitationToken=vmhSCzlTBi3G_ehDOb3K_QRCCeYnCf_rWHcReG2YDPW0H2IdOC3D3ahIdc6LmWo7A",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "17",
@@ -239,7 +239,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B96FC56F0-8E43-42AE-8C7A-A28DE752E61D%7D&file=EDRMS%20R2026.1%20High-Level%20Solution%20Design%20(HLSD).docx&action=default&mobileredirect=true",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "18",
@@ -247,7 +247,7 @@
        "label": "link",
        "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BDF3F8A12-1909-4AD3-B45C-06F5AA52AAF0%7D&file=Test%20Case%20Outline.xlsx&action=default&mobileredirect=true",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "19",
@@ -279,7 +279,7 @@
        "label": "link",
        "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BA8741029-B763-47D5-BA26-A0FED0B3CAD7%7D&file=EDRMS%20UAT%20Checklist.xlsx&action=default&mobileredirect=true&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjAyMTIxNTExNiIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       },
       {
        "sn": "23",
@@ -319,7 +319,7 @@
        "label": "link",
        "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data/SitePages/Home.aspx",
        "verified": true,
-       "account": "jp…@contractor.adb.org"
+       "account": "jperez@contractor.adb.org"
       },
       {
        "sn": "28",
@@ -327,7 +327,7 @@
        "label": "link",
        "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BEEEB0698-4851-4300-87B8-777159DB19E6%7D&file=DRM%20-%20Leave%20Roster%20in%20Dec%20and%20Jan.xlsx&action=default&mobileredirect=true&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA0MDQwMTcxOCJ9&linkOpenTime=1777362706008",
        "verified": true,
-       "account": "ji…@avepoint.com"
+       "account": "jimwyl.perez@avepoint.com"
       }
      ]
     },
@@ -479,6 +479,7 @@
   {
    "id": "lhub",
    "name": "LHUB",
+   "active": false,
    "full": "LHUB — Vitae for LXP (VITAELXP) Jira intake",
    "blurb": "BA role reference: how signed-off FSDs become Jira epics, stories and sub-tasks.",
    "sections": [
@@ -544,8 +545,7 @@
       "9. For the Sub-task, use the following Summary Format:\n- [Pillar #] [FSD Name] [FSD Section] FSD sub-section\n- Assign the sub-task to the appropriate developer.\n- Follow the same description format used in the Epic and Story."
      ]
     }
-   ],
-   "active": false
+   ]
   }
  ],
  "daily": [],

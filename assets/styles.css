@@ -255,3 +255,17 @@ table.tasktable tr.detail td{background:var(--panel-2)}
 .taskdetail .desc{white-space:pre-wrap;color:var(--text)}
 .taskdetail .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 td .actions,span.actions{display:inline-flex;gap:6px;white-space:nowrap}
+
+/* ---------- account / email access cells ---------- */
+/* Addresses must never break mid-word: a wrapped jperez@contractor.adb.org
+   reads as two different values. Give the column room and keep each on one
+   line, clickable to copy the whole thing. */
+td.acct, td:has(> .acctcell){white-space:nowrap}
+.acctcell{
+  background:none;border:0;padding:0;margin:0;cursor:pointer;
+  color:var(--text);font:inherit;text-align:left;white-space:nowrap;
+  border-bottom:1px dotted var(--line);
+}
+.acctcell:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.acctcell.copied{color:var(--ok);border-bottom-color:var(--ok)}
+table.linktable th:nth-child(3), table.linktable td:nth-child(3){min-width:230px}
