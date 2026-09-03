@@ -155,7 +155,7 @@
             <span class="tag">${esc(l.meta || "drive")}</span>
             <button class="btn sm" data-unpin="${esc(l.id)}">Remove</button>
           </div>
-        </div>`).join("") || `<div class="empty">Nothing pinned yet.</div>`}
+        </div>`).join("") || `<div class="empty">Nothing pinned yet.</div>`}</div>
 
       ${token ? `<h3 class="sec">Your Drive — recent files (${files.length})</h3>
         <div class="grid">${files.map((f) => `
@@ -163,7 +163,7 @@
             <div class="t"><a href="${esc(f.webViewLink)}" target="_blank" rel="noopener">${esc(f.name)}</a></div>
             <div class="m">${esc((f.mimeType || "").split(".").pop())} · ${esc((f.modifiedTime || "").slice(0, 10))}</div>
             <div class="row"><button class="btn sm" data-pin="${esc(f.id)}">Pin to tracker</button></div>
-          </div>`).join("") || `<div class="empty">No files.</div>`}` : ""}`;
+          </div>`).join("") || `<div class="empty">No files.</div>`}</div>` : ""}`;
   }
 
   /* ---------- wiring ---------- */
