@@ -76,8 +76,12 @@
       fields: [
         { name: "no", label: "Task No.", value: cur ? cur.no : nextNo,
           help: "Numbered for you; change it if you keep your own numbering." },
-        { name: "description", label: "Description of the Task", type: "textarea", rows: 4,
-          value: cur ? cur.description : "", placeholder: "What needs doing" },
+        { name: "name", label: "Name of task", value: cur ? (cur.name || "") : "",
+          placeholder: "Short name shown in the table" },
+        { name: "description", label: "Detailed description", type: "textarea", rows: 4,
+          value: cur ? cur.description : "",
+          help: "Shown when you click the task, not in the table.",
+          placeholder: "What needs doing" },
         { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
@@ -97,7 +101,7 @@
     const wasDone = cur ? cur.status === "Done" : false;
     const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
     Object.assign(target, {
-      no: values.no, description: values.description, given: values.given,
+      no: values.no, name: values.name, description: values.description, given: values.given,
       due: values.due, ref: values.ref, status: values.status || STATUSES[0],
       assignee: values.assignee, project: values.project,
     });
@@ -180,8 +184,26 @@
   }
 
   /* ---------- render ---------- */
-  const COLUMNS = ["Task No.", "Description of the Task", "Task Given Date", "Due Date", "Reference link"];
+  const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
   let openRow = null;   // the task expanded in place
+
+  /** Every link on a task, wherever it was entered. */
+  function taskLinks(t) {
+    const out = [];
+    if (t.ref) out.push({ url: t.ref, label: "Open ↗" });
+    for (const a of t.attachments || []) {
+      if (a.kind === "link" && a.url) out.push({ url: a.url, label: "Link ↗" });
+    }
+    return out;
+  }
+
+  function refCell(t) {
+    const links = taskLinks(t);
+    if (!links.length) return `<span class="tag dead">—</span>`;
+    return links.map((l) =>
+      `<a class="btn sm" href="${esc(l.url)}" target="_blank" rel="noopener">${l.label}</a>`
+    ).join(" ");
+  }
 
   function attachmentChip(a) {
     return a.kind === "link"
@@ -215,15 +237,15 @@
   function taskRow(t) {
     const dash = `<span class="tag dead">—</span>`;
     const short = (t.description || "").split("\n")[0].slice(0, 90);
+    // Tasks created before "Name of task" existed fall back to their description.
     return `<tr class="taskrow${t.status === "Done" ? " done" : ""}${openRow === t.id ? " open" : ""}"
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>
-        <td class="wrap">${short ? esc(short) : dash}</td>
+        <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>
+        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}</td>
         <td>${t.given ? esc(t.given) : dash}</td>
         <td>${t.due ? esc(t.due) : dash}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
-        <td>${t.ref
-          ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>`
-          : dash}</td>
+        <td>${refCell(t)}</td>
       </tr>${openRow === t.id ? detailRow(t) : ""}`;
   }
 
@@ -244,10 +266,11 @@
         ? `<div class="tablewrap"><table class="tasktable">
              <thead><tr>
                ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
-               ${window.TrackerUI.sortHeader("tasks", "description", COLUMNS[1])}
-               ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[2])}
-               ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[3])}
-               <th>${COLUMNS[4]}</th>
+               ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
+               ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+               ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[3])}
+               ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[4])}
+               <th>${COLUMNS[5]}</th>
              </tr></thead>
              <tbody>${rows.map(taskRow).join("")}</tbody>
            </table></div>`

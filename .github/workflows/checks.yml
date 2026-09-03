@@ -35,3 +35,5 @@ jobs:
         run: node checks/check_layout.mjs
       - name: Authored collections can be renamed and deleted
         run: node checks/check_crud.mjs
+      - name: Task table and dialog behave
+        run: node checks/check_tasks.mjs

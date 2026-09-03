@@ -170,7 +170,7 @@ ok("LHUB has left the sidebar", !flat.includes("LHUB"), flat.join(" · "));
 ok("Communications has left the sidebar", !flat.includes("Communications"));
 
 /* ---------------------------------------------------------------------------
-   The To Do List is a table now: five named columns, every field optional,
+   The To Do List is a table now: six named columns, every field optional,
    and a row that expands in place to show its description.
 --------------------------------------------------------------------------- */
 await page.click('button[data-route="todo"]');
@@ -184,8 +184,10 @@ await page.click('[data-fd="save"]');
 await page.waitForSelector("table.tasktable");
 
 const taskHeads = await page.locator("table.tasktable thead th").allTextContents();
-const wantTasks = ["Task No.", "Description of the Task", "Task Given Date", "Due Date", "Reference link"];
-ok("the task table carries exactly the five named columns",
+// The description moved into the row's detail; the table names the task and
+// says which project it belongs to.
+const wantTasks = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
+ok("the task table carries exactly the six named columns",
    JSON.stringify(taskHeads.map((h) => h.replace(/[ ↑↓]+$/, ""))) === JSON.stringify(wantTasks),
    taskHeads.join(" · "));
 ok("a new task appears as a row", (await page.locator("tr.taskrow").count()) === 1);

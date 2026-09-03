@@ -109,7 +109,18 @@
       };
       const onKey = (e) => {
         if (e.key === "Escape") { e.stopPropagation(); close(null); }
-        if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") { e.preventDefault(); close(collect()); }
+        // Enter used to submit the whole dialog from any input. On a ten-field
+        // form that saves everything below the caret as blank, which is how a
+        // task could be created with its link fields empty. Enter now moves to
+        // the next field; Ctrl/Cmd+Enter or the button saves.
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); close(collect()); return; }
+        if (e.key === "Enter" && e.target.tagName === "INPUT" && e.target.type !== "file") {
+          e.preventDefault();
+          const inputs = [...box.querySelectorAll("input, textarea, select")]
+            .filter((el) => !el.disabled && el.type !== "hidden");
+          const i = inputs.indexOf(e.target);
+          if (i > -1 && i + 1 < inputs.length) inputs[i + 1].focus();
+        }
       };
       const onClick = (e) => {
         if (e.target === box || e.target.closest('[data-fd="cancel"]')) return close(null);
