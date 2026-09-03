@@ -20,6 +20,10 @@ jobs:
         run: node checks/check_views_selftest.mjs
       - name: Views produce balanced markup
         run: node checks/check_views.mjs
+      # Runs before the browser steps, which create node_modules: this must
+      # judge the repository as committed, not as the checks leave it.
+      - name: Nothing unpublishable is tracked
+        run: node checks/check_publishable.mjs
       - name: Links open as tabs, not popup windows
         run: node checks/check_links_open.mjs
       - name: Paged tables behave
