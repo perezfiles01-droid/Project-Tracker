@@ -247,6 +247,7 @@
         and on the Overview page.</p>
       ${setup}
       ${notice ? `<div class="note" style="border-color:var(--warn)">${esc(notice)}</div>` : ""}
+      <div class="pagetools">${window.TrackerLinks.searchBox("drive", "Search pinned links and files…")}</div>
       <div class="chips" style="margin-top:14px">
         ${clientId
           ? `<button class="btn ${token ? "" : "primary"}" id="driveConnect">${token ? "Refresh files" : "Connect Google Drive"}</button>`

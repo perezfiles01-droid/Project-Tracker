@@ -407,6 +407,7 @@
   });
 
   window.TrackerLinks = {
+    searchBox, findValue: (key) => (find[key] || "").toLowerCase(),
     resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, saveRow, addRow, addTable,
     removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,
   };

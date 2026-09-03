@@ -117,8 +117,10 @@
     overview() { return window.TrackerLinks.overview(); },
 
     project(p) {
-      const q = state.query;
-      let html = `<h2 class="page">${esc(p.name)}</h2><p class="lede">${esc(p.full)} — ${esc(p.blurb)}</p>`;
+      const key = "project:" + p.id;
+      const q = window.TrackerLinks.findValue(key);
+      let html = `<h2 class="page">${esc(p.name)}</h2><p class="lede">${esc(p.full)} — ${esc(p.blurb)}</p>
+        <div class="pagetools">${window.TrackerLinks.searchBox(key, "Search this project…")}</div>`;
       for (const sec of p.sections) {
         html += `<h3 class="sec">${esc(sec.title)}</h3>`;
         if (sec.type === "links") {
@@ -166,14 +168,15 @@
     },
 
     daily() {
-      const q = state.query;
+      const q = window.TrackerLinks.findValue("daily");
       const all = window.TrackerTasks.logAll();
       const rows = all.filter((d) => matches(d, q));
       return `
         <h2 class="page">Daily activity</h2>
         <p class="lede">${rows.length} of ${all.length} logged activities. A task
           marked done is logged here automatically; you can also add entries by hand.</p>
-        <div class="chips">
+        <div class="pagetools">
+          ${window.TrackerLinks.searchBox("daily", "Search activities…")}
           <button class="btn primary" data-edit="act:new">Log an activity</button>
         </div>
         ${table("daily", [
@@ -192,7 +195,7 @@
     },
 
     comms() {
-      const q = state.query;
+      const q = window.TrackerLinks.findValue("comms");
       const f = state.filters.comms;
       const statuses = [...new Set(state.data.communications.map((c) => c.status).filter(Boolean))];
       const rows = state.data.communications
@@ -215,9 +218,9 @@
         ], rows)}`;
     },
 
-    drive() { return window.TrackerDrive.view(state.query); },
+    drive() { return window.TrackerDrive.view(window.TrackerLinks.findValue("drive")); },
 
-    todo() { return window.TrackerTasks.view(state.query); },
+    todo() { return window.TrackerTasks.view(window.TrackerLinks.findValue("todo")); },
   };
 
   /* ---------- shell ---------- */
@@ -309,9 +312,11 @@
     }
   });
 
-  $("#q").addEventListener("input", (e) => { state.query = e.target.value.trim().toLowerCase(); render(); });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); }
+    if (e.key === "/" && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+      const first = document.querySelector("#view [data-search]");
+      if (first) { e.preventDefault(); first.focus(); }
+    }
     if (e.key === "Escape") document.querySelectorAll(".modal").forEach((m) => (m.hidden = true));
   });
 

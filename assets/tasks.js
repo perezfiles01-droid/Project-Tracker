@@ -236,7 +236,8 @@
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
         Click a row to see its description. Tasks are stored in this browser only.</p>
-      <div class="chips">
+      <div class="pagetools">
+        ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length

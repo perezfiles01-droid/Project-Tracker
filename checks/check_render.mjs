@@ -83,13 +83,14 @@ ok("Remove button survives paging",
    (await page.locator('table.cellgrid [data-remove^="drive:"]').count()) === 1);
 
 // A search that shrinks the list must not strand the reader on an empty page.
-await page.fill("#q", "Pinned link 1");
+// Each page owns its search now; the header box was removed.
+await page.fill('#view [data-search]', "Pinned link 1");
 await page.waitForTimeout(200);
 const stranded = await page.evaluate(() =>
   !!document.querySelector("table.cellgrid") &&
   document.querySelectorAll("table.cellgrid tbody td:not(.pad)").length === 0);
 ok("a shrinking search never leaves an empty page", !stranded);
-await page.fill("#q", "");
+await page.fill('#view [data-search]', "");
 await page.waitForTimeout(150);
 
 // Files table: seed through the app's own render path.
@@ -127,7 +128,7 @@ ok("Pin buttons survive paging",
    item type added tomorrow with a Remove button and no Edit button fails this
    check without anyone remembering to update it.
 --------------------------------------------------------------------------- */
-await page.fill("#q", "");
+await page.fill('#view [data-search]', "");
 await page.waitForTimeout(150);
 const orphans = await page.evaluate(() => {
   const edits = new Set([...document.querySelectorAll("[data-edit]")].map((b) => b.dataset.edit));

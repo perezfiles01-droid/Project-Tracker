@@ -280,6 +280,10 @@ td.acct, td:has(> .acctcell){white-space:nowrap}
 .acctcell.copied{color:var(--ok);border-bottom-color:var(--ok)}
 table.linktable th:nth-child(3), table.linktable td:nth-child(3){min-width:230px}
 
+/* Page-level tools row: search on the LEFT, actions after it. */
+.pagetools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+.pagetools .search{flex:0 1 320px;min-width:200px}
+
 </style>
 </head>
 <body>
@@ -299,9 +303,6 @@ table.linktable th:nth-child(3), table.linktable td:nth-child(3){min-width:230px
 
   <main class="main">
     <div class="topbar">
-      <div class="search">
-        <input id="q" type="search" placeholder="Search every link, task and document…" autocomplete="off">
-      </div>
       <button class="btn" id="exportBtn">Export JSON</button>
       <div class="seg" role="group" aria-label="Theme">
         <button data-theme-set="system" title="Match your system" aria-pressed="false">
@@ -794,7 +795,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
         Click a row to see its description. Tasks are stored in this browser only.</p>
-      <div class="chips">
+      <div class="pagetools">
+        ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
@@ -1280,6 +1282,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   });
 
   window.TrackerLinks = {
+    searchBox, findValue: (key) => (find[key] || "").toLowerCase(),
     resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, saveRow, addRow, addTable,
     removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,
   };
@@ -1406,8 +1409,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     overview() { return window.TrackerLinks.overview(); },
 
     project(p) {
-      const q = state.query;
-      let html = `<h2 class="page">${esc(p.name)}</h2><p class="lede">${esc(p.full)} — ${esc(p.blurb)}</p>`;
+      const key = "project:" + p.id;
+      const q = window.TrackerLinks.findValue(key);
+      let html = `<h2 class="page">${esc(p.name)}</h2><p class="lede">${esc(p.full)} — ${esc(p.blurb)}</p>
+        <div class="pagetools">${window.TrackerLinks.searchBox(key, "Search this project…")}</div>`;
       for (const sec of p.sections) {
         html += `<h3 class="sec">${esc(sec.title)}</h3>`;
         if (sec.type === "links") {
@@ -1455,14 +1460,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     },
 
     daily() {
-      const q = state.query;
+      const q = window.TrackerLinks.findValue("daily");
       const all = window.TrackerTasks.logAll();
       const rows = all.filter((d) => matches(d, q));
       return `
         <h2 class="page">Daily activity</h2>
         <p class="lede">${rows.length} of ${all.length} logged activities. A task
           marked done is logged here automatically; you can also add entries by hand.</p>
-        <div class="chips">
+        <div class="pagetools">
+          ${window.TrackerLinks.searchBox("daily", "Search activities…")}
           <button class="btn primary" data-edit="act:new">Log an activity</button>
         </div>
         ${table("daily", [
@@ -1481,7 +1487,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     },
 
     comms() {
-      const q = state.query;
+      const q = window.TrackerLinks.findValue("comms");
       const f = state.filters.comms;
       const statuses = [...new Set(state.data.communications.map((c) => c.status).filter(Boolean))];
       const rows = state.data.communications
@@ -1504,9 +1510,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         ], rows)}`;
     },
 
-    drive() { return window.TrackerDrive.view(state.query); },
+    drive() { return window.TrackerDrive.view(window.TrackerLinks.findValue("drive")); },
 
-    todo() { return window.TrackerTasks.view(state.query); },
+    todo() { return window.TrackerTasks.view(window.TrackerLinks.findValue("todo")); },
   };
 
   /* ---------- shell ---------- */
@@ -1598,9 +1604,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   });
 
-  $("#q").addEventListener("input", (e) => { state.query = e.target.value.trim().toLowerCase(); render(); });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); }
+    if (e.key === "/" && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+      const first = document.querySelector("#view [data-search]");
+      if (first) { e.preventDefault(); first.focus(); }
+    }
     if (e.key === "Escape") document.querySelectorAll(".modal").forEach((m) => (m.hidden = true));
   });
 
@@ -1916,6 +1924,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         and on the Overview page.</p>
       ${setup}
       ${notice ? `<div class="note" style="border-color:var(--warn)">${esc(notice)}</div>` : ""}
+      <div class="pagetools">${window.TrackerLinks.searchBox("drive", "Search pinned links and files…")}</div>
       <div class="chips" style="margin-top:14px">
         ${clientId
           ? `<button class="btn ${token ? "" : "primary"}" id="driveConnect">${token ? "Refresh files" : "Connect Google Drive"}</button>`

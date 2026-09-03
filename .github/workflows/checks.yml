@@ -29,3 +29,5 @@ jobs:
           node checks/check_render.mjs
       - name: Email addresses are complete and readable
         run: node checks/check_emails.mjs
+      - name: Every page owns a working search
+        run: node checks/check_search.mjs
