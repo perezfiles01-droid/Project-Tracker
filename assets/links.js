@@ -173,6 +173,56 @@
     writeTables(list);
   }
 
+  /**
+   * Rename a table. Tables come from two places - the workbook's own section
+   * titles and ones you named yourself - so the rename is recorded once, at
+   * the name level, and every row that quoted the old name is re-pointed.
+   * A workbook row keeps its tombstone/override record; nothing is rewritten
+   * in the data file.
+   */
+  function renameTable(projectName, oldName, newName) {
+    newName = String(newName || "").trim();
+    if (!newName || newName === oldName) return;
+
+    const custom = customTables();
+    const mine = custom.find((c) => c.project === projectName && c.name === oldName);
+    if (mine) mine.name = newName;
+    else custom.push({ id: "tb-" + Date.now(), project: projectName, name: newName });
+    writeTables(custom);
+
+    // Re-point rows you added or pinned.
+    const own = added();
+    for (const r of own) if (r.project === projectName && (r.table || "") === oldName) r.table = newName;
+    writeAdded(own);
+    const pinned = drive();
+    for (const r of pinned) if (r.project === projectName && (r.table || "") === oldName) r.table = newName;
+    writeDrive(pinned);
+
+    // Workbook rows move by override, the same mechanism an edit already uses.
+    const ov = edits();
+    for (const r of resolved()) {
+      if (r.origin === "workbook" && r.project === projectName && r.table === oldName) {
+        ov[r.id] = { ...(ov[r.id] || {}), table: newName };
+      }
+    }
+    writeEdits(ov);
+
+    // The old custom entry, if the rename left one behind, is now empty.
+    writeTables(customTables().filter((c) =>
+      !(c.project === projectName && c.name === oldName)));
+  }
+
+  /**
+   * Delete a table and every link in it. Workbook rows are tombstoned rather
+   * than dropped, because the workbook still holds them and they would come
+   * straight back on the next render.
+   */
+  function deleteTable(projectName, tableName) {
+    for (const r of rowsIn(projectName, tableName)) removeRow(r);
+    writeTables(customTables().filter((c) =>
+      !(c.project === projectName && c.name === tableName)));
+  }
+
   function removeRow(row) {
     if (row.origin === "workbook") {
       const ov = edits();
@@ -284,6 +334,8 @@
           <div class="sectiontools">
             ${emails.length ? emailPicker : ""}
             <button class="btn sm" data-addto="${esc(projectName)}|${esc(tableName)}">Add link</button>
+            <button class="btn sm" data-edit="table:${esc(projectName)}|${esc(tableName)}">Rename</button>
+            <button class="btn sm" data-remove="table:${esc(projectName)}|${esc(tableName)}">Delete</button>
           </div>
         </div>
         ${rows.length
@@ -383,6 +435,18 @@
       const i = at.dataset.addto.lastIndexOf("|");
       return add(at.dataset.addto.slice(0, i), at.dataset.addto.slice(i + 1));
     }
+    const tre = e.target.closest('[data-edit^="table:"]');
+    if (tre) {
+      const spec = tre.dataset.edit.slice(6);
+      const i = spec.lastIndexOf("|");
+      return renamePrompt(spec.slice(0, i), spec.slice(i + 1));
+    }
+    const trd = e.target.closest('[data-remove^="table:"]');
+    if (trd) {
+      const spec = trd.dataset.remove.slice(6);
+      const i = spec.lastIndexOf("|");
+      return deletePrompt(spec.slice(0, i), spec.slice(i + 1));
+    }
     const ed = e.target.closest('[data-edit^="link:"]');
     if (ed) return edit(ed.dataset.edit.slice(5));
     const rm = e.target.closest('[data-remove^="link:"]');
@@ -394,6 +458,38 @@
 
   // Re-rendering replaces the inputs, so focus and caret are restored by hand;
   // without this a section search loses focus after every keystroke.
+  async function renamePrompt(projectName, tableName) {
+    const v = await window.TrackerUI.formDialog({
+      title: "Rename table",
+      intro: `Renaming "${tableName}" in ${projectName}. Every link in it moves with the name.`,
+      submitLabel: "Rename",
+      fields: [{ name: "name", label: "Table name", value: tableName }],
+    });
+    if (!v || !v.name.trim() || v.name.trim() === tableName) return;
+    renameTable(projectName, tableName, v.name.trim());
+    window.TrackerRender();
+  }
+
+  async function deletePrompt(projectName, tableName) {
+    const n = rowsIn(projectName, tableName).length;
+    const v = await window.TrackerUI.formDialog({
+      title: "Delete table",
+      // Say the cost before it is paid: deleting a table takes its links too,
+      // and a workbook link removed here does not come back on reload.
+      intro: `Delete "${tableName}" from ${projectName}?` +
+             (n ? ` Its ${n} link${n === 1 ? "" : "s"} will be removed with it.` : " It is empty."),
+      submitLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
+      fields: [{ name: "confirm", label: "Type the table name to confirm", value: "",
+                 placeholder: tableName,
+                 help: "Case does not matter — the heading is shown in capitals." }],
+    });
+    // Compared case-insensitively on purpose: the heading is uppercased by CSS,
+    // so anyone typing what they see would otherwise be refused.
+    if (!v || v.confirm.trim().toLowerCase() !== tableName.trim().toLowerCase()) return;
+    deleteTable(projectName, tableName);
+    window.TrackerRender();
+  }
+
   document.addEventListener("input", (e) => {
     const box = e.target.closest("[data-search]");
     if (box) {
@@ -411,6 +507,7 @@
   window.TrackerLinks = {
     searchBox, findValue: (key) => (find[key] || "").toLowerCase(),
     resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, saveRow, addRow, addTable,
+    renameTable, deleteTable,
     removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,
   };
 })();

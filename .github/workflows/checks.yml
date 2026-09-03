@@ -33,3 +33,5 @@ jobs:
         run: node checks/check_search.mjs
       - name: Table searches sit on the left
         run: node checks/check_layout.mjs
+      - name: Authored collections can be renamed and deleted
+        run: node checks/check_crud.mjs
