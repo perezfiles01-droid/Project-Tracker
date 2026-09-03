@@ -80,7 +80,7 @@ ok("pinned page 2 never exceeds the page size", s.filled <= PINNED);
 ok("Next is disabled on the last page",
    await page.locator('[data-page="pinned:next"]').isDisabled());
 ok("Remove button survives paging",
-   (await page.locator("table.cellgrid [data-unpin]").count()) === 1);
+   (await page.locator('table.cellgrid [data-remove^="drive:"]').count()) === 1);
 
 // A search that shrinks the list must not strand the reader on an empty page.
 await page.fill("#q", "Pinned link 1");
@@ -120,8 +120,159 @@ ok("Next is disabled on the final files page",
 ok("Pin buttons survive paging",
    (await page.locator("table.filetable [data-pin]").count()) > 0);
 
+/* ---------------------------------------------------------------------------
+   Family invariant: anything you can delete, you can also correct.
+
+   Enumerated from the rendered DOM rather than from a list kept here, so an
+   item type added tomorrow with a Remove button and no Edit button fails this
+   check without anyone remembering to update it.
+--------------------------------------------------------------------------- */
+await page.fill("#q", "");
+await page.waitForTimeout(150);
+const orphans = await page.evaluate(() => {
+  const edits = new Set([...document.querySelectorAll("[data-edit]")].map((b) => b.dataset.edit));
+  return [...document.querySelectorAll("[data-remove]")]
+    .map((b) => b.dataset.remove)
+    .filter((key) => !edits.has(key));
+});
+ok("every removable item also has an Edit control", orphans.length === 0, orphans.join(", "));
+
+/* ---------------------------------------------------------------------------
+   Nav groups. The old renderNav emitted "Projects" at index 1 and nothing
+   after, so every later entry fell under that heading. These assert the shape
+   the old code got wrong.
+--------------------------------------------------------------------------- */
+const nav = await page.evaluate(() => {
+  const out = [];
+  let cur = null;
+  for (const el of document.querySelector("#nav").children) {
+    if (el.classList.contains("nav-title")) { cur = { title: el.textContent.trim(), items: [] }; out.push(cur); }
+    else if (el.tagName === "BUTTON") {
+      if (!cur) return { orphan: true };
+      cur.items.push(el.querySelector("span").textContent.trim());
+    }
+  }
+  return { groups: out };
+});
+ok("no nav button appears before the first heading", !nav.orphan);
+const titles = (nav.groups || []).map((g) => g.title);
+ok("nav headings are Index / Projects / Task / Drive",
+   JSON.stringify(titles) === JSON.stringify(["Index", "Projects", "Task", "Drive"]), titles.join(" · "));
+const flat = (nav.groups || []).flatMap((g) => g.items);
+ok("every nav button sits under a heading",
+   flat.length === (await page.locator("#nav button").count()));
+const taskGroup = (nav.groups || []).find((g) => g.title === "Task");
+ok("Task group holds To Do List and Daily activity",
+   JSON.stringify(taskGroup && taskGroup.items) === JSON.stringify(["To Do List", "Daily activity"]),
+   String(taskGroup && taskGroup.items));
+ok("LHUB has left the sidebar", !flat.includes("LHUB"), flat.join(" · "));
+ok("Communications has left the sidebar", !flat.includes("Communications"));
+
+/* ---------------------------------------------------------------------------
+   Tasks: a full add -> reload -> edit -> reload -> delete round trip, because
+   a task that does not survive a refresh is worse than no task list at all.
+--------------------------------------------------------------------------- */
+await page.click('button[data-route="todo"]');
+await page.waitForSelector(".taskboard");
+ok("To Do List renders a column per status",
+   (await page.locator(".taskcol").count()) === 4, String(await page.locator(".taskcol").count()));
+
+await page.click('[data-edit="task:new"]');
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_title", "Draft the release note");
+await page.fill("#fd_description", "Summarise 2026.2 for the BA pack.");
+await page.fill("#fd_deadline", "2020-01-01");   // in the past, to prove the overdue flag
+await page.fill("#fd_assignee", "Me");
+await page.click('[data-fd="save"]');
+await page.waitForSelector(".card.task");
+ok("a new task appears on the board", (await page.locator(".card.task").count()) === 1);
+ok("a past deadline is flagged overdue", (await page.locator(".card.task.late").count()) === 1);
+
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="todo"]');
+await page.waitForSelector(".card.task");
+ok("the task survives a reload",
+   (await page.locator(".card.task .t").first().textContent()).includes("Draft the release note"));
+
+await page.click(".card.task [data-edit]");
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_title", "Draft the release note (v2)");
+await page.click('[data-fd="save"]');
+await page.waitForTimeout(150);
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="todo"]');
+await page.waitForSelector(".card.task");
+ok("an edited title survives a reload",
+   (await page.locator(".card.task .t").first().textContent()).includes("(v2)"));
+
+// An attachment must survive a reload too: the bytes go to IndexedDB while the
+// task record goes to localStorage, and a mismatch between the two loses files.
+await page.click(".card.task [data-edit]");
+await page.waitForSelector("#formDialog .box");
+await page.setInputFiles("#fd_files", {
+  name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("attachment body"),
+});
+await page.click('[data-fd="save"]');
+await page.waitForSelector(".card.task .attchip");
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="todo"]');
+await page.waitForSelector(".card.task");
+ok("an attachment survives a reload",
+   (await page.locator(".card.task .attchip").count()) === 1);
+ok("the attachment keeps its filename",
+   (await page.locator(".card.task .attchip").first().textContent()).includes("note.txt"));
+
+await page.click(".card.task [data-remove]");
+await page.waitForTimeout(150);
+ok("a deleted task is gone", (await page.locator(".card.task").count()) === 0);
+
+/* ---------------------------------------------------------------------------
+   Renaming a pinned link, the thing that used to cost a delete and a re-add.
+--------------------------------------------------------------------------- */
+await page.click('button[data-route="drive"]');
+await page.waitForSelector("table.cellgrid");
+await page.click('table.cellgrid [data-edit^="drive:"]');
+await page.waitForSelector("#formDialog .box");
+await page.fill("#fd_name", "Renamed without re-adding");
+await page.click('[data-fd="save"]');
+await page.waitForTimeout(150);
+await page.reload({ waitUntil: "load" });
+await page.click('button[data-route="drive"]');
+await page.waitForSelector("table.cellgrid");
+ok("a renamed pinned link survives a reload",
+   (await page.locator("table.cellgrid").innerText()).includes("Renamed without re-adding"));
+
+/* ---------------------------------------------------------------------------
+   Theme. System had nothing to follow before: the stylesheet carried no
+   prefers-color-scheme block and index.html hardcoded dark.
+--------------------------------------------------------------------------- */
+const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+await page.emulateMedia({ colorScheme: "light" });
+await page.click('[data-theme-set="system"]');
+await page.waitForTimeout(80);
+const sysLight = await bg();
+await page.emulateMedia({ colorScheme: "dark" });
+await page.waitForTimeout(80);
+const sysDark = await bg();
+ok("System follows the operating system", sysLight !== sysDark, `${sysLight} vs ${sysDark}`);
+
+await page.click('[data-theme-set="light"]');
+await page.waitForTimeout(80);
+const light = await bg();
+ok("Light overrides a dark system", light !== sysDark, `${light} vs ${sysDark}`);
+await page.click('[data-theme-set="dark"]');
+await page.waitForTimeout(80);
+const dark = await bg();
+ok("Dark differs from Light", dark !== light, `${dark} vs ${light}`);
+
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(120);
+ok("the theme choice survives a reload", (await bg()) === dark);
+ok("the chosen segment is the pressed one",
+   (await page.getAttribute('[data-theme-set="dark"]', "aria-pressed")) === "true");
+
 ok("no console or page errors", errors.length === 0, errors.join(" | "));
 
 await browser.close();
-console.log(failed ? `\n${failed} render check(s) failed` : "\nPASS: paged tables behave");
+console.log(failed ? `\n${failed} render check(s) failed` : "\nPASS: paged tables, nav groups, tasks and theme behave");
 process.exit(failed ? 1 : 0);

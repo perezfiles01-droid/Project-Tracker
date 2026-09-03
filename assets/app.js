@@ -73,9 +73,17 @@
   }
 
   /* ---------- link inventory (flattened, for search + overview) ---------- */
+  /**
+   * Projects shown in the nav and counted on Overview. A project carrying
+   * active:false stays in the JSON and in Export JSON but leaves the UI, so
+   * a finished engagement comes back by flipping one flag.
+   */
+  const activeProjects = () => state.data.projects.filter((p) => p.active !== false);
+  window.TrackerProjectNames = () => activeProjects().map((p) => p.name);
+
   function allLinks() {
     const out = [];
-    for (const p of state.data.projects) {
+    for (const p of activeProjects()) {
       for (const sec of p.sections) {
         if (sec.type === "links") {
           sec.items.forEach((i) => out.push({ ...i, project: p.name, section: sec.title }));
@@ -110,13 +118,12 @@
       const q = state.query;
       const links = allLinks().filter((l) => matches(l, q));
       const daily = state.data.daily;
-      const openComms = state.data.communications.filter((c) => (c.status || "").toLowerCase() !== "completed");
       const unverified = allLinks().filter((l) => l.url && l.verified === false).length;
       const stats = [
         ["Tracked links", allLinks().length],
-        ["Projects", state.data.projects.length],
+        ["Projects", activeProjects().length],
         ["Logged activities", daily.length],
-        ["Open comms items", openComms.length],
+        ["Open tasks", window.TrackerTasks.load().filter((t) => t.status !== "Done").length],
         ["Links to verify", unverified],
       ];
       return `
@@ -225,25 +232,38 @@
     },
 
     drive() { return window.TrackerDrive.view(state.query); },
+
+    todo() { return window.TrackerTasks.view(state.query); },
   };
 
   /* ---------- shell ---------- */
-  function renderNav() {
-    const items = [
-      ["overview", "Overview", allLinks().length],
-      ...state.data.projects.map((p) => [`p:${p.id}`, p.name, null]),
+  /**
+   * The nav is grouped data, not positions in a flat list.
+   *
+   * It used to emit "Projects" at index 1 and nothing after, so every entry
+   * past the first project fell under that heading — which is how Daily
+   * activity and Google Drive came to sit under PROJECTS. Groups now carry
+   * their own items, so a third group is a line of data.
+   */
+  const navGroups = () => [
+    { title: "Index", items: [["overview", "Overview", allLinks().length]] },
+    { title: "Projects", items: activeProjects().map((p) => [`p:${p.id}`, p.name, null]) },
+    { title: "Task", items: [
+      ["todo", "To Do List", window.TrackerTasks.load().length],
       ["daily", "Daily activity", state.data.daily.length],
-      ["comms", "Communications", state.data.communications.length],
-      ["drive", "Google Drive", driveLinks().length],
-    ];
-    $("#nav").innerHTML =
-      `<div class="nav-title">Index</div>` +
-      items.map(([r, label, n], i) => {
-        const head = (i === 1) ? `<div class="nav-title">Projects</div>` : "";
-        const tail = (r === "daily") ? "" : "";
-        return head + `<button data-route="${r}" aria-current="${state.route === r}">
-          <span>${esc(label)}</span>${n !== null ? `<span class="count">${n}</span>` : ""}</button>` + tail;
-      }).join("");
+    ] },
+    { title: "Drive", items: [["drive", "Google Drive", driveLinks().length]] },
+  ];
+
+  function navButton([r, label, n]) {
+    return `<button data-route="${r}" aria-current="${state.route === r}">
+        <span>${esc(label)}</span>${n !== null ? `<span class="count">${n}</span>` : ""}</button>`;
+  }
+
+  function renderNav() {
+    $("#nav").innerHTML = navGroups().map((g) =>
+      `<div class="nav-title">${esc(g.title)}</div>` + g.items.map(navButton).join("")
+    ).join("");
   }
 
   function render() {
@@ -294,17 +314,40 @@
     if (e.key === "Escape") document.querySelectorAll(".modal").forEach((m) => (m.hidden = true));
   });
 
-  $("#toggleTheme").addEventListener("click", () => {
-    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("tracker.theme", next);
-  });
-  if (localStorage.getItem("tracker.theme")) {
-    document.documentElement.dataset.theme = localStorage.getItem("tracker.theme");
+  /* ---------- theme ----------
+     Three modes. System is the one that needed work: the stylesheet had no
+     prefers-color-scheme block at all and index.html hardcoded dark, so the
+     site could not follow the operating system. System now sets no attribute
+     and lets the media query decide, which also means an OS change applies
+     live with no listener here. */
+  function applyTheme(mode) {
+    if (mode === "light" || mode === "dark") document.documentElement.dataset.theme = mode;
+    else delete document.documentElement.dataset.theme;
+    document.querySelectorAll("[data-theme-set]").forEach((b) =>
+      b.setAttribute("aria-pressed", b.dataset.themeSet === mode));
   }
+  const themeMode = () => {
+    const v = localStorage.getItem("tracker.theme");
+    return v === "light" || v === "dark" ? v : "system";
+  };
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-theme-set]");
+    if (!b) return;
+    const mode = b.dataset.themeSet;
+    if (mode === "system") localStorage.removeItem("tracker.theme");
+    else localStorage.setItem("tracker.theme", mode);
+    applyTheme(mode);
+  });
+  applyTheme(themeMode());
+  window.TrackerTheme = { applyTheme, themeMode };
 
   $("#exportBtn").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ ...state.data, driveLinks: driveLinks() }, null, 1)],
+    const tasks = window.TrackerTasks.load().map((t) => ({
+      ...t,
+      // Attachment bytes live in IndexedDB and do not travel in a JSON export.
+      attachments: (t.attachments || []).map((a) => ({ name: a.name, kind: a.kind, url: a.url })),
+    }));
+    const blob = new Blob([JSON.stringify({ ...state.data, driveLinks: driveLinks(), tasks }, null, 1)],
       { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

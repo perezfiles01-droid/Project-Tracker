@@ -203,6 +203,9 @@ def build(path):
     out["projects"].append({
         "id": "lhub",
         "name": "LHUB",
+        # Hidden from the nav and from Overview; still exported. Flip to True
+        # to bring the engagement back.
+        "active": False,
         "full": "LHUB — Vitae for LXP (VITAELXP) Jira intake",
         "blurb": "BA role reference: how signed-off FSDs become Jira epics, stories and sub-tasks.",
         "sections": [

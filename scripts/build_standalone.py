@@ -14,6 +14,8 @@ html = (root / "index.html").read_text()
 css = (root / "assets" / "styles.css").read_text()
 app = (root / "assets" / "app.js").read_text()
 drive = (root / "assets" / "drive.js").read_text()
+ui = (root / "assets" / "ui.js").read_text()
+tasks = (root / "assets" / "tasks.js").read_text()
 cfg = (root / "config.js").read_text()
 data = json.loads((root / "data" / "tracker.json").read_text())
 
@@ -27,8 +29,11 @@ html = html.replace('<link rel="stylesheet" href="assets/styles.css">',
                     f"<style>\n{css}\n</style>")
 html = html.replace('<link rel="icon" href="assets/favicon.svg">', "")
 html = html.replace(
-    '<script src="config.js"></script>\n<script src="assets/app.js"></script>\n<script src="assets/drive.js"></script>',
+    '<script src="config.js"></script>\n<script src="assets/ui.js"></script>\n'
+    '<script src="assets/tasks.js"></script>\n<script src="assets/app.js"></script>\n'
+    '<script src="assets/drive.js"></script>',
     "<script>\n" + cfg + "\nwindow.TRACKER_DATA = " + json.dumps(data) + ";\n</script>\n"
+    "<script>\n" + ui + "\n</script>\n<script>\n" + tasks + "\n</script>\n"
     "<script>\n" + app + "\n</script>\n<script>\n" + drive + "\n</script>",
 )
 html = html.replace("<title>Tracker —", "<title>Tracker (standalone) —")

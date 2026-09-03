@@ -544,7 +544,8 @@
       "9. For the Sub-task, use the following Summary Format:\n- [Pillar #] [FSD Name] [FSD Section] FSD sub-section\n- Assign the sub-task to the appropriate developer.\n- Follow the same description format used in the Epic and Story."
      ]
     }
-   ]
+   ],
+   "active": false
   }
  ],
  "daily": [

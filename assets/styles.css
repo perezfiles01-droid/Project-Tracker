@@ -1,13 +1,30 @@
+/* Three theme modes. Every colour is defined on bare :root so no token has
+   its only definition inside a media query; the dark palette is then restated
+   twice — once for "follow the system" (no data-theme attribute set) and once
+   for an explicit dark choice, so the control wins in both directions. */
 :root{
+  color-scheme:light;
+  --bg:#f6f6f7; --panel:#fff; --panel-2:#f0f0f2; --line:#e2e2e6;
+  --text:#18181b; --muted:#52525b; --dim:#71717a;
+  --accent:#ef4444; --accent-2:#991b1b;
+  --ok:#16a34a; --warn:#d97706; --info:#0284c7;
+  --radius:14px; --shadow:0 8px 24px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
   --bg:#0b0b0d; --panel:#141417; --panel-2:#1b1b20; --line:#2a2a31;
   --text:#f4f4f5; --muted:#a1a1aa; --dim:#71717a;
-  --accent:#ef4444; --accent-2:#991b1b;
-  --ok:#22c55e; --warn:#f59e0b; --info:#38bdf8;
-  --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.45);
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+    --ok:#22c55e; --warn:#f59e0b; --info:#38bdf8;
+  }
 }
-:root[data-theme="light"]{
-  --bg:#f6f6f7; --panel:#fff; --panel-2:#f0f0f2; --line:#e2e2e6;
-  --text:#18181b; --muted:#52525b; --dim:#71717a; --shadow:0 8px 24px rgba(0,0,0,.08);
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0b0b0d; --panel:#141417; --panel-2:#1b1b20; --line:#2a2a31;
+  --text:#f4f4f5; --muted:#a1a1aa; --dim:#71717a;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+  --ok:#22c55e; --warn:#f59e0b; --info:#38bdf8;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -166,3 +183,40 @@ table.cellgrid .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margi
 .pager .btn[disabled]:hover{border-color:var(--line);color:var(--muted)}
 
 td .namecell{display:block;word-break:break-word}
+
+
+/* ---------- theme segmented control ---------- */
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{
+  background:none;border:0;border-radius:7px;padding:6px 10px;cursor:pointer;
+  color:var(--dim);display:grid;place-items:center;line-height:0;
+}
+.seg button:hover{color:var(--text)}
+.seg button[aria-pressed="true"]{background:var(--panel-2);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.seg svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- form dialog ---------- */
+.modal .fieldset{display:flex;flex-direction:column}
+.field textarea,.field select{
+  background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+  padding:10px 12px;outline:none;font:inherit;color:inherit;resize:vertical;
+}
+.field textarea:focus,.field select:focus{border-color:var(--accent)}
+.field input[type="file"]{background:none;border:0;padding:6px 0}
+.attachments{display:flex;flex-direction:column;gap:6px}
+.attrow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.attrow .attname{flex:1;word-break:break-word}
+.attrow .attdrop{color:var(--dim);font-size:11px}
+.attrow input:checked ~ .attname{text-decoration:line-through;color:var(--dim)}
+
+/* ---------- task board ---------- */
+.taskboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;align-items:start}
+.taskcol h3.sec{margin-top:0}
+.taskstack{display:flex;flex-direction:column;gap:10px}
+.card.task{cursor:default}
+.card.task.late{border-color:rgba(239,68,68,.5)}
+.card.task .desc{white-space:pre-wrap}
+.card.task .atts{gap:6px}
+.attchip{cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-family:inherit}
+.attchip:hover{border-color:var(--accent);color:var(--text)}
