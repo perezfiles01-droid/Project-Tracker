@@ -445,3 +445,11 @@ table.tasktable{min-width:0}
   .tasksplit{grid-template-columns:minmax(0,1fr)}
   .taskpane{position:static;max-height:none}
 }
+
+/* A column header that filters its own column, the shape Email Access uses. */
+th.filterhead{white-space:nowrap}
+th.filterhead .filterlabel{margin-right:6px}
+th.filterhead .colpick{
+  font:inherit;font-size:11px;color:var(--dim);background:var(--panel);
+  border:1px solid var(--line);border-radius:6px;padding:1px 4px;max-width:120px}
+th.filterhead .colpick:focus{border-color:var(--accent)}

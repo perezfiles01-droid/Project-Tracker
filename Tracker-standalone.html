@@ -456,6 +456,14 @@ table.tasktable{min-width:0}
   .taskpane{position:static;max-height:none}
 }
 
+/* A column header that filters its own column, the shape Email Access uses. */
+th.filterhead{white-space:nowrap}
+th.filterhead .filterlabel{margin-right:6px}
+th.filterhead .colpick{
+  font:inherit;font-size:11px;color:var(--dim);background:var(--panel);
+  border:1px solid var(--line);border-radius:6px;padding:1px 4px;max-width:120px}
+th.filterhead .colpick:focus{border-color:var(--accent)}
+
 </style>
 </head>
 <body>
@@ -1600,6 +1608,41 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return `<th data-sortkey="${key}" data-sortfield="${field}">${label}${arrow}</th>`;
   };
 
+  /**
+   * A column header that also filters its own column.
+   *
+   * The same shape the Email Access column uses, made shared rather than
+   * copied: the filter belongs to the column it acts on, because a lone
+   * "All projects" select above a table gives no clue which column it filters.
+   * `values` are the ones actually present in the data, so a project with no
+   * tasks is never offered.
+   */
+  const filterHeader = (key, field, label, values, chosen, hint) =>
+    `<th class="filterhead" data-sortkey="${key}" data-sortfield="${field}">
+       <span class="filterlabel">${label}</span>
+       ${values.length ? `<select class="colpick" data-colfilter="${key}:${field}"
+         title="${hint}" aria-label="${hint}">
+         <option value="">All</option>
+         ${values.map((v) =>
+           `<option value="${v}"${v === chosen ? " selected" : ""}>${v}</option>`).join("")}
+       </select>` : ""}
+     </th>`;
+
+  /* Which value each filtering column is set to, keyed "route:field". Held in
+     memory like the account filter, so a reload shows everything again. */
+  const colFilters = {};
+  const colFilter = (key, field) => colFilters[`${key}:${field}`] || "";
+  document.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-colfilter]");
+    if (!sel) return;
+    colFilters[sel.dataset.colfilter] = sel.value;
+    window.TrackerRender();
+  });
+  // The select lives inside a sortable header; clicking it must not also sort.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-colfilter]")) e.stopPropagation();
+  }, true);
+
   /** Apply the current sort for `key`. Alphabetical, numbers read as numbers. */
   const sortRows = (key, rows) => {
     const s2 = sorts[key];
@@ -1725,7 +1768,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
 
@@ -2102,8 +2145,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   function view(q) {
     const all = numbered(load());
+    // Only the projects tasks actually carry, so a project with no task is
+    // never offered as a filter that would empty the table.
+    const projects = [...new Set(all.map((t) => t.project).filter(Boolean))].sort();
+    const picked = window.TrackerUI.colFilter("tasks", "project");
     const rows = window.TrackerUI.sortRows("tasks",
-      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
+      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q))
+         .filter((t) => !picked || t.project === picked));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -2126,7 +2174,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                  <thead><tr>
                    ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
                    ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                   ${window.TrackerUI.filterHeader("tasks", "project", COLUMNS[2],
+                       projects, picked, "Filter by project")}
                  </tr></thead>
                  <tbody>${slice.map(taskRow).join("")}</tbody>
                </table></div>

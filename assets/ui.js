@@ -432,6 +432,41 @@
     return `<th data-sortkey="${key}" data-sortfield="${field}">${label}${arrow}</th>`;
   };
 
+  /**
+   * A column header that also filters its own column.
+   *
+   * The same shape the Email Access column uses, made shared rather than
+   * copied: the filter belongs to the column it acts on, because a lone
+   * "All projects" select above a table gives no clue which column it filters.
+   * `values` are the ones actually present in the data, so a project with no
+   * tasks is never offered.
+   */
+  const filterHeader = (key, field, label, values, chosen, hint) =>
+    `<th class="filterhead" data-sortkey="${key}" data-sortfield="${field}">
+       <span class="filterlabel">${label}</span>
+       ${values.length ? `<select class="colpick" data-colfilter="${key}:${field}"
+         title="${hint}" aria-label="${hint}">
+         <option value="">All</option>
+         ${values.map((v) =>
+           `<option value="${v}"${v === chosen ? " selected" : ""}>${v}</option>`).join("")}
+       </select>` : ""}
+     </th>`;
+
+  /* Which value each filtering column is set to, keyed "route:field". Held in
+     memory like the account filter, so a reload shows everything again. */
+  const colFilters = {};
+  const colFilter = (key, field) => colFilters[`${key}:${field}`] || "";
+  document.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-colfilter]");
+    if (!sel) return;
+    colFilters[sel.dataset.colfilter] = sel.value;
+    window.TrackerRender();
+  });
+  // The select lives inside a sortable header; clicking it must not also sort.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-colfilter]")) e.stopPropagation();
+  }, true);
+
   /** Apply the current sort for `key`. Alphabetical, numbers read as numbers. */
   const sortRows = (key, rows) => {
     const s2 = sorts[key];
@@ -557,6 +592,6 @@
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();

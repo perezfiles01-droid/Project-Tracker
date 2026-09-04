@@ -369,8 +369,13 @@
 
   function view(q) {
     const all = numbered(load());
+    // Only the projects tasks actually carry, so a project with no task is
+    // never offered as a filter that would empty the table.
+    const projects = [...new Set(all.map((t) => t.project).filter(Boolean))].sort();
+    const picked = window.TrackerUI.colFilter("tasks", "project");
     const rows = window.TrackerUI.sortRows("tasks",
-      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
+      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q))
+         .filter((t) => !picked || t.project === picked));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -393,7 +398,8 @@
                  <thead><tr>
                    ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
                    ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                   ${window.TrackerUI.filterHeader("tasks", "project", COLUMNS[2],
+                       projects, picked, "Filter by project")}
                  </tr></thead>
                  <tbody>${slice.map(taskRow).join("")}</tbody>
                </table></div>
