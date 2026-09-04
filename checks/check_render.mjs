@@ -254,10 +254,13 @@ ok("Daily activity starts empty — the 34 workbook rows are gone",
 await page.click('button[data-route="todo"]');
 await page.waitForSelector("table.tasktable");
 await page.click("tr.taskrow td:nth-child(2)");
-// A task is finished from the Status dropdown in the pane now, not a tick.
+// A task is finished from the Status dropdown in the pane now, not a tick,
+// and marking it Done asks first because it moves the task to Daily activity.
 await page.waitForSelector("[data-status]");
 await page.selectOption("[data-status]", "Done");
-await page.waitForTimeout(250);
+await page.waitForSelector('#formDialog:not([hidden]) [data-fd="choice"]');
+await page.click('#formDialog [data-fd="choice"]');
+await page.waitForTimeout(300);
 await page.click('button[data-route="daily"]');
 await page.waitForTimeout(150);
 ok("finishing a task logs exactly one activity",

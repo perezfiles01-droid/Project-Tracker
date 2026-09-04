@@ -3,9 +3,15 @@
  * Guard: one status vocabulary, set from the pane.
  *
  * The tick could only ever say "Done", and the two pages spoke different
- * languages: tasks used To do / In progress / Blocked / Done, the activity log
- * used Completed / In Progress / Pending, and a finished task was logged as
- * "Completed" for a status the task itself called "Done".
+ * languages: the activity log used Completed / In Progress / Pending, and a
+ * finished task was logged as "Completed" for a status the task itself called
+ * "Done".
+ *
+ * The vocabulary is three words now - In progress, Blocked, Done - and the
+ * status decides which page a task is on, so changing one asks first. This
+ * check keeps its original subject (one vocabulary, set from the pane, and
+ * one log entry per task) and answers the prompt where the app now shows one.
+ * Which page a task lands on is check_task_flow's subject, not this one.
  *
  * Unifying them has a trap this asserts explicitly: statusTag colours by
  * substring, so "Done" matched none of its cases and every completed activity
@@ -39,8 +45,26 @@ const openTodo = async () => {
   await page.click('#nav button[data-route="todo"]');
   await page.waitForTimeout(300);
 };
+/** Confirm the move the app now asks about. Returns false if nothing asked. */
+const confirmMove = async () => {
+  await page.waitForTimeout(250);
+  const btn = page.locator('#formDialog:not([hidden]) [data-fd="choice"]');
+  if (!await btn.count()) return false;
+  await btn.first().click();
+  await page.waitForTimeout(300);
+  return true;
+};
+/** Set the status wherever the picker currently is: the pane, or the log row. */
+const setStatus = async (value) => {
+  if (!await page.locator("[data-status]").count()) {
+    await page.click('#nav button[data-route="daily"]');
+    await page.waitForTimeout(300);
+  }
+  await page.selectOption("[data-status]", value);
+  await confirmMove();
+};
 
-await seed([{ id: "t-1", name: "Alpha", attachments: [], status: "To do" }]);
+await seed([{ id: "t-1", name: "Alpha", attachments: [], status: "In progress" }]);
 await page.reload({ waitUntil: "load" });
 await page.waitForTimeout(300);
 await openTodo();
@@ -55,28 +79,23 @@ ok("the Mark done tick is gone",
 
 const taskOpts = await page.$$eval(".taskpane [data-status] option", (o) => o.map((x) => x.value));
 ok("it offers every status a task can be in",
-   taskOpts.join("|") === "To do|In progress|Blocked|Done", taskOpts.join("|"));
+   taskOpts.join("|") === "In progress|Blocked|Done", taskOpts.join("|"));
 
-await page.selectOption(".taskpane [data-status]", "In progress");
-await page.waitForTimeout(300);
-ok("choosing a status saves it",
-   (await page.evaluate(() => JSON.parse(localStorage.getItem("tracker.tasks"))[0].status))
-     === "In progress");
-ok("nothing is logged for a status that is not Done",
+ok("nothing is logged while the task is in progress",
    (await page.evaluate(() => JSON.parse(localStorage.getItem("tracker.activity") || "[]").length)) === 0);
 
 await page.selectOption(".taskpane [data-status]", "Done");
-await page.waitForTimeout(300);
+ok("moving a task to Done asks before it moves", await confirmMove());
+ok("choosing a status saves it",
+   (await page.evaluate(() => JSON.parse(localStorage.getItem("tracker.tasks"))[0].status)) === "Done");
 const logged = await page.evaluate(() => JSON.parse(localStorage.getItem("tracker.activity") || "[]"));
 ok("choosing Done writes one activity entry", logged.length === 1, String(logged.length));
 ok("the entry is logged as Done, not Completed",
    logged[0] && logged[0].status === "Done", logged[0] && logged[0].status);
 
 /* Moving out of Done and back must not log a second time. */
-await page.selectOption(".taskpane [data-status]", "Blocked");
-await page.waitForTimeout(250);
-await page.selectOption(".taskpane [data-status]", "Done");
-await page.waitForTimeout(250);
+await setStatus("Blocked");
+await setStatus("Done");
 ok("going out of Done and back does not log twice",
    (await page.evaluate(() => JSON.parse(localStorage.getItem("tracker.activity")).length)) === 1);
 
@@ -91,10 +110,15 @@ const dialogStatuses = async (route, opener) => {
   await page.waitForTimeout(200);
   return opts;
 };
-const inTask = await dialogStatuses("todo", '[data-edit="task:new"]');
+// The new-task dialog no longer asks for a status, so the task side of this
+// comparison is read from the app's own list rather than from that dialog.
+// The point still stands: the log speaks the task vocabulary, not a second one.
+const inTask = await page.evaluate(() => window.TrackerTasks.STATUSES);
 const inDaily = await dialogStatuses("daily", '[data-edit="act:new"]');
-ok("the Daily activity dialog offers the same statuses as a task",
-   inTask.join("|") === inDaily.join("|"), `${inTask.join("|")} vs ${inDaily.join("|")}`);
+ok("the Daily activity dialog speaks the task vocabulary",
+   inDaily.every((s) => inTask.includes(s)), `${inTask.join("|")} vs ${inDaily.join("|")}`);
+ok("and it offers only the two statuses that belong in a log",
+   inDaily.join("|") === "Done|Blocked", inDaily.join("|"));
 
 /* --- a status saved under the old words is kept, not rewritten ------------ */
 await seed([{ id: "t-9", name: "Legacy", attachments: [], status: "Pending" }],

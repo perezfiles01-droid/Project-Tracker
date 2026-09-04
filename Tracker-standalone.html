@@ -1800,9 +1800,19 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const DB = "tracker-files", STORE = "blobs";
   /* One vocabulary, used by the task pane, the task dialog and the Daily
      activity dialog. They were three separate lists, and the log wrote
-     "Completed" for a status the task list called "Done". */
-  const STATUSES = ["To do", "In progress", "Blocked", "Done"];
+     "Completed" for a status the task list called "Done".
+
+     Three, not four. "To do" and "In progress" were the same thing said twice:
+     a task on the list is a task to do, and the status that mattered was which
+     of them had been picked up. The status now decides which page the task is
+     on - In progress is the To Do List, Blocked and Done are Daily activity -
+     so a fourth word for "not finished" would put a task in two places. */
+  const STATUSES = ["In progress", "Blocked", "Done"];
+  const ACTIVE = "In progress";
+  const BLOCKED = "Blocked";
   const DONE = "Done";
+  /** The two statuses that belong in the log rather than the task list. */
+  const LOGGED = (s) => s === DONE || s === BLOCKED;
   const DEFAULT_ASSIGNEE = "Jim";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1813,6 +1823,57 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const logWrite = (a) => window.TrackerStore.set(LOG, a);
   const save = (list) => window.TrackerStore.set(KEY, list);
   window.TrackerTasks = { load };
+
+  /**
+   * Bring what is already saved onto the three-status rule, once.
+   *
+   * Two things are reconciled, and only if something actually needs it - a
+   * browser with nothing to change writes nothing at all:
+   *
+   *   1. A task saved as "To do", or with no status, becomes In progress.
+   *      Dropping the word without this leaves tasks carrying a value no
+   *      picker offers, which reads as an empty status box.
+   *   2. A log entry the app wrote itself (origin "task") is a record derived
+   *      from a status, so one whose task is no longer Done or Blocked is
+   *      removed - that is the rule applied to data saved before the rule
+   *      existed. Entries typed by hand are left exactly as they are: they are
+   *      not derived from anything, and an upgrade that deletes what someone
+   *      wrote is a bug however tidy the result looks.
+   */
+  function migrate() {
+    const tasks = window.TrackerStore.get(KEY, []);
+    let touched = false;
+    for (const t of tasks) {
+      if (!t.status || t.status === "To do") { t.status = ACTIVE; touched = true; }
+    }
+    if (touched) window.TrackerStore.set(KEY, tasks);
+
+    const log = window.TrackerStore.get(LOG, []);
+    const alive = log.filter((e) => {
+      if (e.origin !== "task") return true;
+      const t = tasks.find((x) => x.id === e.taskId);
+      return !!t && LOGGED(t.status);
+    });
+    // And the other direction, which matters more: a task saved as Done or
+    // Blocked before this rule existed, with no entry of its own, would be on
+    // neither page - off the To Do List by its status and absent from the log
+    // for want of a record. Reconciling only one way loses tasks quietly.
+    let added = false;
+    for (const t of tasks) {
+      if (!LOGGED(t.status)) continue;
+      if (alive.some((e) => e.origin === "task" && e.taskId === t.id)) continue;
+      alive.push({
+        id: "a-" + t.id, taskId: t.id, date: t.given || t.created || today(),
+        task: t.description || t.name || "Task",
+        status: t.status, url: t.ref || "", origin: "task",
+      });
+      added = true;
+    }
+    if (added || alive.length !== log.length) window.TrackerStore.set(LOG, alive);
+  }
+  // Called at the foot of this file, not here: migrate() reads today(), which
+  // is declared further down, and calling it from this line threw before the
+  // app had rendered a single row.
 
   /* ---------- attachment bytes ---------- */
   const idb = () => new Promise((resolve, reject) => {
@@ -1886,8 +1947,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           value: cur ? (cur.given || "") : today() },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
-        { name: "status", label: "Status", type: "select", options: STATUSES,
-          value: cur ? cur.status : STATUSES[0] },
+        // Only when editing. A new task is In progress by definition - you are
+        // writing down something to do - so asking for a status at creation is
+        // a field with one sensible answer. It is changed afterwards, from
+        // here or from the dropdown in the pane.
+        ...(cur ? [{ name: "status", label: "Status", type: "select",
+                     options: [...new Set([...STATUSES, cur.status].filter(Boolean))],
+                     value: cur.status }] : []),
         // A new task is assigned to Jim unless you say otherwise. Editing shows
         // the task's own assignee, including a deliberately empty one: a
         // default that overwrites what you already saved is a different
@@ -1901,12 +1967,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     });
     if (!values) return;
 
-    const wasDone = cur ? cur.status === "Done" : false;
+    // A status change made in the dialog moves the task between the two pages
+    // exactly as the dropdown in the pane does, so it asks the same question.
+    // Declining keeps the status it had and saves the rest of the edit: the
+    // answer was about the move, not about the other six fields.
+    if (cur && values.status && values.status !== cur.status &&
+        LOGGED(values.status) !== LOGGED(cur.status) &&
+        !await confirmMove(cur, values.status)) {
+      values.status = cur.status;
+    }
+
     const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
     Object.assign(target, {
       // No "no" here: the number is the task's position, worked out at render.
       name: values.name, description: values.description, given: values.given,
-      due: values.due, ref: values.ref, status: values.status || STATUSES[0],
+      due: values.due, ref: values.ref, status: values.status || ACTIVE,
       assignee: values.assignee, project: values.project,
     });
 
@@ -1923,40 +1998,87 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
     if (!cur) list.push(target);
     save(list);
-    if (!wasDone && target.status === "Done") logDone(target);
+    syncLog(target);
     window.TrackerRender();
   }
 
   /**
-   * A finished task becomes an activity entry. Guarded on the task id so
-   * editing a task that is already Done cannot log it twice.
+   * Keep the activity log agreeing with the task's status, in both directions.
+   *
+   * logDone only ever wrote, and only for Done, which is why a task could not
+   * come back: the entry was a record of a moment rather than a reflection of
+   * where the task is now. Blocked and Done put a task in the log; anything
+   * else takes it out again. Still one entry per task, guarded on the task id,
+   * so Done to Blocked updates the entry it already has rather than adding a
+   * second - and the date and any wording edited by hand survive that.
+   *
+   * Entries typed by hand (origin "manual") are never touched here.
    */
-  function logDone(t) {
+  function syncLog(t) {
     const log = logRead();
-    if (log.some((e) => e.taskId === t.id)) return;
+    const mine = log.find((e) => e.origin === "task" && e.taskId === t.id);
+    if (!LOGGED(t.status)) {
+      if (!mine) return;
+      return logWrite(log.filter((e) => e !== mine));
+    }
+    if (mine) {
+      mine.status = t.status;
+      return logWrite(log);
+    }
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
       task: t.description || t.name || "Task",
-      status: DONE, url: t.ref || "", origin: "task",
+      status: t.status, url: t.ref || "", origin: "task",
     });
     logWrite(log);
   }
 
   /**
-   * Set a task's status from the pane, and log it the first time it is Done.
+   * Ask before a status change moves the task to the other page.
    *
-   * markDone was one direction only. This is every direction, and it keeps the
-   * same promise: the activity log gets one entry per task, guarded on the
-   * task id inside logDone, so moving a task out of Done and back does not
-   * write a second one.
+   * Both directions ask, because both move something. Marking a task Blocked
+   * or Done takes it off the To Do List; putting it back to In progress
+   * deletes the entry it had in Daily activity, and a log entry disappearing
+   * with no prompt is the worse of the two surprises. The dialog is the one
+   * every delete in the app already uses rather than a new pattern.
    */
-  function setStatus(id, status) {
-    const list = load();
-    const t = list.find((x) => x.id === id);
+  function confirmMove(t, status) {
+    const name = String(t.name || t.description || "This task").slice(0, 60);
+    if (LOGGED(status)) {
+      return window.TrackerUI.confirmDialog({
+        title: status === DONE ? "Mark as done" : "Mark as blocked",
+        intro: `"${name}" will move off the To Do List and be logged in ` +
+               `Daily activity as ${status}.`,
+        confirmLabel: status === DONE ? "Mark done" : "Mark blocked",
+      });
+    }
+    return window.TrackerUI.confirmDialog({
+      title: "Back to in progress",
+      intro: `"${name}" will return to the To Do List, and its Daily activity ` +
+             "entry will be removed.",
+      confirmLabel: "Move back",
+    });
+  }
+
+  /**
+   * Set a task's status, and keep the two pages agreeing about where it lives.
+   *
+   * Nothing is written until the prompt is answered, and declining re-renders:
+   * the dropdown snaps back to the status actually saved rather than sitting
+   * on one nobody agreed to.
+   */
+  async function setStatus(id, status) {
+    const t = load().find((x) => x.id === id);
     if (!t || t.status === status) return;
-    t.status = status;
+    if (!await confirmMove(t, status)) return window.TrackerRender();
+    // Read again: the dialog was open, and awaiting it is time in which
+    // anything else could have written to storage.
+    const list = load();
+    const target = list.find((x) => x.id === id);
+    if (!target) return window.TrackerRender();
+    target.status = status;
     save(list);
-    if (status === DONE) logDone(t);
+    syncLog(target);
     window.TrackerRender();
   }
 
@@ -2175,8 +2297,17 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return list;
   }
 
+  /**
+   * The tasks the To Do List shows: the ones still to do.
+   *
+   * Blocked and Done live on the Daily activity page instead, so a task is on
+   * exactly one of the two pages and the sidebar count beside "To Do List"
+   * counts the rows you can actually see.
+   */
+  function active() { return load().filter((t) => !LOGGED(t.status)); }
+
   function view(q) {
-    const all = numbered(load());
+    const all = numbered(active());
     // Only the projects tasks actually carry, so a project with no task is
     // never offered as a filter that would empty the table.
     const projects = [...new Set(all.map((t) => t.project).filter(Boolean))].sort();
@@ -2192,7 +2323,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     setTimeout(paintShots, 0);
     return `
       <h2 class="page">To Do List</h2>
-      <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
+      <p class="lede">${rows.length} of ${all.length} tasks in progress${late ? ` · ${late} overdue` : ""}.
+        Blocked and completed tasks move to Daily activity.
         Click a task to see everything on it, beside the list.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
@@ -2212,7 +2344,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                </table></div>
                ${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}
              </div>
-             ${detailPane(all.find((t) => t.id === openRow) || null)}
+             ${detailPane(load().find((t) => t.id === openRow) || null)}
            </div>`
         : `<div class="empty">No tasks yet.</div>`}`;
   }
@@ -2281,11 +2413,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       fields: [
         { name: "date", label: "Date", type: "date", value: cur ? cur.date : today() },
         { name: "task", label: "Activity", type: "textarea", rows: 3, value: cur ? cur.task : "" },
-        // The same list the tasks use, not a second one that means the same
-        // things in different words. A status already saved outside it is kept
-        // and offered, so old entries are readable and editable as they are.
+        // Only the two statuses this page is for. A logged activity is
+        // something finished or something stuck; a task still in progress
+        // belongs on the To Do List, and offering it here would put the same
+        // task on both pages. A status already saved outside the two is kept
+        // and offered, so an older entry stays readable and editable as it is.
         { name: "status", label: "Status", type: "select",
-          options: [...new Set([...STATUSES, cur && cur.status].filter(Boolean))],
+          options: [...new Set([DONE, BLOCKED, cur && cur.status].filter(Boolean))],
           value: cur ? cur.status : DONE },
         { name: "url", label: "Reference link", value: cur ? cur.url : "", placeholder: "https://…" },
       ],
@@ -2312,7 +2446,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (rm) return logRemove(window.TrackerUI.actionId(rm, "remove"));
   });
 
-  window.TrackerTasks = { view, load, editTask, setStatus, STATUSES, COLUMNS,
+  migrate();
+
+  window.TrackerTasks = { view, load, active, editTask, setStatus, STATUSES, COLUMNS,
                           logAll, logEdit, logRemove };
 })();
 
@@ -3352,6 +3488,24 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
   const matches = (obj, q) => !q || JSON.stringify(obj).toLowerCase().includes(q);
 
+  /**
+   * The same dropdown the task pane uses, for a log entry that came from a
+   * task. It carries data-status, so the change handler in tasks.js picks it
+   * up: one code path for a status change, one confirmation, wherever it is
+   * made from. Returns "" when there is no live task behind the entry.
+   */
+  function taskStatusPicker(r) {
+    if (r.origin !== "task" || !r.taskId) return "";
+    const t = window.TrackerTasks.load().find((x) => x.id === r.taskId);
+    if (!t) return "";
+    const options = [...new Set([...window.TrackerTasks.STATUSES, t.status].filter(Boolean))];
+    return `<select class="statuspick" data-status="${esc(t.id)}"
+              aria-label="Status of ${esc(t.name || t.description || "task")}">
+        ${options.map((s) =>
+          `<option value="${esc(s)}"${s === t.status ? " selected" : ""}>${esc(s)}</option>`).join("")}
+      </select>`;
+  }
+
   function statusTag(s) {
     if (!s) return "";
     const v = s.toLowerCase();
@@ -3361,7 +3515,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     // quietly stopped meaning anything.
     const cls = v.includes("complete") || v.includes("done") ? "ok"
       : v.includes("progress") ? "info"
-      : v.includes("pending") || v.includes("block") || v.includes("to do") ? "warn" : "";
+      // "to do" was here for a task status that no longer exists: a task is In
+      // progress, Blocked or Done. Milestone data out of tracker.json still
+      // uses "pending", so that stays.
+      : v.includes("pending") || v.includes("block") ? "warn" : "";
     return `<span class="tag ${cls}">${esc(s)}</span>`;
   }
 
@@ -3548,7 +3705,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         ${table("daily", [
           { key: "date", label: "Date", render: (r) => esc(r.date) },
           { key: "task", label: "Activity", wrap: true, render: (r) => esc(r.task) },
-          { key: "status", label: "Status", render: (r) => statusTag(r.status) },
+          // A logged task keeps its status control here, because here is where
+          // the task now lives: it is off the To Do List, and without this the
+          // only way back to In progress would be a page that no longer lists
+          // it. Hand-typed entries have no task behind them, so they show the
+          // tag they always did.
+          { key: "status", label: "Status", render: (r) => taskStatusPicker(r) || statusTag(r.status) },
           { key: "origin", label: "Source", render: (r) =>
               `<span class="tag">${r.origin === "task" ? "task completed" : "manual"}</span>` },
           { key: "url", label: "Link", render: linkCell },
@@ -3617,7 +3779,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     { title: "Index", items: [["overview", "Overview", window.TrackerLinks.resolved().length]] },
     { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
-      ["todo", "To Do List", window.TrackerTasks.load().length],
+      // The count is what the page lists, not every task ever saved: blocked
+      // and completed ones are counted beside Daily activity instead.
+      ["todo", "To Do List", window.TrackerTasks.active().length],
       ["daily", "Daily activity", window.TrackerTasks.logAll().length],
     ] },
     { title: "Drive", items: [["drive", "Google Drive", driveLinks().length]] },
