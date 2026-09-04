@@ -61,5 +61,7 @@ jobs:
         run: node checks/check_nav_projects.mjs
       - name: The Standardize button keeps what you typed
         run: node checks/check_standardize.mjs
+      - name: The model picker sorts by tier and purpose
+        run: node checks/check_models.mjs
       - name: A deploy cannot serve new HTML with old JavaScript
         run: node checks/check_cachebust.mjs

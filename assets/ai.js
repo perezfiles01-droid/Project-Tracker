@@ -86,6 +86,40 @@
   const rank = (m) =>
     /flash-lite/.test(m) ? 0 : /flash/.test(m) ? 1 : /pro/.test(m) ? 3 : 2;
 
+  /**
+   * What a model is for, and which side of the bill it usually falls on.
+   *
+   * Google's ListModels reports name, description, supported methods and token
+   * limits - and nothing at all about billing. So the tier here is this app's
+   * own labelling by name, not a fact read from the account, and the dialog
+   * says so. The rules are ordered most specific first, and anything that
+   * matches nothing falls through to free text rather than vanishing: a stale
+   * rule should put a model in the wrong group, never out of reach.
+   */
+  const PURPOSE_ORDER = ["text", "image", "speech", "music", "research", "special"];
+  const PURPOSE_LABEL = {
+    text: "Text generation",
+    image: "Image generation",
+    speech: "Speech and audio",
+    music: "Music",
+    research: "Research",
+    special: "Specialised",
+  };
+
+  function classify(name) {
+    const m = String(name || "").toLowerCase();
+    const purpose =
+      /(^|-)tts|transcribe|speech|audio/.test(m) ? "speech" :
+      /lyria/.test(m)                           ? "music"  :
+      /image|nano-banana|imagen/.test(m)        ? "image"  :
+      /deep-research/.test(m)                   ? "research" :
+      /computer-use|robotics|customtools|embedding/.test(m) ? "special" :
+      "text";
+    const paid =
+      /deep-research|lyria|computer-use|robotics|nano-banana-pro|pro-image/.test(m);
+    return { tier: paid ? "paid" : "free", purpose };
+  }
+
   /* ---------------------------------------------------------------- Gemini */
   const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
   // Used only until the picker is filled from the account itself. Model names
@@ -100,6 +134,7 @@
     modelSetting: "tracker.geminiModel",
     keyHelp: "aistudio.google.com → Get API key. No card needed.",
     free: true,
+    classify,
     key: () => get("tracker.geminiKey"),
     model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
 
@@ -194,5 +229,6 @@
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt };
+  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt,
+                     classify, PURPOSE_ORDER, PURPOSE_LABEL };
 })();

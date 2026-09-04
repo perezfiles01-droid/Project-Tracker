@@ -77,10 +77,22 @@
       <small id="aiKeyHelp"></small>
     </div>
     <div class="field">
+      <label>Which models to show</label>
+      <div id="aiTier" class="radios">
+        <label><input type="radio" name="aiTier" value="free" checked> Free tier</label>
+        <label><input type="radio" name="aiTier" value="paid"> Paid (billing required)</label>
+        <label><input type="radio" name="aiTier" value="all"> Show everything</label>
+      </div>
+      <small>Free or paid is this app's own labelling by model name: Google's
+        model list carries no billing information, so your account's actual
+        entitlement is what decides. Nothing is ever hidden for good — Show
+        everything lists all of them.</small>
+    </div>
+    <div class="field">
       <label for="aiModel">Model</label>
       <select id="aiModel"></select>
-      <small id="aiModelHelp">Saved per engine. The list is read from your own
-        account once a key is in place.</small>
+      <small id="aiModelHelp">Saved per engine, and grouped by what each model
+        is for. The list is read from your own account once a key is in place.</small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
