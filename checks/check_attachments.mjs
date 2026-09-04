@@ -65,6 +65,19 @@ const pasteImages = (n) => page.evaluate(({ b64, n }) => {
     new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
 }, { b64: PNG, n });
 
+/** Paste onto a specific element, to prove where the listener really is. */
+const pasteImagesOn = (selector, n) => page.evaluate(({ b64, n, selector }) => {
+  const dt = new DataTransfer();
+  for (let i = 0; i < n; i++) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+    dt.items.add(new File([bytes], "image.png", { type: "image/png" }));
+  }
+  document.querySelector(selector).dispatchEvent(
+    new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+}, { b64: PNG, n, selector });
+
 /** Choose files through the picker, one call per pick. */
 const choose = (names) => page.setInputFiles("#fd_files",
   names.map((name) => ({ name, mimeType: "text/plain", buffer: Buffer.from("x") })));
@@ -80,6 +93,22 @@ ok("a pasted image is renamed to something saveable",
 ok("a pasted image shows a thumbnail",
    (await page.locator(".attstaged .attthumb").count()) === 1);
 
+/* --- a paste lands wherever the caret is, or nowhere at all ---------------
+   The listener used to be on the dialog element, so a paste with nothing
+   focused went to the body and was dropped without a word - the case where
+   Ctrl+V is most expected to work. */
+await page.click("#fd_description");
+await pasteImages(1);
+await page.waitForTimeout(200);
+ok("pasting with the caret in the description attaches",
+   (await staged()).length === 2, (await staged()).join(", "));
+
+await page.evaluate(() => document.activeElement && document.activeElement.blur());
+await pasteImagesOn("body", 1);
+await page.waitForTimeout(200);
+ok("pasting with nothing focused attaches too",
+   (await staged()).length === 3, (await staged()).join(", "));
+
 /* --- picking twice adds, it does not replace ------------------------------ */
 await choose(["one.txt"]);
 await page.waitForTimeout(200);
@@ -87,17 +116,17 @@ await choose(["two.txt"]);
 await page.waitForTimeout(200);
 const afterPicks = await staged();
 ok("choosing files twice adds to the list rather than replacing it",
-   afterPicks.length === 3 && afterPicks.includes("one.txt") && afterPicks.includes("two.txt"),
+   afterPicks.length === 5 && afterPicks.includes("one.txt") && afterPicks.includes("two.txt"),
    afterPicks.join(", "));
-ok("the count is shown", /3 of 5/.test(await countNote()), await countNote());
+ok("the count is shown", /5 of 5/.test(await countNote()), await countNote());
 
 /* --- the sixth is refused, out loud, and the five survive ----------------- */
 await choose(["three.txt", "four.txt", "five.txt"]);
 await page.waitForTimeout(250);
 const atLimit = await staged();
-ok("five attach and the sixth is refused", atLimit.length === 5, atLimit.join(", "));
+ok("five is the ceiling and the rest are refused", atLimit.length === 5, atLimit.join(", "));
 const note = (await page.locator('[data-note="fd_files"]').textContent()).trim();
-ok("the refusal says so rather than dropping it silently",
+ok("the refusal says so rather than dropping them silently",
    /not attached/i.test(note) && /5/.test(note), note || "(nothing said)");
 ok("the picker is disabled once full",
    await page.$eval("#fd_files", (el) => el.disabled));
@@ -116,9 +145,20 @@ const savedCount = await page.evaluate(() =>
   (JSON.parse(localStorage.getItem("tracker.tasks"))[0].attachments || []).length);
 ok("all four are saved with the task", savedCount === 4, String(savedCount));
 
+/* --- and the listener does not outlive the dialog ------------------------- */
+await pasteImagesOn("body", 1);
+await page.waitForTimeout(200);
+const afterClose = await page.evaluate(() =>
+  (JSON.parse(localStorage.getItem("tracker.tasks"))[0].attachments || []).length);
+ok("a paste after the dialog closed attaches nothing", afterClose === savedCount,
+   `${afterClose} vs ${savedCount}`);
+
 await page.locator("tr.taskrow").first().click();
 await page.waitForTimeout(300);
-ok("each attachment offers View", (await page.locator("[data-att]").count()) === 4);
+// Counted on the chip specifically: image thumbnails in the pane carry
+// data-att as well, so a bare [data-att] count measures both and means neither.
+ok("each attachment offers View", (await page.locator(".attchip[data-att]").count()) === 4,
+   String(await page.locator(".attchip[data-att]").count()));
 ok("each attachment offers Download", (await page.locator("[data-attdl]").count()) === 4);
 
 /* The download must carry the file's own name, or it saves as "download". */

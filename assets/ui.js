@@ -172,12 +172,21 @@
       paint(f);
     }
 
-    box.addEventListener("paste", (e) => {
+    /* Bound on the document, not on the dialog.
+     *
+     * A paste event fires at whatever has focus. With the caret in a field it
+     * bubbles through the dialog either way, but a paste with nothing focused
+     * lands on the body and never reaches the dialog element - so Ctrl+V did
+     * nothing, silently, in exactly the case where a person expects it to work
+     * most. Removed again when the dialog closes, so it cannot outlive the
+     * fields it stages into. */
+    const onPaste = (e) => {
       const files = (e.clipboardData && e.clipboardData.files) || [];
       if (!files.length) return;
       e.preventDefault();
       add(specs[0], files);
-    });
+    };
+    document.addEventListener("paste", onPaste);
 
     box.addEventListener("click", (e) => {
       const un = e.target.closest("[data-unstage]");
@@ -192,7 +201,13 @@
       if (e.target.matches("[data-drop]")) specs.forEach(paint);
     });
 
-    return { staged, revoke: () => urls.forEach((u) => URL.revokeObjectURL(u)) };
+    return {
+      staged,
+      revoke: () => {
+        document.removeEventListener("paste", onPaste);
+        urls.forEach((u) => URL.revokeObjectURL(u));
+      },
+    };
   }
 
   /** Escape a value for use inside a CSS attribute selector. */
