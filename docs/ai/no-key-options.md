@@ -31,6 +31,15 @@ npm tarball unpacks to about 74 MB, but that includes every build variant and
 type definitions. **The size a browser actually downloads was never measured**
 and must be checked before committing to this.
 
+**Confirmed against the package itself, September 2026.** The published
+`harper.js` 2.7.0 was downloaded and its type definitions read. The complete
+text facing API is `lint(text)` returning spans, each with `suggestions()`,
+plus `applySuggestion(text, lint, suggestion)` and `toTitleCase`. There is no
+rewrite, no tone, no generation. Measured payload: the WebAssembly binary is
+15.1 MB raw and **7.7 MB gzipped** over the wire. The `slimBinary` build saves
+almost nothing, 7.6 MB gzipped. It does work without a bundler: `WorkerLinter`
+plus `createBinaryModuleFromUrl`, with the wasm resolved from `import.meta.url`.
+
 **What it will not do.** Harper corrects; it does not rewrite. It catches
 broken grammar, misspellings and awkward phrasing and offers fixes. It will not
 take a rambling paragraph and restate the idea more simply. If a future request

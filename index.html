@@ -61,6 +61,21 @@
       <input id="apiKey" placeholder="AIza…" spellcheck="false">
       <small>Same console → Create credentials → API key. Needed by the Drive Picker.</small>
     </div>
+    <h3 style="margin-top:22px">Standardize text</h3>
+    <p class="lede">Powers the wand button beside a task's name and description.
+      Stored in this browser only, and deliberately left out of the backup file.
+      Give the key a spend cap in the Anthropic console.</p>
+    <div class="field">
+      <label for="aiKey">Anthropic API key</label>
+      <input id="aiKey" type="password" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
+      <small>console.anthropic.com &rarr; API keys. Leave blank to turn the button off.</small>
+    </div>
+    <div class="field">
+      <label for="aiModel">Model</label>
+      <select id="aiModel"></select>
+      <small>Opus 5 writes better; Haiku 4.5 is cheaper and faster. Both cost
+        well under a cent per click.</small>
+    </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
       <button class="btn primary" id="settingsSave">Save</button>
@@ -70,6 +85,7 @@
 
 <script src="config.js"></script>
 <script src="assets/store.js"></script>
+<script src="assets/ai.js"></script>
 <script src="assets/ui.js"></script>
 <script src="assets/tasks.js"></script>
 <script src="assets/projects.js"></script>

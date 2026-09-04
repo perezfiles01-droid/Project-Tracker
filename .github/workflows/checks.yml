@@ -59,3 +59,5 @@ jobs:
         run: node checks/check_pin.mjs
       - name: The sidebar and the Projects page agree
         run: node checks/check_nav_projects.mjs
+      - name: The Standardize button keeps what you typed
+        run: node checks/check_standardize.mjs

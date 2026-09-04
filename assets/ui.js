@@ -54,9 +54,18 @@
       control = `<input id="${id}" type="${f.type || "text"}" value="${esc(v)}"
         placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
     }
+    // The label row carries the field's own tools on the right. Today that
+    // is the standardize button; anything per-field goes here rather than
+    // floating over the control, which would sit on top of the text.
+    const tools = f.standardize
+      ? `<span class="fieldtools">
+           ${iconButton("wand", "Standardize text", `data-standardize="${id}"`)}
+         </span>`
+      : "";
     return `<div class="field">
-        <label for="${id}">${esc(f.label)}</label>
+        <div class="fieldhead"><label for="${id}">${esc(f.label)}</label>${tools}</div>
         ${control}
+        <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
   }
@@ -165,6 +174,35 @@
       cancelLabel: "Cancel",
     }).then((r) => !!(r && r.choice === "confirm"));
 
+  /**
+   * Strip the dashes a model reaches for, whatever the prompt asked.
+   *
+   * The prompt says not to use them. This makes sure. An instruction is a
+   * request and a regex is a guarantee, and the difference shows up on the
+   * one rewrite in fifty where the model does it anyway.
+   *
+   * Deliberately narrow. A hyphen inside "well-known" and an en dash between
+   * "2024-2025" are not the problem and are left alone; only the dash used as
+   * punctuation between words is rewritten, as the comma it was standing in
+   * for.
+   */
+  function tidyDashes(text) {
+    return String(text ?? "")
+      // A range between numbers is not the problem. Handled first, or the
+      // rule below turns "2024-2025" into "2024, 2025" - which it did, and
+      // the check caught it.
+      .replace(/(\d)\s*[\u2014\u2013]\s*(?=\d)/g, "$1-")
+      // " word - word " and "word-word": the parenthetical dash becomes the
+      // comma it was standing in for.
+      .replace(/\s*[\u2014\u2013]\s*(?=[A-Za-z0-9])/g, (m, off, str) =>
+        /[A-Za-z0-9]$/.test(str.slice(0, off)) ? ", " : " ")
+      // A trailing one with nothing after it is just noise.
+      .replace(/\s*[\u2014\u2013]\s*$/g, "")
+      .replace(/ {2,}/g, " ")
+      .replace(/ +([,.;:!?])/g, "$1")
+      .trim();
+  }
+
   /* ---------- shared pager ----------
      Lifted out of drive.js, where it was private to that closure while two
      tables used it and a third needed it. One implementation, keyed per
@@ -269,6 +307,9 @@
     // A drawing pin seen side on: head, shaft, point. It reads as pinned
     // when the button fills it, which is the whole point of the control.
     pin: '<path d="M9 3h6l-1 5 3.5 3.5H6.5L10 8z"/><path d="M12 11.5V21"/>',
+    // A wand with a spark: the conventional "let the machine have a go at
+    // this" mark, and distinct at 14px from the pencil that means "edit".
+    wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
   };
 
   /**
@@ -280,6 +321,69 @@
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
-  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
+  /* ---------- standardize a field ----------
+     The button belongs to the dialog, not to any one caller, so it is wired
+     once here. Whatever produces the improved text is injected as
+     window.TrackerAI, so this file stays free of any provider.
+
+     Two rules the whole thing is built around. What you typed is never lost:
+     the original is kept and Undo puts it back exactly. And a failure leaves
+     your text alone and says why in words, because a rewriter that eats a
+     paragraph on a flaky connection is worse than no rewriter. */
+  const originals = new Map();
+
+  const noteFor = (id) => document.querySelector(`[data-note="${id}"]`);
+  function setNote(id, html, kind = "") {
+    const el = noteFor(id);
+    if (!el) return;
+    el.className = "fieldnote" + (kind ? " " + kind : "");
+    el.innerHTML = html;
+    el.hidden = !html;
+  }
+
+  async function standardize(btn) {
+    const id = btn.dataset.standardize;
+    const field = document.getElementById(id);
+    if (!field) return;
+    const text = field.value.trim();
+    if (!text) return setNote(id, "Write something first.", "warn");
+    if (!window.TrackerAI) return setNote(id, "The text helper is not loaded.", "warn");
+
+    btn.disabled = true;
+    btn.classList.add("working");
+    setNote(id, "Standardizing…");
+    try {
+      const improved = tidyDashes(await window.TrackerAI.standardize(text, {
+        kind: field.tagName === "TEXTAREA" ? "description" : "title",
+      }));
+      if (!improved) throw new Error("Nothing came back.");
+      originals.set(id, text);            // only on success: nothing to undo otherwise
+      field.value = improved;
+      setNote(id, `Standardized. <button type="button" class="linkish"
+                     data-undo="${id}">Undo</button>`, "ok");
+    } catch (err) {
+      // The field is deliberately untouched here.
+      setNote(id, esc(err.message || "That did not work."), "warn");
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("working");
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-standardize]");
+    if (b) { e.preventDefault(); return standardize(b); }
+    const u = e.target.closest("[data-undo]");
+    if (u) {
+      e.preventDefault();
+      const id = u.dataset.undo;
+      const field = document.getElementById(id);
+      if (field && originals.has(id)) field.value = originals.get(id);
+      originals.delete(id);
+      return setNote(id, "");
+    }
+  });
+
+  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
                        iconButton, ICONS };
 })();
