@@ -86,12 +86,50 @@ ok("computer use and robotics read as specialised",
    by("gemini-2.5-computer-use-preview-10-2025").purpose === "special" &&
    by("gemini-robotics-er-2-preview").purpose === "special");
 ok("the flash family is free",
-   ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.7-flash", "gemini-2.5-pro"]
+   ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.7-flash", "gemini-flash-latest"]
      .every((n) => by(n).tier === "free"));
+// Every pro is paid, whatever else it is: a pro TTS model stays under Speech
+// and audio, on the paid side.
+ok("every pro model is paid",
+   ["gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-pro-latest",
+    "gemini-2.5-pro-preview-tts", "gemini-3-pro-image",
+    "deep-research-pro-preview-12-2025", "nano-banana-pro-preview"]
+     .every((n) => by(n).tier === "paid"),
+   ["gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-pro-latest",
+    "gemini-2.5-pro-preview-tts"].map((n) => `${n}=${by(n).tier}`).join(", "));
+ok("a pro model keeps its purpose when it moves to paid",
+   by("gemini-2.5-pro-preview-tts").purpose === "speech" &&
+   by("gemini-3-pro-image").purpose === "image" &&
+   by("gemini-2.5-pro").purpose === "text");
+// "pro" as a segment, never as a substring: preview, prompt and product are
+// not pro models, and a rule that caught them would empty the free tier.
+const notPro = await page.evaluate(() =>
+  ["gemini-3-flash-preview-latest", "prompt-tuner-1", "product-search-2", "gemma-4-26b-a4b-it"]
+    .map((n) => `${n}=${window.TrackerAI.classify(n).tier}`));
+ok("a name that merely contains the letters pro is not paid",
+   notPro.every((r) => r.endsWith("=free")), notPro.join(", "));
 ok("research, music, robotics and the pro image models are paid",
    ["deep-research-pro-preview-12-2025", "lyria-3-clip-preview", "gemini-3-pro-image",
     "nano-banana-pro-preview", "gemini-2.5-computer-use-preview-10-2025"]
      .every((n) => by(n).tier === "paid"));
+
+/* --- the 2.5 flash family is withdrawn, not merely relabelled ---
+   Google answers a request for one with "no longer available to new users", so
+   a picker that still offers it is offering a 404. It is dropped inside
+   listModels rather than in the dialog, so run() cannot reach one either, and
+   the rule is exposed as `retired` so this can check it without a key. */
+const retired = await page.evaluate((names) => {
+  const p = window.TrackerAI.PROVIDERS.find((x) => x.id === "gemini");
+  return names.filter((n) => p.retired && p.retired(n));
+}, FIXTURE);
+ok("every 2.5 flash name is withdrawn",
+   ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash-image",
+    "gemini-2.5-flash-preview-tts"].every((n) => retired.includes(n)),
+   retired.join(", "));
+ok("nothing else is withdrawn with them",
+   retired.every((n) => n.startsWith("gemini-2.5-flash")) &&
+   !retired.includes("gemini-2.5-pro") && !retired.includes("gemini-3.7-flash"),
+   retired.join(", ") || "none");
 ok("both tiers are actually populated by a real account's list",
    seen.some((r) => r.tier === "free") && seen.some((r) => r.tier === "paid"));
 
@@ -100,9 +138,10 @@ ok("both tiers are actually populated by a real account's list",
 // with no key and no request.
 await page.evaluate((names) => {
   const p = window.TrackerAI.PROVIDERS[0];
-  p.listModels = async () => names.slice();
+  // Stubbed at the transport, so the provider's own withdrawal rule still runs.
+  p.listModels = async () => names.filter((n) => !(p.retired && p.retired(n)));
   window.TrackerStore.setText(p.keySetting, "stub-key");
-  window.TrackerStore.setText(p.modelSetting, "gemini-2.5-flash");
+  window.TrackerStore.setText(p.modelSetting, "gemini-3.7-flash");
 }, FIXTURE);
 await page.click("#openSettings");
 await page.waitForFunction(() => document.querySelectorAll("#aiModel option").length > 1);
@@ -144,8 +183,12 @@ ok("paid options are grouped too", await grouped());
 
 await page.check('#aiTier input[value="all"]');
 const all = await shown();
-ok("show everything lists every model, so nothing is out of reach",
-   all.length === FIXTURE.length, `${all.length} of ${FIXTURE.length}`);
+const live = FIXTURE.filter((n) => !retired.includes(n));
+ok("show everything lists every model still offered, so nothing is out of reach",
+   all.length === live.length, `${all.length} of ${live.length}`);
+ok("no withdrawn model is offered under any tier",
+   all.every((m) => !retired.includes(m)),
+   all.filter((m) => retired.includes(m)).join(", ") || "none");
 
 /* --------------------------------------------- 3. the saved model holds */
 await page.selectOption("#aiModel", "gemini-3-pro-image");
@@ -177,7 +220,8 @@ if (engineIds.length > 1) {
   await page.evaluate((names) => {
     localStorage.clear();
     for (const p of window.TrackerAI.PROVIDERS) {
-      p.listModels = async () => names.map((n) => `${p.id}/${n}`);
+      p.listModels = async () => names.filter((n) => !(p.retired && p.retired(n)))
+                                      .map((n) => `${p.id}/${n}`);
       p.classify = (m) => window.TrackerAI.classify(String(m).split("/").pop());
       window.TrackerStore.setText(p.keySetting, "stub-" + p.id);
     }
@@ -241,6 +285,30 @@ if (engineIds.length > 1) {
   ok("All engines is only offered when there is more than one engine",
      !(await page.$$eval("#aiEngine option", (o) => o.some((x) => x.value === "all"))));
 }
+
+/* ------------------------------- 5. a saved withdrawn model is let go of
+   This is the case that was actually reported: the picker reads the saved name
+   straight back, so a withdrawn one produces a 404 on every click and nothing
+   in the dialog can escape it. Cleared on load, once, and only when withdrawn. */
+const url2 = "file://" + join(root, "Tracker-standalone.html");
+await page.goto(url2, { waitUntil: "load" });
+await page.evaluate(() => {
+  localStorage.clear();
+  localStorage.setItem("tracker.geminiModel", "gemini-2.5-flash-lite");
+});
+await page.goto(url2, { waitUntil: "load" });
+ok("a saved model that has been withdrawn is cleared",
+   await page.evaluate(() => localStorage.getItem("tracker.geminiModel")) === null,
+   String(await page.evaluate(() => localStorage.getItem("tracker.geminiModel"))));
+
+await page.evaluate(() => {
+  localStorage.clear();
+  localStorage.setItem("tracker.geminiModel", "gemini-3.7-flash");
+});
+await page.goto(url2, { waitUntil: "load" });
+ok("a saved model that still works is left exactly as it was",
+   await page.evaluate(() => localStorage.getItem("tracker.geminiModel")) === "gemini-3.7-flash",
+   String(await page.evaluate(() => localStorage.getItem("tracker.geminiModel"))));
 
 ok("nothing threw while doing all that", errors.length === 0, errors.slice(0, 3).join(" | "));
 

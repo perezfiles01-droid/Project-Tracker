@@ -117,8 +117,14 @@
       /deep-research/.test(m)                   ? "research" :
       /computer-use|robotics|customtools|embedding/.test(m) ? "special" :
       "text";
+    // "pro" is paid wherever it appears as a segment of the name - Pro, Pro
+    // preview, pro-latest and the pro TTS and image models alike. Written with
+    // boundaries so it reads a segment and never a substring: preview, prompt
+    // and product are not pro models, and a rule that caught them would empty
+    // the free tier.
     const paid =
-      /deep-research|lyria|computer-use|robotics|nano-banana-pro|pro-image/.test(m);
+      /(^|-)pro(-|$)/.test(m) ||
+      /deep-research|lyria|computer-use|robotics|nano-banana|imagen/.test(m);
     return { tier: paid ? "paid" : "free", purpose };
   }
 
@@ -128,6 +134,18 @@
   // churn, so this file does not pretend to know the current best one:
   // listModels asks, and a name baked in here would be wrong within months.
   const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash";
+
+  /**
+   * Models Google has withdrawn, which the picker must stop offering.
+   *
+   * The 2.5 flash family answers a request with 404 "This model ... is no
+   * longer available to new users", so leaving it in the list is offering a
+   * name that cannot work. This is the one place a model is taken out of reach
+   * rather than merely relabelled, which is why the rule is narrow, named and
+   * exposed: a withdrawal is a fact about the service, not a guess about a
+   * price, and the guard checks it by calling this rather than by scraping.
+   */
+  const GEMINI_RETIRED = /^gemini-2\.5-flash/;
 
   const gemini = {
     id: "gemini",
@@ -141,6 +159,7 @@
     // against another engine's response body.
     wire: "gemini",
     classify,
+    retired: (name) => GEMINI_RETIRED.test(String(name || "")),
     key: () => get("tracker.geminiKey"),
     model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
 
@@ -155,6 +174,9 @@
         .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
         .map((m) => String(m.name || "").replace(/^models\//, ""))
         .filter(Boolean)
+        // Dropped here rather than in the dialog, so run() cannot reach one
+        // either, whichever tier is on screen.
+        .filter((m) => !gemini.retired(m))
         .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     },
 
@@ -306,6 +328,23 @@
    * storage. Moved once, and only when it is unmistakably a Google key and the
    * Gemini slot is empty, so nothing can be overwritten.
    */
+  /**
+   * Let go of a model the service has withdrawn.
+   *
+   * Someone whose saved model is gemini-2.5-flash-lite gets a 404 on every
+   * click, and the picker cannot help because it reads the saved name straight
+   * back. Cleared once, so the next open falls to whatever the account itself
+   * offers. Only a withdrawn name is touched; anything else is left exactly as
+   * it was chosen.
+   */
+  function retire() {
+    const saved = get("tracker.geminiModel");
+    if (!saved || !gemini.retired(saved)) return false;
+    window.TrackerStore.remove("tracker.geminiModel");
+    return true;
+  }
+  retire();
+
   function adopt() {
     const stale = get("tracker.aiKey");
     if (!stale || !/^AIza/.test(stale)) return false;
@@ -342,6 +381,6 @@
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt,
+  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL };
 })();
