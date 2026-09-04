@@ -387,6 +387,25 @@ th.emailhead .accountpick{
 .btn.icon.pinned{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
 .btn.icon.pinned svg{fill:currentColor}
 
+/* The project list in the sidebar shows three at a time and scrolls for the
+   rest. --nav-rows is the count, so the height follows the button metrics
+   rather than a number typed twice. The scrollbar is deliberately faint: it
+   is a hint that there is more, not a control anyone aims at. */
+.navscroll{
+  --nav-rows:3;
+  /* One row is the button's own box plus the flex gap above it. Measured
+     from .nav button in the browser: 41px, plus the nav's 2px gap. */
+  --nav-row:41px;
+  max-height:calc(var(--nav-rows) * (var(--nav-row) + 2px));
+  display:flex;flex-direction:column;gap:2px;
+  overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+}
+.navscroll::-webkit-scrollbar{width:6px}
+.navscroll::-webkit-scrollbar-track{background:transparent}
+.navscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.navscroll:hover::-webkit-scrollbar-thumb{background:var(--dim)}
+
 </style>
 </head>
 <body>
@@ -2061,7 +2080,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   /** Kept so an existing #g:<project> bookmark still opens that project. */
   function tableView(key) {
-    if (groupByKey(key)) selected = key;
+    if (groupByKey(key)) {
+      selected = key;
+      // Opening a project from the sidebar has to leave its tile on screen.
+      // The tiles page six at a time, so the seventh project opened its
+      // tables under a page of tiles that did not include it.
+      const i = groups().findIndex((g) => g.key === key);
+      if (i > -1) window.TrackerUI.goToPage("projects", Math.floor(i / PROJ_PER_PAGE));
+    }
     return overview();
   }
 
@@ -2573,9 +2599,24 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * activity and Google Drive came to sit under PROJECTS. Groups now carry
    * their own items, so a third group is a line of data.
    */
+  /**
+   * Projects come from TrackerLinks.groups(), not from the JSON.
+   *
+   * The nav used to read state.data.projects directly - the workbook file,
+   * which is served read-only and holds two projects. Every project you add
+   * lives in localStorage and is assembled by groups(), which only the
+   * Projects page ever called. So the page listed seven and the sidebar
+   * listed two, and a project you had renamed or deleted was still listed
+   * here under its old name. One source now answers both.
+   */
+  const projectNav = () => window.TrackerLinks.groups().map((g) => {
+    const own = state.data.projects.find((p) => p.active !== false && p.name === g.name);
+    return [own ? `p:${own.id}` : `g:${g.key}`, g.name, null];
+  });
+
   const navGroups = () => [
     { title: "Index", items: [["overview", "Overview", window.TrackerLinks.resolved().length]] },
-    { title: "Projects", items: activeProjects().map((p) => [`p:${p.id}`, p.name, null]) },
+    { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
       ["todo", "To Do List", window.TrackerTasks.load().length],
       ["daily", "Daily activity", window.TrackerTasks.logAll().length],
@@ -2589,8 +2630,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
 
   function renderNav() {
+    // A scrolling group is wrapped so its own box can be given a height;
+    // the buttons themselves are unchanged.
     $("#nav").innerHTML = navGroups().map((g) =>
-      `<div class="nav-title">${esc(g.title)}</div>` + g.items.map(navButton).join("")
+      `<div class="nav-title">${esc(g.title)}</div>` +
+      (g.scroll
+        ? `<div class="navscroll">${g.items.map(navButton).join("")}</div>`
+        : g.items.map(navButton).join(""))
     ).join("");
   }
 

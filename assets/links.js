@@ -468,7 +468,14 @@
 
   /** Kept so an existing #g:<project> bookmark still opens that project. */
   function tableView(key) {
-    if (groupByKey(key)) selected = key;
+    if (groupByKey(key)) {
+      selected = key;
+      // Opening a project from the sidebar has to leave its tile on screen.
+      // The tiles page six at a time, so the seventh project opened its
+      // tables under a page of tiles that did not include it.
+      const i = groups().findIndex((g) => g.key === key);
+      if (i > -1) window.TrackerUI.goToPage("projects", Math.floor(i / PROJ_PER_PAGE));
+    }
     return overview();
   }
 

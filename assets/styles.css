@@ -376,3 +376,22 @@ th.emailhead .accountpick{
    accent, so "pinned" is visible without hovering for a tooltip. */
 .btn.icon.pinned{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
 .btn.icon.pinned svg{fill:currentColor}
+
+/* The project list in the sidebar shows three at a time and scrolls for the
+   rest. --nav-rows is the count, so the height follows the button metrics
+   rather than a number typed twice. The scrollbar is deliberately faint: it
+   is a hint that there is more, not a control anyone aims at. */
+.navscroll{
+  --nav-rows:3;
+  /* One row is the button's own box plus the flex gap above it. Measured
+     from .nav button in the browser: 41px, plus the nav's 2px gap. */
+  --nav-row:41px;
+  max-height:calc(var(--nav-rows) * (var(--nav-row) + 2px));
+  display:flex;flex-direction:column;gap:2px;
+  overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+}
+.navscroll::-webkit-scrollbar{width:6px}
+.navscroll::-webkit-scrollbar-track{background:transparent}
+.navscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.navscroll:hover::-webkit-scrollbar-thumb{background:var(--dim)}

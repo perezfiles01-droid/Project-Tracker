@@ -57,3 +57,5 @@ jobs:
         run: node checks/check_project_actions.mjs
       - name: A pinned site holds the top of its table
         run: node checks/check_pin.mjs
+      - name: The sidebar and the Projects page agree
+        run: node checks/check_nav_projects.mjs

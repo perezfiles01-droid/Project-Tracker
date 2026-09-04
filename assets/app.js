@@ -239,9 +239,24 @@
    * activity and Google Drive came to sit under PROJECTS. Groups now carry
    * their own items, so a third group is a line of data.
    */
+  /**
+   * Projects come from TrackerLinks.groups(), not from the JSON.
+   *
+   * The nav used to read state.data.projects directly - the workbook file,
+   * which is served read-only and holds two projects. Every project you add
+   * lives in localStorage and is assembled by groups(), which only the
+   * Projects page ever called. So the page listed seven and the sidebar
+   * listed two, and a project you had renamed or deleted was still listed
+   * here under its old name. One source now answers both.
+   */
+  const projectNav = () => window.TrackerLinks.groups().map((g) => {
+    const own = state.data.projects.find((p) => p.active !== false && p.name === g.name);
+    return [own ? `p:${own.id}` : `g:${g.key}`, g.name, null];
+  });
+
   const navGroups = () => [
     { title: "Index", items: [["overview", "Overview", window.TrackerLinks.resolved().length]] },
-    { title: "Projects", items: activeProjects().map((p) => [`p:${p.id}`, p.name, null]) },
+    { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
       ["todo", "To Do List", window.TrackerTasks.load().length],
       ["daily", "Daily activity", window.TrackerTasks.logAll().length],
@@ -255,8 +270,13 @@
   }
 
   function renderNav() {
+    // A scrolling group is wrapped so its own box can be given a height;
+    // the buttons themselves are unchanged.
     $("#nav").innerHTML = navGroups().map((g) =>
-      `<div class="nav-title">${esc(g.title)}</div>` + g.items.map(navButton).join("")
+      `<div class="nav-title">${esc(g.title)}</div>` +
+      (g.scroll
+        ? `<div class="navscroll">${g.items.map(navButton).join("")}</div>`
+        : g.items.map(navButton).join(""))
     ).join("");
   }
 
