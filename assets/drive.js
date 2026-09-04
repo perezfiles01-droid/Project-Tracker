@@ -353,8 +353,57 @@
       ? "Free tier. No card needed."
       : "Uses purchased credit on that account.";
     const saved = window.TrackerStore.getText(p.modelSetting) || p.model();
-    $("#aiModel").innerHTML = `<option value="${saved}" selected>${saved}</option>`;
+    // Until the account answers, the saved model is the whole list: it is the
+    // one name known to work, and it must stay selected through the wait.
+    modelsHeld = [saved];
+    setTier(tierOf(saved));
+    paintModels(saved);
     loadModels(p, saved);
+  }
+
+  /* ---------- the model picker: tier radios, purpose groups ----------
+     The tier is this app's own labelling, not a fact read from the account:
+     Google's model list carries no billing information at all. So the filter
+     never removes a model outright - "Show everything" is always there, and a
+     model wrongly labelled stays reachable. */
+  let modelsHeld = [];
+  const ai = () => window.TrackerAI || {};
+  const tierOf = (m) => (ai().classify ? ai().classify(m).tier : "free");
+  const purposeOf = (m) => (ai().classify ? ai().classify(m).purpose : "text");
+  const tierPicked = () => {
+    const on = $("#aiTier") && $("#aiTier").querySelector("input:checked");
+    return on ? on.value : "free";
+  };
+  function setTier(tier) {
+    const box = $("#aiTier");
+    if (!box) return;
+    const want = box.querySelector(`input[value="${tier}"]`) ||
+                 box.querySelector('input[value="free"]');
+    if (want) want.checked = true;
+  }
+
+  /**
+   * Render the held list under the chosen tier, grouped by what each model is
+   * for. Text first, because the Standardize button is a text job. Empty
+   * groups are dropped rather than shown blank.
+   */
+  function paintModels(saved) {
+    const sel = $("#aiModel");
+    if (!sel) return;
+    const tier = tierPicked();
+    const shown = modelsHeld.filter((m) => tier === "all" || tierOf(m) === tier);
+    const order = ai().PURPOSE_ORDER || ["text"];
+    const label = ai().PURPOSE_LABEL || {};
+    const groups = order
+      .map((k) => [k, shown.filter((m) => purposeOf(m) === k)])
+      .filter(([, list]) => list.length);
+    sel.innerHTML = groups.map(([k, list]) =>
+      `<optgroup label="${label[k] || k}">` + list.map((m) =>
+        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("") +
+      "</optgroup>").join("");
+    if (shown.includes(saved)) sel.value = saved;
+    else if (shown.length) sel.value = shown[0];
+    return shown.length;
   }
 
   /**
@@ -370,11 +419,14 @@
     try {
       const models = await p.listModels(key);
       if (!models.length) throw new Error("none listed");
-      $("#aiModel").innerHTML = models.map((m) =>
-        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("");
-      if (!models.includes(saved)) $("#aiModel").value = models[0];
+      modelsHeld = models;
+      // Follow the saved model to its own side rather than quietly selecting a
+      // different one: the choice already made is never changed behind a back.
+      if (models.includes(saved)) setTier(tierOf(saved));
+      const shown = paintModels(saved);
       $("#aiModelHelp").textContent =
-        `${models.length} models on this account. The cheapest and fastest are first.`;
+        `Showing ${shown} of ${models.length} models on this account, ` +
+        "grouped by what each is for. The cheapest and fastest are first.";
     } catch (err) {
       $("#aiModelHelp").textContent = "Could not read the model list (" +
         (err.message || "failed") + "). Keeping " + saved + ".";
@@ -391,6 +443,13 @@
 
   document.addEventListener("change", (e) => {
     if (e.target.id === "aiEngine") showEngine();
+    if (e.target.name === "aiTier") {
+      const shown = paintModels($("#aiModel").value);
+      $("#aiModelHelp").textContent = modelsHeld.length > 1
+        ? `Showing ${shown} of ${modelsHeld.length} models on this account, ` +
+          "grouped by what each is for. The cheapest and fastest are first."
+        : $("#aiModelHelp").textContent;
+    }
   });
   // A pasted key should fill the model list without needing a save first.
   document.addEventListener("blur", (e) => {

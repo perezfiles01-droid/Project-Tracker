@@ -170,6 +170,12 @@ td.wrap{max-width:420px;white-space:pre-wrap}
 .field input{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;outline:none}
 .field input:focus{border-color:var(--accent)}
 .field small{color:var(--dim);font-size:12px}
+/* The tier radios. Laid out as rows so a long label wraps rather than
+   colliding with the next one on a phone. */
+.radios{display:flex;flex-wrap:wrap;gap:8px 18px;padding:2px 0}
+.radios label{display:inline-flex;align-items:center;gap:7px;font-size:13px;
+  color:var(--text);text-transform:none;letter-spacing:0;cursor:pointer}
+.radios input{width:auto;margin:0;accent-color:var(--accent)}
 .modal .actions{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
 
 @media (max-width:860px){
@@ -489,10 +495,22 @@ th.emailhead .accountpick{
       <small id="aiKeyHelp"></small>
     </div>
     <div class="field">
+      <label>Which models to show</label>
+      <div id="aiTier" class="radios">
+        <label><input type="radio" name="aiTier" value="free" checked> Free tier</label>
+        <label><input type="radio" name="aiTier" value="paid"> Paid (billing required)</label>
+        <label><input type="radio" name="aiTier" value="all"> Show everything</label>
+      </div>
+      <small>Free or paid is this app's own labelling by model name: Google's
+        model list carries no billing information, so your account's actual
+        entitlement is what decides. Nothing is ever hidden for good — Show
+        everything lists all of them.</small>
+    </div>
+    <div class="field">
       <label for="aiModel">Model</label>
       <select id="aiModel"></select>
-      <small id="aiModelHelp">Saved per engine. The list is read from your own
-        account once a key is in place.</small>
+      <small id="aiModelHelp">Saved per engine, and grouped by what each model
+        is for. The list is read from your own account once a key is in place.</small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
@@ -806,6 +824,40 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const rank = (m) =>
     /flash-lite/.test(m) ? 0 : /flash/.test(m) ? 1 : /pro/.test(m) ? 3 : 2;
 
+  /**
+   * What a model is for, and which side of the bill it usually falls on.
+   *
+   * Google's ListModels reports name, description, supported methods and token
+   * limits - and nothing at all about billing. So the tier here is this app's
+   * own labelling by name, not a fact read from the account, and the dialog
+   * says so. The rules are ordered most specific first, and anything that
+   * matches nothing falls through to free text rather than vanishing: a stale
+   * rule should put a model in the wrong group, never out of reach.
+   */
+  const PURPOSE_ORDER = ["text", "image", "speech", "music", "research", "special"];
+  const PURPOSE_LABEL = {
+    text: "Text generation",
+    image: "Image generation",
+    speech: "Speech and audio",
+    music: "Music",
+    research: "Research",
+    special: "Specialised",
+  };
+
+  function classify(name) {
+    const m = String(name || "").toLowerCase();
+    const purpose =
+      /(^|-)tts|transcribe|speech|audio/.test(m) ? "speech" :
+      /lyria/.test(m)                           ? "music"  :
+      /image|nano-banana|imagen/.test(m)        ? "image"  :
+      /deep-research/.test(m)                   ? "research" :
+      /computer-use|robotics|customtools|embedding/.test(m) ? "special" :
+      "text";
+    const paid =
+      /deep-research|lyria|computer-use|robotics|nano-banana-pro|pro-image/.test(m);
+    return { tier: paid ? "paid" : "free", purpose };
+  }
+
   /* ---------------------------------------------------------------- Gemini */
   const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
   // Used only until the picker is filled from the account itself. Model names
@@ -820,6 +872,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     modelSetting: "tracker.geminiModel",
     keyHelp: "aistudio.google.com → Get API key. No card needed.",
     free: true,
+    classify,
     key: () => get("tracker.geminiKey"),
     model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
 
@@ -914,7 +967,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt };
+  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt,
+                     classify, PURPOSE_ORDER, PURPOSE_LABEL };
 })();
 
 </script>
@@ -3457,8 +3511,57 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       ? "Free tier. No card needed."
       : "Uses purchased credit on that account.";
     const saved = window.TrackerStore.getText(p.modelSetting) || p.model();
-    $("#aiModel").innerHTML = `<option value="${saved}" selected>${saved}</option>`;
+    // Until the account answers, the saved model is the whole list: it is the
+    // one name known to work, and it must stay selected through the wait.
+    modelsHeld = [saved];
+    setTier(tierOf(saved));
+    paintModels(saved);
     loadModels(p, saved);
+  }
+
+  /* ---------- the model picker: tier radios, purpose groups ----------
+     The tier is this app's own labelling, not a fact read from the account:
+     Google's model list carries no billing information at all. So the filter
+     never removes a model outright - "Show everything" is always there, and a
+     model wrongly labelled stays reachable. */
+  let modelsHeld = [];
+  const ai = () => window.TrackerAI || {};
+  const tierOf = (m) => (ai().classify ? ai().classify(m).tier : "free");
+  const purposeOf = (m) => (ai().classify ? ai().classify(m).purpose : "text");
+  const tierPicked = () => {
+    const on = $("#aiTier") && $("#aiTier").querySelector("input:checked");
+    return on ? on.value : "free";
+  };
+  function setTier(tier) {
+    const box = $("#aiTier");
+    if (!box) return;
+    const want = box.querySelector(`input[value="${tier}"]`) ||
+                 box.querySelector('input[value="free"]');
+    if (want) want.checked = true;
+  }
+
+  /**
+   * Render the held list under the chosen tier, grouped by what each model is
+   * for. Text first, because the Standardize button is a text job. Empty
+   * groups are dropped rather than shown blank.
+   */
+  function paintModels(saved) {
+    const sel = $("#aiModel");
+    if (!sel) return;
+    const tier = tierPicked();
+    const shown = modelsHeld.filter((m) => tier === "all" || tierOf(m) === tier);
+    const order = ai().PURPOSE_ORDER || ["text"];
+    const label = ai().PURPOSE_LABEL || {};
+    const groups = order
+      .map((k) => [k, shown.filter((m) => purposeOf(m) === k)])
+      .filter(([, list]) => list.length);
+    sel.innerHTML = groups.map(([k, list]) =>
+      `<optgroup label="${label[k] || k}">` + list.map((m) =>
+        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("") +
+      "</optgroup>").join("");
+    if (shown.includes(saved)) sel.value = saved;
+    else if (shown.length) sel.value = shown[0];
+    return shown.length;
   }
 
   /**
@@ -3474,11 +3577,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     try {
       const models = await p.listModels(key);
       if (!models.length) throw new Error("none listed");
-      $("#aiModel").innerHTML = models.map((m) =>
-        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("");
-      if (!models.includes(saved)) $("#aiModel").value = models[0];
+      modelsHeld = models;
+      // Follow the saved model to its own side rather than quietly selecting a
+      // different one: the choice already made is never changed behind a back.
+      if (models.includes(saved)) setTier(tierOf(saved));
+      const shown = paintModels(saved);
       $("#aiModelHelp").textContent =
-        `${models.length} models on this account. The cheapest and fastest are first.`;
+        `Showing ${shown} of ${models.length} models on this account, ` +
+        "grouped by what each is for. The cheapest and fastest are first.";
     } catch (err) {
       $("#aiModelHelp").textContent = "Could not read the model list (" +
         (err.message || "failed") + "). Keeping " + saved + ".";
@@ -3495,6 +3601,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   document.addEventListener("change", (e) => {
     if (e.target.id === "aiEngine") showEngine();
+    if (e.target.name === "aiTier") {
+      const shown = paintModels($("#aiModel").value);
+      $("#aiModelHelp").textContent = modelsHeld.length > 1
+        ? `Showing ${shown} of ${modelsHeld.length} models on this account, ` +
+          "grouped by what each is for. The cheapest and fastest are first."
+        : $("#aiModelHelp").textContent;
+    }
   });
   // A pasted key should fill the model list without needing a save first.
   document.addEventListener("blur", (e) => {
