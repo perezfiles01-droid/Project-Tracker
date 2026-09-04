@@ -67,15 +67,12 @@
     const cur = id ? list.find((t) => t.id === id) : null;
     if (id && !cur) return;
     const projects = (window.TrackerProjectNames ? window.TrackerProjectNames() : []);
-    // Every field is optional: a task with nothing but a number is valid, so
-    // the only thing that stops a save is cancelling the dialog.
-    const nextNo = String(list.reduce((n, t) => Math.max(n, Number(t.no) || 0), 0) + 1);
+    // Every field is optional: a task with nothing filled in at all is valid,
+    // so the only thing that stops a save is cancelling the dialog.
     const values = await window.TrackerUI.formDialog({
       title: cur ? "Edit task" : "New task",
       submitLabel: cur ? "Save changes" : "Add task",
       fields: [
-        { name: "no", label: "Task No.", value: cur ? cur.no : nextNo,
-          help: "Numbered for you; change it if you keep your own numbering." },
         { name: "name", label: "Name of task", value: cur ? (cur.name || "") : "",
           placeholder: "Short name shown in the table", standardize: true },
         { name: "description", label: "Detailed description", type: "textarea", rows: 4,
@@ -101,7 +98,8 @@
     const wasDone = cur ? cur.status === "Done" : false;
     const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
     Object.assign(target, {
-      no: values.no, name: values.name, description: values.description, given: values.given,
+      // No "no" here: the number is the task's position, worked out at render.
+      name: values.name, description: values.description, given: values.given,
       due: values.due, ref: values.ref, status: values.status || STATUSES[0],
       assignee: values.assignee, project: values.project,
     });
@@ -135,7 +133,7 @@
     if (log.some((e) => e.taskId === t.id)) return;
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
-      task: t.description || ("Task " + (t.no || "")),
+      task: t.description || t.name || "Task",
       status: "Completed", url: t.ref || "", origin: "task",
     });
     logWrite(log);
@@ -276,8 +274,27 @@
       </tr>${openRow === t.id ? detailRow(t) : ""}`;
   }
 
+  /**
+   * The number in the Task No. column.
+   *
+   * It is the task's position in creation order, worked out here and attached
+   * to this render's own copies - never stored. It used to be an editable
+   * field pre-filled with max+1, which is how a list came to read 1, 2, 3, 4,
+   * 1: nothing checked what you typed. Derived, it cannot collide, cannot be
+   * edited into a duplicate, and closes its own gaps when a task is deleted.
+   *
+   * Attaching it as `no` rather than keeping a separate map is deliberate:
+   * sorting, searching and the detail table all read fields off the task, so
+   * they keep working untouched. load() parses fresh objects on every call, so
+   * this cannot leak back into storage.
+   */
+  function numbered(list) {
+    list.forEach((t, i) => { t.no = String(i + 1); });
+    return list;
+  }
+
   function view(q) {
-    const all = load();
+    const all = numbered(load());
     const rows = window.TrackerUI.sortRows("tasks",
       all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
     const late = rows.filter(overdue).length;

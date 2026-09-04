@@ -51,6 +51,8 @@ jobs:
         run: node checks/check_tasks.mjs
       - name: The task dialog offers the projects the page lists
         run: node checks/check_task_project.mjs
+      - name: Task numbers count 1..n and cannot be typed
+        run: node checks/check_task_number.mjs
       - name: Artifacts and timeline behave
         run: node checks/check_projects.mjs
       - name: Every delete asks the same question
