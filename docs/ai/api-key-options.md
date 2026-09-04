@@ -66,12 +66,21 @@ for one request would be a larger change than the feature itself.
 Estimated from published list prices, not measured. A 100 word description is
 roughly 300 input and 200 output tokens.
 
-| Model | Input / Output per million | Per click |
-| --- | --- | --- |
-| `claude-opus-5` | $5 / $25 | about $0.007 |
-| `claude-haiku-4-5` | $1 / $5 | about $0.001 |
+| Model | Input / Output per million | Per click | What $20 of credit buys |
+| --- | --- | --- | --- |
+| `claude-haiku-4-5` (default) | $1 / $5 | about $0.001 | roughly 15,000 clicks |
+| `claude-opus-5` | $5 / $25 | about $0.007 | roughly 2,900 clicks |
 
-Under a cent either way. Cost is not the reason to hesitate here.
+Under a cent either way. Haiku is the default because this is a rewrite
+rather than a reasoning problem, and purchased credit expires one year after
+purchase, so the slower it burns the better.
+
+**`output_config.effort` is not universal.** Opus 5 accepts it and `low` is
+right for a one paragraph rewrite. **Haiku 4.5 rejects it with a 400.**
+Sending it to every model turns a model switch into a broken button, and the
+error reads like a bad key rather than a bad request. `TAKES_EFFORT` in
+`assets/ai.js` gates it, and `check_standardize.mjs` drives every offered
+model to assert which of them is sent it.
 
 ## The key is the reason to hesitate
 

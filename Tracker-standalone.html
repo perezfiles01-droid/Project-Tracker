@@ -727,13 +727,26 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 (() => {
   const ENDPOINT = "https://api.anthropic.com/v1/messages";
   const VERSION = "2023-06-01";
-  const DEFAULT_MODEL = "claude-opus-5";
+  // Haiku is the default because this is a rewrite, not a reasoning problem,
+   // and it runs roughly five times further on the same credit. Opus stays on
+   // the list for anyone who wants the better writer.
+  const DEFAULT_MODEL = "claude-haiku-4-5";
 
   /** Models offered in Settings. First is the default. */
   const MODELS = [
-    "claude-opus-5",
     "claude-haiku-4-5",
+    "claude-opus-5",
   ];
+
+  /**
+   * Which models take output_config.effort.
+   *
+   * Not cosmetic. Haiku 4.5 REJECTS effort with a 400, so sending it to every
+   * model turns a model switch into a broken button. Opus 5 accepts it, and
+   * "low" is right here: a one paragraph rewrite needs no deliberation and the
+   * button should feel immediate.
+   */
+  const TAKES_EFFORT = (model) => /^claude-(opus|sonnet)-5/.test(model);
 
   const cfg = () => ({
     key: window.TrackerStore.getText("tracker.aiKey") ||
@@ -811,9 +824,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         body: JSON.stringify({
           model,
           max_tokens: 2000,
-          // A rewrite of one paragraph is not a reasoning problem, and the
-          // button should feel immediate.
-          output_config: { effort: "low" },
+          ...(TAKES_EFFORT(model) ? { output_config: { effort: "low" } } : {}),
           system: SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description),
           messages: [{ role: "user", content: text }],
         }),
@@ -839,7 +850,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   const hasKey = () => !!cfg().key;
 
-  window.TrackerAI = { standardize, hasKey, MODELS, DEFAULT_MODEL };
+  window.TrackerAI = { standardize, hasKey, MODELS, DEFAULT_MODEL, TAKES_EFFORT };
 })();
 
 </script>

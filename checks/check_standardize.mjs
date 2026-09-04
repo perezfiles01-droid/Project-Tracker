@@ -122,6 +122,38 @@ await page.waitForTimeout(250);
 ok("Undo restores the original byte for byte",
    (await page.inputValue("#fd_description")) === typed);
 
+/* --- effort is sent only to models that accept it ---
+   Haiku 4.5 rejects output_config.effort with a 400. Sending it to every
+   model turns switching model into a broken button, and the failure looks
+   like a bad key rather than a bad request. Every offered model is checked
+   at runtime, so one added later is covered. */
+const offered = await page.evaluate(() => window.TrackerAI.MODELS);
+ok("more than one model is offered", offered.length >= 2, offered.join(", "));
+for (const model of offered) {
+  await openTask();
+  await page.evaluate((m) => localStorage.setItem("tracker.aiModel", m), model);
+  await page.reload({ waitUntil: "load" });
+  await page.click('#nav button[data-route="todo"]');
+  await page.waitForTimeout(300);
+  await page.click('[data-edit="task:new"]');
+  await page.waitForSelector("#formDialog .box");
+  await stub(reply("fine."));
+  await page.fill("#fd_description", "something to fix");
+  await page.click('[data-standardize="fd_description"]');
+  await page.waitForTimeout(350);
+  const body = JSON.parse((await page.evaluate(() => window.__calls[0])).init.body);
+  const hasEffort = !!(body.output_config && body.output_config.effort);
+  const shouldHave = await page.evaluate((m) => window.TrackerAI.TAKES_EFFORT(m), model);
+  ok(`${model} is sent ${shouldHave ? "with" : "without"} effort`,
+     hasEffort === shouldHave, `model=${body.model} effort=${hasEffort}`);
+  ok(`${model} is the model actually sent`, body.model === model, body.model);
+}
+// Named explicitly, because this is the one that was wrong.
+ok("Haiku is never sent an effort parameter",
+   !(await page.evaluate(() => window.TrackerAI.TAKES_EFFORT("claude-haiku-4-5"))));
+ok("the default model is the one the picker lists first",
+   (await page.evaluate(() => window.TrackerAI.DEFAULT_MODEL)) === offered[0]);
+
 /* --- the dash rule holds even when the model ignores it --- */
 await openTask();
 await stub(reply("We shipped it — it works, and the 2024–2025 range is fine."));
