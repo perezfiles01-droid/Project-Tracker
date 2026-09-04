@@ -1,13 +1,53 @@
 # Running the Standardize button for nothing
 
-One engine: Google Gemini. An AI Studio key is issued with no card and has a
-free tier, so the feature costs nothing to run.
+Two engines, both free to run with nothing to buy:
 
-Anthropic was here first and was removed once the free path worked. It needed
-purchased credit, and credit expires one year after purchase. `PROVIDERS` in
-`assets/ai.js` is still a list rather than one hardcoded call, so putting a
-second engine back is one entry with the same four members; the Settings
-dialog shows the Engine picker only when there is more than one to pick.
+| Engine | Key from | What is free |
+| --- | --- | --- |
+| Google Gemini | aistudio.google.com → Get API key | The free tier, no card |
+| OpenRouter | openrouter.ai/keys → Create key | Models whose id ends `:free`, no card |
+
+Anthropic was here first and was removed once a free path worked. It needed
+purchased credit, and credit expires one year after purchase.
+
+`PROVIDERS` in `assets/ai.js` is the whole list, and nothing outside it counts
+the entries. A third engine is one entry declaring `key`, `model`,
+`listModels`, `run`, a `wire` naming its reply shape, and optionally its own
+`classify`. The Settings dialog and both guards enumerate that list at runtime.
+
+## All engines, and the engine a model belongs to
+
+The Engine picker offers each engine plus **All engines**, which appears only
+when there is more than one. Under it every engine that has a key is asked, and
+the results are shown in one list. Optgroups cannot nest, so the engine's name
+joins the group label: "Text generation - OpenRouter".
+
+Picking a model fills the Engine box with the engine that owns it, and the key
+box follows, so it is always visible which engine will run. The list itself
+stays as it was: rebuilding it per pick would take the other engines' models
+away the moment you touched one. What is saved is always a real engine id;
+`tracker.aiEngineMode` remembers the All engines view separately, because
+`standardize()` dispatches on the engine and must never be handed a pseudo one.
+
+## Free and paid, and one model family that is gone
+
+For Gemini the tier is this app's own labelling by name - Google's ListModels
+reports methods and token limits and nothing about billing. Every **pro** model
+counts as paid, matched as a segment of the name so `preview`, `prompt` and
+`product` are not caught. OpenRouter publishes its prices in the same listing
+as its models, so its split is read from the account rather than guessed.
+
+**Google's `gemini-2.5-flash*` family is withdrawn, not hidden.** A request for
+one answers:
+
+```
+404  This model models/gemini-2.5-flash-lite is no longer available to new users.
+```
+
+So it is dropped inside `gemini.listModels`, where `run()` cannot reach one
+either, and a saved model matching it is cleared once on load by
+`TrackerAI.retire`. That is the only place this app takes a model out of reach
+rather than relabelling it; everything else stays listed under Show everything.
 
 ## If you used the button before this change
 
@@ -22,7 +62,8 @@ is never overwritten.
 
 1. Go to **aistudio.google.com** and click Get API key. No card is required.
 2. In the tracker: **Settings → Standardize text**.
-3. Engine: **Google Gemini (free tier)**. Paste the key.
+3. Engine: **Google Gemini (free tier)**, or **All engines** to see both at
+   once. Paste the key in the box at the bottom.
 4. Leave the Model box alone. Once the key is in, the list is read from your
    own account and the cheapest and fastest model is selected first.
 5. Save, then click the wand beside a task's name or description.
@@ -62,6 +103,35 @@ passed. Sending `{"nonsense_field":1}` instead returns `Unknown name
 engine. Every path is driven by a stubbed `fetch` in
 `checks/check_standardize.mjs`. The plumbing is proven; the quality of the
 writing is not.
+
+**OpenRouter's browser support was NOT observed here.** `openrouter.ai` is
+unreachable from the environment this was built in - the agent proxy answers
+`403 to CONNECT` for it, as it does for `api.groq.com`, `api.cerebras.ai`,
+`api.mistral.ai` and `api.cohere.com`. Its documented support for client-side
+calls is what this rests on. To re-test it, from a machine that can reach it:
+
+```
+curl -s -D - -o /dev/null -H "Origin: https://perezfiles01-droid.github.io" \
+     https://openrouter.ai/api/v1/models | grep -i access-control-allow-origin
+```
+
+Gemini was re-checked the same way on 4 September 2026 and still echoes the
+origin back, refusing for the missing key rather than for the origin.
+
+## Free engines considered and not added
+
+All offer a free tier with no card. None was added, because a static site can
+only call an API that permits cross-origin browser requests, and none of these
+could be checked from the build environment (see above). Do not re-research
+them without testing CORS first - that is the only question that decides it.
+
+| Engine | Free without a card | Browser calls |
+| --- | --- | --- |
+| Groq | Yes, rate limited, no credits system | Unverified |
+| Cerebras | Yes | Unverified |
+| Mistral | Yes, phone verification | Unverified |
+| Cohere | Yes, trial keys | Unverified |
+| GitHub Models | Yes, with a PAT | Unverified |
 
 ## Options that were considered and not built
 

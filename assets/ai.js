@@ -4,14 +4,16 @@
  * same thing. Everything about talking to a model lives here, so ui.js owns
  * the button and knows nothing about who improves the text.
  *
- * One engine: Google Gemini. AI Studio issues a key with no card and a free
- * tier, so the button costs nothing to run, which is the whole requirement.
- * Anthropic was here and was removed once the free path worked; it needed
- * purchased credit and credit expires a year after purchase.
+ * Two engines, both free to run: Google Gemini, whose AI Studio key needs no
+ * card, and OpenRouter, whose ":free" models cost nothing per token. Anthropic
+ * was here and was removed once a free path worked; it needed purchased credit
+ * and credit expires a year after purchase.
  *
- * PROVIDERS is still a list rather than one hardcoded call. Adding a second
- * engine back is a new entry with the same four members, and the Settings
- * dialog shows the Engine picker only when there is more than one to pick.
+ * PROVIDERS is a list, and nothing outside it counts the entries. An engine is
+ * a new entry declaring the same members - key, model, listModels, run, plus
+ * a wire naming its reply shape and optionally its own classify. The Settings
+ * dialog and the guard both enumerate this list at runtime, so a third engine
+ * is one entry here and no edit anywhere else.
  *
  * Why raw fetch and not an SDK: this repository has no bundler for its
  * JavaScript. Every file is a plain <script src>, and build_standalone inlines
@@ -115,8 +117,14 @@
       /deep-research/.test(m)                   ? "research" :
       /computer-use|robotics|customtools|embedding/.test(m) ? "special" :
       "text";
+    // "pro" is paid wherever it appears as a segment of the name - Pro, Pro
+    // preview, pro-latest and the pro TTS and image models alike. Written with
+    // boundaries so it reads a segment and never a substring: preview, prompt
+    // and product are not pro models, and a rule that caught them would empty
+    // the free tier.
     const paid =
-      /deep-research|lyria|computer-use|robotics|nano-banana-pro|pro-image/.test(m);
+      /(^|-)pro(-|$)/.test(m) ||
+      /deep-research|lyria|computer-use|robotics|nano-banana|imagen/.test(m);
     return { tier: paid ? "paid" : "free", purpose };
   }
 
@@ -127,6 +135,18 @@
   // listModels asks, and a name baked in here would be wrong within months.
   const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash";
 
+  /**
+   * Models Google has withdrawn, which the picker must stop offering.
+   *
+   * The 2.5 flash family answers a request with 404 "This model ... is no
+   * longer available to new users", so leaving it in the list is offering a
+   * name that cannot work. This is the one place a model is taken out of reach
+   * rather than merely relabelled, which is why the rule is narrow, named and
+   * exposed: a withdrawal is a fact about the service, not a guess about a
+   * price, and the guard checks it by calling this rather than by scraping.
+   */
+  const GEMINI_RETIRED = /^gemini-2\.5-flash/;
+
   const gemini = {
     id: "gemini",
     label: "Google Gemini (free tier)",
@@ -134,7 +154,12 @@
     modelSetting: "tracker.geminiModel",
     keyHelp: "aistudio.google.com → Get API key. No card needed.",
     free: true,
+    // The shape its replies come back in. The guard reads this rather than
+    // matching on the id, so a third engine cannot be tested by accident
+    // against another engine's response body.
+    wire: "gemini",
     classify,
+    retired: (name) => GEMINI_RETIRED.test(String(name || "")),
     key: () => get("tracker.geminiKey"),
     model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
 
@@ -149,6 +174,9 @@
         .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
         .map((m) => String(m.name || "").replace(/^models\//, ""))
         .filter(Boolean)
+        // Dropped here rather than in the dialog, so run() cannot reach one
+        // either, whichever tier is on screen.
+        .filter((m) => !gemini.retired(m))
         .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     },
 
@@ -183,6 +211,113 @@
     },
   };
 
+  /* ------------------------------------------------------------ OpenRouter */
+  /*
+   * The second engine, and the reason the Engine picker is a picker again.
+   *
+   * OpenRouter issues a key with no card, and the models whose id ends ":free"
+   * cost nothing per token. Unlike Google it publishes its prices in the same
+   * listing as the models, so its free-and-paid split is read from the account
+   * rather than guessed from the name - which is why it carries its own
+   * classify rather than borrowing Gemini's.
+   *
+   * Not verified: no call has been made to this host from the build
+   * environment, which cannot reach it (the proxy answers 403 to CONNECT). Its
+   * documented support for browser calls is the basis for it being here. The
+   * first real proof is a key pasted into Settings.
+   */
+  const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+  const OPENROUTER_FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+  /* What the last listing said about each model, so classify can answer from
+   * the account's own prices instead of the name. Empty until a list is read;
+   * an id that is not in it is treated as paid, because guessing "free" about
+   * something unknown is the guess that costs money. */
+  const orMeta = new Map();
+
+  function orClassify(name) {
+    const id = String(name || "");
+    const m = id.toLowerCase();
+    const meta = orMeta.get(id);
+    const purpose =
+      /(^|[-\/])tts|whisper|audio|speech/.test(m) ? "speech" :
+      /(^|[-\/])(sd|flux|dall-e|imagen|stable-diffusion)|image/.test(m) ? "image" :
+      /deep-research|(^|[-\/])research/.test(m) ? "research" :
+      /embed|rerank|moderation|guard/.test(m) ? "special" :
+      "text";
+    const free = meta ? meta.free : /:free$/.test(m);
+    return { tier: free ? "free" : "paid", purpose };
+  }
+
+  const openrouter = {
+    id: "openrouter",
+    label: "OpenRouter (free models)",
+    keySetting: "tracker.openrouterKey",
+    modelSetting: "tracker.openrouterModel",
+    keyHelp: "openrouter.ai/keys → Create key. No card needed.",
+    free: true,
+    wire: "openai",
+    classify: orClassify,
+    key: () => get("tracker.openrouterKey"),
+    model: () => get("tracker.openrouterModel") || OPENROUTER_FALLBACK_MODEL,
+
+    /** Every model the catalogue offers, with its price remembered. */
+    async listModels(key) {
+      if (!key) return [];
+      const res = await send(`${OPENROUTER_BASE}/models`, {
+        method: "GET",
+        headers: { authorization: "Bearer " + key },
+      }, "OpenRouter");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      const rows = (body && body.data) || [];
+      orMeta.clear();
+      const zero = (v) => v === 0 || v === "0" || Number(v) === 0;
+      for (const r of rows) {
+        const id = String(r && r.id || "");
+        if (!id) continue;
+        const pr = (r && r.pricing) || {};
+        orMeta.set(id, { free: zero(pr.prompt) && zero(pr.completion) });
+      }
+      // Free first, then by name: the same intent as Gemini's rank, expressed
+      // with the fact rather than with a guess about it.
+      return [...orMeta.keys()].sort((a, b) =>
+        (orMeta.get(a).free === orMeta.get(b).free ? 0 : orMeta.get(a).free ? -1 : 1) ||
+        a.localeCompare(b));
+    },
+
+    async run(text, kind) {
+      const key = openrouter.key();
+      if (!key) throw new Error("Add an OpenRouter key in Settings to use this.");
+      const res = await send(`${OPENROUTER_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + key,
+          // The browser sets Referer itself and will not let a page forge it,
+          // so only the title is sent by hand.
+          "x-title": "Project Tracker",
+        },
+        body: JSON.stringify({
+          model: openrouter.model(),
+          messages: [
+            { role: "system", content: prompt(kind) },
+            { role: "user", content: text },
+          ],
+          temperature: 0.3,
+          max_tokens: 2000,
+        }),
+      }, "OpenRouter");
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      const choice = body && body.choices && body.choices[0];
+      const out = choice && choice.message && choice.message.content;
+      if (!out) throw new Error("Nothing came back. Your text is unchanged.");
+      return String(out).trim();
+    },
+  };
+
   /**
    * Move a Google key out of the slot the removed engine used.
    *
@@ -193,6 +328,23 @@
    * storage. Moved once, and only when it is unmistakably a Google key and the
    * Gemini slot is empty, so nothing can be overwritten.
    */
+  /**
+   * Let go of a model the service has withdrawn.
+   *
+   * Someone whose saved model is gemini-2.5-flash-lite gets a 404 on every
+   * click, and the picker cannot help because it reads the saved name straight
+   * back. Cleared once, so the next open falls to whatever the account itself
+   * offers. Only a withdrawn name is touched; anything else is left exactly as
+   * it was chosen.
+   */
+  function retire() {
+    const saved = get("tracker.geminiModel");
+    if (!saved || !gemini.retired(saved)) return false;
+    window.TrackerStore.remove("tracker.geminiModel");
+    return true;
+  }
+  retire();
+
   function adopt() {
     const stale = get("tracker.aiKey");
     if (!stale || !/^AIza/.test(stale)) return false;
@@ -204,7 +356,7 @@
   adopt();
 
   /* -------------------------------------------------------------- dispatch */
-  const PROVIDERS = [gemini];
+  const PROVIDERS = [gemini, openrouter];
   const DEFAULT_ENGINE = gemini.id;
 
   const byId = (id) => PROVIDERS.find((p) => p.id === id);
@@ -216,9 +368,9 @@
    * Improve `text`. Resolves with the new text, or throws with a readable
    * reason - ui.js shows the message and leaves what you typed alone.
    *
-   * If the chosen engine has no key but the other one does, the other one
-   * runs rather than refusing. Someone who set up one engine and then changed
-   * the default should get a working button, not a lecture.
+   * If the chosen engine has no key, the first engine that does have one runs
+   * rather than refusing. Someone who set up one engine and then changed the
+   * default should get a working button, not a lecture.
    */
   async function standardize(text, { kind = "description" } = {}) {
     const chosen = engine();
@@ -229,6 +381,6 @@
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt,
+  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL };
 })();

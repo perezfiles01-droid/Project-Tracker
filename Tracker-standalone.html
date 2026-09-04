@@ -482,17 +482,14 @@ th.emailhead .accountpick{
     <h3 style="margin-top:22px">Standardize text</h3>
     <p class="lede">Powers the wand button beside a task's name and description.
       Keys are stored in this browser only and are deliberately left out of the
-      backup file. Google AI Studio issues a key with no card and a free tier,
-      which is the default.</p>
+      backup file. Two engines, both free to run: Google AI Studio issues a key
+      with no card and a free tier, which is the default, and OpenRouter's
+      ":free" models cost nothing per token. All engines lists both at once, and
+      picking a model fills the Engine box with the engine that owns it.</p>
     <div class="field">
       <label for="aiEngine">Engine</label>
       <select id="aiEngine"></select>
       <small id="aiEngineHelp"></small>
-    </div>
-    <div class="field">
-      <label for="aiKey">API key</label>
-      <input id="aiKey" type="password" placeholder="Paste your key" spellcheck="false" autocomplete="off">
-      <small id="aiKeyHelp"></small>
     </div>
     <div class="field">
       <label>Which models to show</label>
@@ -501,16 +498,24 @@ th.emailhead .accountpick{
         <label><input type="radio" name="aiTier" value="paid"> Paid (billing required)</label>
         <label><input type="radio" name="aiTier" value="all"> Show everything</label>
       </div>
-      <small>Free or paid is this app's own labelling by model name: Google's
-        model list carries no billing information, so your account's actual
-        entitlement is what decides. Nothing is ever hidden for good — Show
-        everything lists all of them.</small>
+      <small>For Gemini this is the app's own labelling by model name, because
+        Google's model list carries no billing information; OpenRouter publishes
+        its prices, so its split is read from the account. Every "pro" model
+        counts as paid. Nothing is hidden for good — Show everything lists all
+        of them. The one exception is Google's 2.5 flash family, which is
+        withdrawn rather than hidden: it now answers "no longer available to new
+        users".</small>
     </div>
     <div class="field">
       <label for="aiModel">Model</label>
       <select id="aiModel"></select>
       <small id="aiModelHelp">Saved per engine, and grouped by what each model
         is for. The list is read from your own account once a key is in place.</small>
+    </div>
+    <div class="field">
+      <label for="aiKey">API key</label>
+      <input id="aiKey" type="password" placeholder="Paste your key" spellcheck="false" autocomplete="off">
+      <small id="aiKeyHelp"></small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
@@ -580,7 +585,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       // went with it. TrackerAI.adopt moves a Google key left in that slot.
       "tracker.geminiKey",
       "tracker.geminiModel",
+      "tracker.openrouterKey",
+      "tracker.openrouterModel",
       "tracker.aiEngine",
+      // "all" when the picker is showing every engine at once. The engine that
+      // runs is always a real id in tracker.aiEngine; this is only the view.
+      "tracker.aiEngineMode",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
@@ -742,14 +752,16 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
  * same thing. Everything about talking to a model lives here, so ui.js owns
  * the button and knows nothing about who improves the text.
  *
- * One engine: Google Gemini. AI Studio issues a key with no card and a free
- * tier, so the button costs nothing to run, which is the whole requirement.
- * Anthropic was here and was removed once the free path worked; it needed
- * purchased credit and credit expires a year after purchase.
+ * Two engines, both free to run: Google Gemini, whose AI Studio key needs no
+ * card, and OpenRouter, whose ":free" models cost nothing per token. Anthropic
+ * was here and was removed once a free path worked; it needed purchased credit
+ * and credit expires a year after purchase.
  *
- * PROVIDERS is still a list rather than one hardcoded call. Adding a second
- * engine back is a new entry with the same four members, and the Settings
- * dialog shows the Engine picker only when there is more than one to pick.
+ * PROVIDERS is a list, and nothing outside it counts the entries. An engine is
+ * a new entry declaring the same members - key, model, listModels, run, plus
+ * a wire naming its reply shape and optionally its own classify. The Settings
+ * dialog and the guard both enumerate this list at runtime, so a third engine
+ * is one entry here and no edit anywhere else.
  *
  * Why raw fetch and not an SDK: this repository has no bundler for its
  * JavaScript. Every file is a plain <script src>, and build_standalone inlines
@@ -853,8 +865,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       /deep-research/.test(m)                   ? "research" :
       /computer-use|robotics|customtools|embedding/.test(m) ? "special" :
       "text";
+    // "pro" is paid wherever it appears as a segment of the name - Pro, Pro
+    // preview, pro-latest and the pro TTS and image models alike. Written with
+    // boundaries so it reads a segment and never a substring: preview, prompt
+    // and product are not pro models, and a rule that caught them would empty
+    // the free tier.
     const paid =
-      /deep-research|lyria|computer-use|robotics|nano-banana-pro|pro-image/.test(m);
+      /(^|-)pro(-|$)/.test(m) ||
+      /deep-research|lyria|computer-use|robotics|nano-banana|imagen/.test(m);
     return { tier: paid ? "paid" : "free", purpose };
   }
 
@@ -865,6 +883,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   // listModels asks, and a name baked in here would be wrong within months.
   const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash";
 
+  /**
+   * Models Google has withdrawn, which the picker must stop offering.
+   *
+   * The 2.5 flash family answers a request with 404 "This model ... is no
+   * longer available to new users", so leaving it in the list is offering a
+   * name that cannot work. This is the one place a model is taken out of reach
+   * rather than merely relabelled, which is why the rule is narrow, named and
+   * exposed: a withdrawal is a fact about the service, not a guess about a
+   * price, and the guard checks it by calling this rather than by scraping.
+   */
+  const GEMINI_RETIRED = /^gemini-2\.5-flash/;
+
   const gemini = {
     id: "gemini",
     label: "Google Gemini (free tier)",
@@ -872,7 +902,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     modelSetting: "tracker.geminiModel",
     keyHelp: "aistudio.google.com → Get API key. No card needed.",
     free: true,
+    // The shape its replies come back in. The guard reads this rather than
+    // matching on the id, so a third engine cannot be tested by accident
+    // against another engine's response body.
+    wire: "gemini",
     classify,
+    retired: (name) => GEMINI_RETIRED.test(String(name || "")),
     key: () => get("tracker.geminiKey"),
     model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
 
@@ -887,6 +922,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
         .map((m) => String(m.name || "").replace(/^models\//, ""))
         .filter(Boolean)
+        // Dropped here rather than in the dialog, so run() cannot reach one
+        // either, whichever tier is on screen.
+        .filter((m) => !gemini.retired(m))
         .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     },
 
@@ -921,6 +959,113 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     },
   };
 
+  /* ------------------------------------------------------------ OpenRouter */
+  /*
+   * The second engine, and the reason the Engine picker is a picker again.
+   *
+   * OpenRouter issues a key with no card, and the models whose id ends ":free"
+   * cost nothing per token. Unlike Google it publishes its prices in the same
+   * listing as the models, so its free-and-paid split is read from the account
+   * rather than guessed from the name - which is why it carries its own
+   * classify rather than borrowing Gemini's.
+   *
+   * Not verified: no call has been made to this host from the build
+   * environment, which cannot reach it (the proxy answers 403 to CONNECT). Its
+   * documented support for browser calls is the basis for it being here. The
+   * first real proof is a key pasted into Settings.
+   */
+  const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+  const OPENROUTER_FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+  /* What the last listing said about each model, so classify can answer from
+   * the account's own prices instead of the name. Empty until a list is read;
+   * an id that is not in it is treated as paid, because guessing "free" about
+   * something unknown is the guess that costs money. */
+  const orMeta = new Map();
+
+  function orClassify(name) {
+    const id = String(name || "");
+    const m = id.toLowerCase();
+    const meta = orMeta.get(id);
+    const purpose =
+      /(^|[-\/])tts|whisper|audio|speech/.test(m) ? "speech" :
+      /(^|[-\/])(sd|flux|dall-e|imagen|stable-diffusion)|image/.test(m) ? "image" :
+      /deep-research|(^|[-\/])research/.test(m) ? "research" :
+      /embed|rerank|moderation|guard/.test(m) ? "special" :
+      "text";
+    const free = meta ? meta.free : /:free$/.test(m);
+    return { tier: free ? "free" : "paid", purpose };
+  }
+
+  const openrouter = {
+    id: "openrouter",
+    label: "OpenRouter (free models)",
+    keySetting: "tracker.openrouterKey",
+    modelSetting: "tracker.openrouterModel",
+    keyHelp: "openrouter.ai/keys → Create key. No card needed.",
+    free: true,
+    wire: "openai",
+    classify: orClassify,
+    key: () => get("tracker.openrouterKey"),
+    model: () => get("tracker.openrouterModel") || OPENROUTER_FALLBACK_MODEL,
+
+    /** Every model the catalogue offers, with its price remembered. */
+    async listModels(key) {
+      if (!key) return [];
+      const res = await send(`${OPENROUTER_BASE}/models`, {
+        method: "GET",
+        headers: { authorization: "Bearer " + key },
+      }, "OpenRouter");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      const rows = (body && body.data) || [];
+      orMeta.clear();
+      const zero = (v) => v === 0 || v === "0" || Number(v) === 0;
+      for (const r of rows) {
+        const id = String(r && r.id || "");
+        if (!id) continue;
+        const pr = (r && r.pricing) || {};
+        orMeta.set(id, { free: zero(pr.prompt) && zero(pr.completion) });
+      }
+      // Free first, then by name: the same intent as Gemini's rank, expressed
+      // with the fact rather than with a guess about it.
+      return [...orMeta.keys()].sort((a, b) =>
+        (orMeta.get(a).free === orMeta.get(b).free ? 0 : orMeta.get(a).free ? -1 : 1) ||
+        a.localeCompare(b));
+    },
+
+    async run(text, kind) {
+      const key = openrouter.key();
+      if (!key) throw new Error("Add an OpenRouter key in Settings to use this.");
+      const res = await send(`${OPENROUTER_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + key,
+          // The browser sets Referer itself and will not let a page forge it,
+          // so only the title is sent by hand.
+          "x-title": "Project Tracker",
+        },
+        body: JSON.stringify({
+          model: openrouter.model(),
+          messages: [
+            { role: "system", content: prompt(kind) },
+            { role: "user", content: text },
+          ],
+          temperature: 0.3,
+          max_tokens: 2000,
+        }),
+      }, "OpenRouter");
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      const choice = body && body.choices && body.choices[0];
+      const out = choice && choice.message && choice.message.content;
+      if (!out) throw new Error("Nothing came back. Your text is unchanged.");
+      return String(out).trim();
+    },
+  };
+
   /**
    * Move a Google key out of the slot the removed engine used.
    *
@@ -931,6 +1076,23 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * storage. Moved once, and only when it is unmistakably a Google key and the
    * Gemini slot is empty, so nothing can be overwritten.
    */
+  /**
+   * Let go of a model the service has withdrawn.
+   *
+   * Someone whose saved model is gemini-2.5-flash-lite gets a 404 on every
+   * click, and the picker cannot help because it reads the saved name straight
+   * back. Cleared once, so the next open falls to whatever the account itself
+   * offers. Only a withdrawn name is touched; anything else is left exactly as
+   * it was chosen.
+   */
+  function retire() {
+    const saved = get("tracker.geminiModel");
+    if (!saved || !gemini.retired(saved)) return false;
+    window.TrackerStore.remove("tracker.geminiModel");
+    return true;
+  }
+  retire();
+
   function adopt() {
     const stale = get("tracker.aiKey");
     if (!stale || !/^AIza/.test(stale)) return false;
@@ -942,7 +1104,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   adopt();
 
   /* -------------------------------------------------------------- dispatch */
-  const PROVIDERS = [gemini];
+  const PROVIDERS = [gemini, openrouter];
   const DEFAULT_ENGINE = gemini.id;
 
   const byId = (id) => PROVIDERS.find((p) => p.id === id);
@@ -954,9 +1116,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * Improve `text`. Resolves with the new text, or throws with a readable
    * reason - ui.js shows the message and leaves what you typed alone.
    *
-   * If the chosen engine has no key but the other one does, the other one
-   * runs rather than refusing. Someone who set up one engine and then changed
-   * the default should get a working button, not a lecture.
+   * If the chosen engine has no key, the first engine that does have one runs
+   * rather than refusing. Someone who set up one engine and then changed the
+   * default should get a working button, not a lecture.
    */
   async function standardize(text, { kind = "description" } = {}) {
     const chosen = engine();
@@ -967,7 +1129,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt,
+  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL };
 })();
 
@@ -3480,54 +3642,98 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
      other one never wipes the setup you already had. The model list is read
      from the account rather than baked in here: model names churn, and a
      stale name is a 404 the reader cannot act on. */
+  /* ---------- which engine is on screen, and which one will run ----------
+     The Engine picker offers every provider plus "All engines", so the model
+     list can span them. Only ever a real provider id is saved as the engine:
+     standardize() dispatches on it, and handing it a pseudo-engine would be a
+     bug that only shows up when the wand is clicked. The pseudo choice is kept
+     apart, in tracker.aiEngineMode, purely so the dialog reopens as you left
+     it. */
+  const ALL = "all";
+  /* Whether the list on screen spans every engine. Held apart from the Engine
+     box's value on purpose: picking a model moves that box to the engine that
+     owns the model, and the list it was picked from must survive being
+     picked from. Only the user choosing an engine leaves union mode. */
+  let unionMode = false;
+  const providers = () => (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+  const byId = (id) => providers().find((p) => p.id === id);
+  /** What the Engine box says right now, which may be the pseudo choice. */
+  const enginePicked = () => ($("#aiEngine") && $("#aiEngine").value) || "";
+  /** Which engines' lists are on screen: all of them, or just the one. */
+  const enginesShown = () =>
+    unionMode ? providers().filter((p) => p.key())
+              : [byId(enginePicked()) || providers()[0]].filter(Boolean);
+  /** The engine that would actually run: the model's owner, under All. */
   const aiCurrentEngine = () => {
-    const chosen = $("#aiEngine") && $("#aiEngine").value;
-    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
-    return list.find((p) => p.id === chosen) || list[0];
+    if (enginePicked() !== ALL) return byId(enginePicked()) || providers()[0];
+    // Still on the pseudo choice: the model's owner decides.
+    const sel = $("#aiModel") && $("#aiModel").value;
+    return modelEngine.get(sel) || providers().find((p) => p.key()) || providers()[0];
   };
 
   function renderAiSettings() {
-    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+    const list = providers();
     if (!list.length) return;
-    const chosen = window.TrackerStore.getText("tracker.aiEngine") ||
-                   window.TrackerAI.DEFAULT_ENGINE;
-    $("#aiEngine").innerHTML = list.map((p) =>
-      `<option value="${p.id}"${p.id === chosen ? " selected" : ""}>${p.label}</option>`).join("");
-    // A picker with one option is a control that cannot be used. The row is
-    // hidden rather than removed, so putting a second engine back is one entry
-    // in PROVIDERS and nothing here changes.
+    const saved = window.TrackerStore.getText("tracker.aiEngine") ||
+                  window.TrackerAI.DEFAULT_ENGINE;
+    const mode = window.TrackerStore.getText("tracker.aiEngineMode") === ALL && list.length > 1
+      ? ALL : saved;
+    // "All engines" is only worth offering when there is more than one, and the
+    // row itself still hides at one, so a single-engine build is unchanged.
+    const opts = list.map((p) => [p.id, p.label])
+      .concat(list.length > 1 ? [[ALL, "All engines"]] : []);
+    $("#aiEngine").innerHTML = opts.map(([v, label]) =>
+      `<option value="${v}"${v === mode ? " selected" : ""}>${label}</option>`).join("");
     const row = $("#aiEngine").closest(".field");
     if (row) row.hidden = list.length < 2;
+    unionMode = mode === ALL;
     showEngine();
   }
 
-  /** Fill the key, the help and the model list for whichever engine is picked. */
+  /** Fill the key, the help and the model list for whatever is picked. */
   function showEngine() {
     const p = aiCurrentEngine();
     if (!p) return;
-    $("#aiKey").value = window.TrackerStore.getText(p.keySetting);
-    $("#aiKeyHelp").textContent = p.keyHelp;
-    $("#aiEngineHelp").textContent = p.free
-      ? "Free tier. No card needed."
-      : "Uses purchased credit on that account.";
+    paintKey(p);
     const saved = window.TrackerStore.getText(p.modelSetting) || p.model();
-    // Until the account answers, the saved model is the whole list: it is the
+    // Until the accounts answer, the saved model is the whole list: it is the
     // one name known to work, and it must stay selected through the wait.
     modelsHeld = [saved];
+    modelEngine.clear();
+    modelEngine.set(saved, p);
     setTier(tierOf(saved));
     paintModels(saved);
-    loadModels(p, saved);
+    loadModels(saved);
+  }
+
+  /** The key box always belongs to the engine that will run. */
+  function paintKey(p) {
+    if (!p) return;
+    $("#aiKey").value = window.TrackerStore.getText(p.keySetting);
+    $("#aiKeyHelp").textContent = p.keyHelp;
+    const cost = p.free ? "Free tier. No card needed."
+                        : "Uses purchased credit on that account.";
+    $("#aiEngineHelp").textContent = unionMode
+      ? `Every engine with a key, in one list. ${p.label} runs the model chosen. ${cost}`
+      : cost;
   }
 
   /* ---------- the model picker: tier radios, purpose groups ----------
-     The tier is this app's own labelling, not a fact read from the account:
-     Google's model list carries no billing information at all. So the filter
-     never removes a model outright - "Show everything" is always there, and a
-     model wrongly labelled stays reachable. */
+     The tier is this app's own labelling for Gemini, because Google's model
+     list carries no billing information at all; OpenRouter publishes its
+     prices, so its own classify reads them. Either way the filter never
+     removes a model outright - "Show everything" is always there. */
   let modelsHeld = [];
+  const modelEngine = new Map();
   const ai = () => window.TrackerAI || {};
-  const tierOf = (m) => (ai().classify ? ai().classify(m).tier : "free");
-  const purposeOf = (m) => (ai().classify ? ai().classify(m).purpose : "text");
+  /* Classification belongs to the engine, not to this dialog. The shared rules
+     are the fallback for an engine that declares none. */
+  const classifierFor = (p) => (p && p.classify) || ai().classify ||
+                               (() => ({ tier: "free", purpose: "text" }));
+  const engineOwning = (m) => modelEngine.get(m) || aiCurrentEngine();
+  const sortOf = (m) => classifierFor(engineOwning(m))(m);
+  const tierOf = (m) => sortOf(m).tier;
+  const purposeOf = (m) => sortOf(m).purpose;
   const tierPicked = () => {
     const on = $("#aiTier") && $("#aiTier").querySelector("input:checked");
     return on ? on.value : "free";
@@ -3544,20 +3750,31 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * Render the held list under the chosen tier, grouped by what each model is
    * for. Text first, because the Standardize button is a text job. Empty
    * groups are dropped rather than shown blank.
+   *
+   * Optgroups cannot nest, so under All engines the engine's name joins the
+   * group label rather than wrapping it: "Text generation - OpenRouter". Every
+   * option carries its engine, which is what lets picking one fill the Engine
+   * box.
    */
   function paintModels(saved) {
     const sel = $("#aiModel");
-    if (!sel) return;
+    if (!sel) return 0;
     const tier = tierPicked();
     const shown = modelsHeld.filter((m) => tier === "all" || tierOf(m) === tier);
     const order = ai().PURPOSE_ORDER || ["text"];
     const label = ai().PURPOSE_LABEL || {};
-    const groups = order
-      .map((k) => [k, shown.filter((m) => purposeOf(m) === k)])
-      .filter(([, list]) => list.length);
-    sel.innerHTML = groups.map(([k, list]) =>
-      `<optgroup label="${label[k] || k}">` + list.map((m) =>
-        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("") +
+    const many = unionMode;
+    const engines = many ? enginesShown() : [aiCurrentEngine()].filter(Boolean);
+    const groups = [];
+    for (const k of order) {
+      for (const p of engines) {
+        const list = shown.filter((m) => purposeOf(m) === k && engineOwning(m) === p);
+        if (list.length) groups.push([many ? `${label[k] || k} - ${p.label}` : (label[k] || k), p, list]);
+      }
+    }
+    sel.innerHTML = groups.map(([text, p, list]) =>
+      `<optgroup label="${text}">` + list.map((m) =>
+        `<option value="${m}" data-engine="${p.id}"${m === saved ? " selected" : ""}>${m}</option>`).join("") +
       "</optgroup>").join("");
     if (shown.includes(saved)) sel.value = saved;
     else if (shown.length) sel.value = shown[0];
@@ -3565,53 +3782,104 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
 
   /**
-   * Ask the account which models it can use. A failure here is not worth
-   * shouting about: the saved model stays selected and still works, so the
-   * note says what happened and the dialog carries on.
+   * Ask each engine on screen which models it can use. A failure is not worth
+   * shouting about: the saved model stays selected and still works, so the note
+   * says what happened and the dialog carries on. Under All engines one engine
+   * failing must not empty the list, so each is asked separately and the ones
+   * that answered are still shown.
    */
-  async function loadModels(p, saved) {
-    if (!p) return;
-    const key = $("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting);
-    if (!key) { $("#aiModelHelp").textContent = "Add a key to see the models it can use."; return; }
-    $("#aiModelHelp").textContent = "Reading the models on that account…";
-    try {
-      const models = await p.listModels(key);
-      if (!models.length) throw new Error("none listed");
-      modelsHeld = models;
-      // Follow the saved model to its own side rather than quietly selecting a
-      // different one: the choice already made is never changed behind a back.
-      if (models.includes(saved)) setTier(tierOf(saved));
-      const shown = paintModels(saved);
-      $("#aiModelHelp").textContent =
-        `Showing ${shown} of ${models.length} models on this account, ` +
-        "grouped by what each is for. The cheapest and fastest are first.";
-    } catch (err) {
-      $("#aiModelHelp").textContent = "Could not read the model list (" +
-        (err.message || "failed") + "). Keeping " + saved + ".";
+  async function loadModels(saved) {
+    const engines = enginesShown();
+    const keyed = engines.filter((p) => (p === aiCurrentEngine()
+      ? ($("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting))
+      : window.TrackerStore.getText(p.keySetting)));
+    if (!keyed.length) {
+      $("#aiModelHelp").textContent = unionMode
+        ? "No engine has a key yet. Add one below to see the models it can use."
+        : "Add a key to see the models it can use.";
+      return;
     }
+    $("#aiModelHelp").textContent = "Reading the models on that account…";
+    const held = [];
+    const owner = new Map();
+    const broke = [];
+    for (const p of keyed) {
+      const key = p === aiCurrentEngine()
+        ? ($("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting))
+        : window.TrackerStore.getText(p.keySetting);
+      try {
+        const models = await p.listModels(key);
+        for (const m of models) if (!owner.has(m)) { owner.set(m, p); held.push(m); }
+      } catch (err) {
+        broke.push(`${p.label} (${err.message || "failed"})`);
+      }
+    }
+    if (!held.length) {
+      $("#aiModelHelp").textContent = "Could not read the model list (" +
+        (broke.join("; ") || "none listed") + "). Keeping " + saved + ".";
+      return;
+    }
+    modelsHeld = held;
+    modelEngine.clear();
+    for (const [m, p] of owner) modelEngine.set(m, p);
+    // Follow the saved model to its own side rather than quietly selecting a
+    // different one: the choice already made is never changed behind a back.
+    if (held.includes(saved)) setTier(tierOf(saved));
+    const shown = paintModels(saved);
+    const missing = enginesShown().length - keyed.length;
+    $("#aiModelHelp").textContent =
+      `Showing ${shown} of ${held.length} models, grouped by what each is for. ` +
+      "The cheapest and fastest are first." +
+      (broke.length ? ` Could not read ${broke.join("; ")}.` : "") +
+      (missing > 0 ? ` ${missing} engine(s) skipped for want of a key.` : "");
+    syncEngineToModel();
+  }
+
+  /**
+   * Picking a model fills the Engine box with the engine that owns it.
+   *
+   * The list on screen is deliberately left alone: it was asked for as one
+   * list across engines, and rebuilding it per pick would take the other
+   * engines' models away the moment you touched one of them.
+   */
+  function syncEngineToModel() {
+    const sel = $("#aiModel");
+    if (!sel || !sel.selectedOptions || !sel.selectedOptions.length) return;
+    const id = sel.selectedOptions[0].dataset.engine;
+    const p = byId(id);
+    if (!p) return;
+    const box = $("#aiEngine");
+    // Setting .value fires no change event, so union mode is not disturbed:
+    // the box names the engine that will run while the list stays as it was.
+    if (box && box.value !== p.id) box.value = p.id;
+    paintKey(p);
   }
 
   function saveAiSettings() {
     const p = aiCurrentEngine();
     if (!p) return;
-    window.TrackerStore.setText("tracker.aiEngine", $("#aiEngine").value);
+    // Never a pseudo-engine: standardize() dispatches on this value.
+    window.TrackerStore.setText("tracker.aiEngine", p.id);
+    window.TrackerStore.setText("tracker.aiEngineMode", unionMode ? ALL : "");
     window.TrackerStore.setText(p.keySetting, $("#aiKey").value.trim());
     window.TrackerStore.setText(p.modelSetting, $("#aiModel").value);
   }
 
   document.addEventListener("change", (e) => {
-    if (e.target.id === "aiEngine") showEngine();
+    if (e.target.id === "aiEngine") { unionMode = e.target.value === ALL; showEngine(); }
+    if (e.target.id === "aiModel") syncEngineToModel();
     if (e.target.name === "aiTier") {
       const shown = paintModels($("#aiModel").value);
+      syncEngineToModel();
       $("#aiModelHelp").textContent = modelsHeld.length > 1
-        ? `Showing ${shown} of ${modelsHeld.length} models on this account, ` +
-          "grouped by what each is for. The cheapest and fastest are first."
+        ? `Showing ${shown} of ${modelsHeld.length} models, grouped by what each is for. ` +
+          "The cheapest and fastest are first."
         : $("#aiModelHelp").textContent;
     }
   });
   // A pasted key should fill the model list without needing a save first.
   document.addEventListener("blur", (e) => {
-    if (e.target.id === "aiKey") loadModels(aiCurrentEngine(), $("#aiModel").value);
+    if (e.target.id === "aiKey") loadModels($("#aiModel").value);
   }, true);
 
   window.TrackerDrive = {

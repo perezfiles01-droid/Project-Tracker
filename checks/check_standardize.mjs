@@ -43,7 +43,7 @@ await page.goto(url, { waitUntil: "load" });
 const providers = await page.evaluate(() =>
   ((window.TrackerAI && window.TrackerAI.PROVIDERS) || []).map((p) => ({
     id: p.id, label: p.label, keySetting: p.keySetting,
-    modelSetting: p.modelSetting, free: !!p.free,
+    modelSetting: p.modelSetting, free: !!p.free, wire: p.wire || "",
   })));
 if (!providers.length) {
   // Everything below drives these. Without them the run would throw a stack
@@ -70,6 +70,26 @@ for (const p of providers) {
   ok(`${p.id}: its key is not a data key`, !dataBlock.includes(p.keySetting), p.keySetting);
   ok(`${p.id}: its key is declared as a setting`, settingsBlock.includes(p.keySetting), p.keySetting);
 }
+
+/* --- the Settings dialog reads in the order it was asked for ---
+   Engine, then which models to show, then Model, then the key at the bottom.
+   Every handler is delegated from document or bound by id, so nothing breaks
+   when these move - which is exactly why a shuffle would go unnoticed. */
+const fieldOrder = await page.evaluate(() => {
+  const want = ["aiEngine", "aiTier", "aiModel", "aiKey"];
+  const rows = [...document.querySelectorAll("#settingsModal .field")];
+  return want
+    .map((id) => {
+      const el = document.getElementById(id);
+      const row = el && el.closest(".field");
+      return [id, row ? rows.indexOf(row) : -1];
+    })
+    .filter(([, i]) => i >= 0)
+    .sort((a, b) => a[1] - b[1])
+    .map(([id]) => id);
+});
+ok("Settings reads Engine, tier, Model, then the key last",
+   fieldOrder.join(" > ") === "aiEngine > aiTier > aiModel > aiKey", fieldOrder.join(" > "));
 
 /** Start clean, with the given engine and key in place. */
 async function openTask({ engine = null, key = "test-key" } = {}) {
@@ -101,13 +121,33 @@ async function stub(spec) {
   }, spec);
 }
 
-/** A success body in whichever shape the provider reads. */
-const replyFor = (id, text) => ({
-  status: 200,
-  body: id === "gemini"
-    ? { candidates: [{ content: { parts: [{ text }] } }] }
-    : { content: [{ type: "text", text }], stop_reason: "end_turn" },
-});
+/**
+ * A success body in whichever shape the provider reads.
+ *
+ * Keyed on the provider's declared `wire`, never on its id. An engine whose
+ * wire is unknown here FAILS LOUDLY rather than falling through to a default:
+ * a stub in the wrong shape makes every assertion below meaningless, and a
+ * silent default is how that goes unnoticed.
+ */
+const WIRES = {
+  gemini: (text) => ({ candidates: [{ content: { parts: [{ text }] } }] }),
+  openai: (text) => ({ choices: [{ message: { role: "assistant", content: text } }] }),
+};
+const replyFor = (id, text) => {
+  const p = providers.find((x) => x.id === id);
+  const shape = p && WIRES[p.wire];
+  if (!shape) {
+    ok(`${id}: the check knows this engine's reply shape`, false,
+       `wire "${p ? p.wire : "?"}" is not in WIRES; teach checks/check_standardize.mjs about it`);
+    return { status: 200, body: {} };
+  }
+  return { status: 200, body: shape(text) };
+};
+
+/* --- every engine declares a wire this check can build --- */
+for (const p of providers) {
+  ok(`${p.id}: declares a reply shape the guard can build`, !!WIRES[p.wire], p.wire || "(none)");
+}
 
 const typed = "the report is not yet done i need to finish it and send to the team";
 
