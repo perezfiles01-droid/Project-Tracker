@@ -13,6 +13,22 @@ read from a package registry, and some could not be checked at all.
 | An API key stored as a setting stays out of backups | Read `exportData` and `importData` in `assets/store.js`. Both walk `KEYS.data`; `KEYS.settings` is in neither. |
 | Six prose fields, one shared renderer | `grep -n 'type: "textarea"' assets/*.js` returned six results across three modules, all rendered by `fieldHtml` in `assets/ui.js`. |
 
+## Measured from the package itself
+
+The published `harper.js` 2.7.0 tarball was downloaded from npm and unpacked,
+so the following are measurements rather than claims:
+
+| Measured | Value |
+| --- | --- |
+| WebAssembly binary | 15.1 MB raw, **7.7 MB gzipped** |
+| The `slim` build | 14.9 MB raw, 7.6 MB gzipped, so it saves almost nothing |
+| Harper's whole text API | `lint`, `Lint.span`, `Lint.suggestions`, `applySuggestion`, `toTitleCase`. No rewrite, no tone, no generation. |
+| Usable without a bundler | Yes. `WorkerLinter` and `createBinaryModuleFromUrl`, wasm resolved from `import.meta.url`. |
+
+That API listing is the reason Harper was not used for the Standardize
+button. It corrects a span; it cannot restate a sentence or supply a missing
+one.
+
 ## Read from the npm registry, not tested
 
 Licence, version, publish date, package size and repository URL for every
@@ -27,14 +43,13 @@ than typed from memory, so they point where the maintainers say they point.
 
 Be careful here. These are the gaps most likely to embarrass a future decision.
 
-- **None of these libraries was ever run.** Not in a browser, not in Node. No
-  claim about output quality, speed, or whether Harper's suggestions are any
-  good on real task descriptions is supported by anything.
-- **Harper's real browser payload was never measured.** The 74 MB figure is the
-  npm tarball unpacked, which includes every build variant. The `./slimBinary`
-  entry point exists in the manifest, but its actual size is unknown, and
-  `cdn.jsdelivr.net` was unreachable from the research environment so it could
-  not be fetched.
+- **None of these libraries was ever run.** Harper's package was unpacked and
+  read, but never executed. No claim about output quality or speed is
+  supported by anything.
+- **The live Claude call was never made.** The Standardize button was built
+  and every path around it was driven with a stubbed `fetch`, including all
+  six failure modes. Nobody has yet clicked it with a real API key, so the
+  quality of the rewriting is unverified.
 - **LanguageTool's public API was never reached.** `api.languagetool.org`
   returned a proxy level 403 from the research environment. That is a fact about
   that environment, not about LanguageTool. Nothing is claimed either way about

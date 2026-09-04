@@ -7,7 +7,16 @@ The question that prompted this: *"can we add a button that fixes the grammar
 in a task's Detailed description, simplifies the thought, and never uses an em
 dash?"*
 
-Nothing here is built. This folder is a decision record, not a design.
+**Update, same day: it was built.** The Standardize button beside a task's
+name and description is live, using the Claude API. See
+[`api-key-options.md`](api-key-options.md) for how it works and
+`assets/ai.js` for the code. The rest of this folder is kept because the
+reasoning still applies to the next AI request.
+
+One finding is worth carrying forward above all: **Harper was researched
+first and cannot do this job.** Its entire API is lint, span, suggestion,
+applySuggestion. It corrects; it does not rewrite, improve tone, or fill a
+gap in a message. If a future request uses those words, it needs a model.
 
 ## Start here: the one constraint that decides everything
 

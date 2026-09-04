@@ -38,6 +38,10 @@
       "tracker.theme",
       "tracker.clientId",
       "tracker.apiKey",
+      // The Anthropic key for the Standardize button. A setting, not data,
+      // so it stays out of the backup file exactly like the two above.
+      "tracker.aiKey",
+      "tracker.aiModel",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];

@@ -25,11 +25,17 @@ the machine. Actively maintained by a real company rather than a single
 volunteer, which matters for something you intend to still be working in a
 year.
 
-The package manifest exposes several entry points, including `./slimBinary`,
-which is the smaller WebAssembly build intended for shipping to a browser. The
-npm tarball unpacks to about 74 MB, but that includes every build variant and
-type definitions. **The size a browser actually downloads was never measured**
-and must be checked before committing to this.
+The npm tarball unpacks to about 74 MB, but that includes every build variant
+and its type definitions, so it is not what a browser would fetch.
+
+**Confirmed against the package itself, September 2026.** The published
+`harper.js` 2.7.0 was downloaded and its type definitions read. The complete
+text facing API is `lint(text)` returning spans, each with `suggestions()`,
+plus `applySuggestion(text, lint, suggestion)` and `toTitleCase`. There is no
+rewrite, no tone, no generation. Measured payload: the WebAssembly binary is
+15.1 MB raw and **7.7 MB gzipped** over the wire. The `slimBinary` build saves
+almost nothing, 7.6 MB gzipped. It does work without a bundler: `WorkerLinter`
+plus `createBinaryModuleFromUrl`, with the wasm resolved from `import.meta.url`.
 
 **What it will not do.** Harper corrects; it does not rewrite. It catches
 broken grammar, misspellings and awkward phrasing and offers fixes. It will not

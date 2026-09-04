@@ -406,6 +406,19 @@ th.emailhead .accountpick{
 .navscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .navscroll:hover::-webkit-scrollbar-thumb{background:var(--dim)}
 
+/* A field's label row, with its own tools on the right. */
+.fieldhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fieldtools{display:inline-flex;gap:6px;flex:0 0 auto}
+.fieldtools .btn.icon{padding:3px 6px}
+.fieldtools .btn.icon svg{width:14px;height:14px}
+.fieldtools .btn.icon.working{opacity:.6;pointer-events:none}
+/* What the button did, or why it could not. Never replaces the field. */
+.fieldnote{font-size:12px;margin-top:5px;color:var(--dim)}
+.fieldnote.ok{color:var(--ok,#3fb950)}
+.fieldnote.warn{color:var(--warn)}
+.linkish{background:none;border:0;padding:0;font:inherit;color:var(--accent);
+  text-decoration:underline;cursor:pointer}
+
 </style>
 </head>
 <body>
@@ -459,6 +472,21 @@ th.emailhead .accountpick{
       <label for="apiKey">API key</label>
       <input id="apiKey" placeholder="AIza…" spellcheck="false">
       <small>Same console → Create credentials → API key. Needed by the Drive Picker.</small>
+    </div>
+    <h3 style="margin-top:22px">Standardize text</h3>
+    <p class="lede">Powers the wand button beside a task's name and description.
+      Stored in this browser only, and deliberately left out of the backup file.
+      Give the key a spend cap in the Anthropic console.</p>
+    <div class="field">
+      <label for="aiKey">Anthropic API key</label>
+      <input id="aiKey" type="password" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
+      <small>console.anthropic.com &rarr; API keys. Leave blank to turn the button off.</small>
+    </div>
+    <div class="field">
+      <label for="aiModel">Model</label>
+      <select id="aiModel"></select>
+      <small>Opus 5 writes better; Haiku 4.5 is cheaper and faster. Both cost
+        well under a cent per click.</small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
@@ -520,6 +548,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       "tracker.theme",
       "tracker.clientId",
       "tracker.apiKey",
+      // The Anthropic key for the Standardize button. A setting, not data,
+      // so it stays out of the backup file exactly like the two above.
+      "tracker.aiKey",
+      "tracker.aiModel",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
@@ -675,6 +707,143 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
 </script>
 <script>
+/* The text helper behind the Standardize button.
+ *
+ * One job: take what you typed and hand back a better-written version of the
+ * same thing. Everything about talking to a model lives here, so ui.js owns
+ * the button and knows nothing about who improves the text.
+ *
+ * Why a raw fetch and not the official SDK: this repository has no bundler
+ * for its JavaScript. Every file is a plain <script src>, and build_standalone
+ * inlines those same files into one HTML page. Adding a build step for a
+ * single request would be a larger change than the feature.
+ *
+ * The key lives in localStorage, which is the honest position for a static
+ * site: there is no server here to hold a secret. It is filed under
+ * KEYS.settings rather than KEYS.data on purpose, so it never travels inside
+ * a backup file you might email to yourself. Give it a spend cap in the
+ * Anthropic console and the worst case stays bounded.
+ */
+(() => {
+  const ENDPOINT = "https://api.anthropic.com/v1/messages";
+  const VERSION = "2023-06-01";
+  const DEFAULT_MODEL = "claude-opus-5";
+
+  /** Models offered in Settings. First is the default. */
+  const MODELS = [
+    "claude-opus-5",
+    "claude-haiku-4-5",
+  ];
+
+  const cfg = () => ({
+    key: window.TrackerStore.getText("tracker.aiKey") ||
+         (window.TRACKER_CONFIG?.anthropicApiKey || ""),
+    model: window.TrackerStore.getText("tracker.aiModel") || DEFAULT_MODEL,
+  });
+
+  /**
+   * The instruction, written as asked for.
+   *
+   * The last line is not decoration. A model told to improve text will often
+   * hand back "Here is the improved version:" and a rewrite in quotes, and
+   * that whole string would land in the field. The dash rule is repeated in
+   * TrackerUI.tidyDashes, which strips them afterwards regardless - the
+   * prompt is the request, the regex is the guarantee.
+   */
+  const SYSTEM = [
+    "Improve the tone of the text the user gives you. Fix the grammar, retain",
+    "the message, and make it clear and easy to understand. If you think there",
+    "is something lacking or a gap in the message, fill that gap.",
+    "",
+    "Never use an em dash or an en dash. Write plainly, in the register of a",
+    "work note written by the person who typed it. Do not make it longer than",
+    "it needs to be, and do not invent specifics such as names, dates, systems",
+    "or numbers that the text does not already imply.",
+    "",
+    "Reply with the improved text and nothing else. No preamble, no quotes",
+    "around it, no explanation of what you changed.",
+  ].join("\n");
+
+  /** A task title is a label, so it stays a label rather than becoming prose. */
+  const KIND_HINT = {
+    title: "This is a short task title. Keep it to one line, under about ten words.",
+    description: "This is a task description. A short paragraph is right.",
+  };
+
+  /**
+   * Turn a failed response into something worth reading.
+   *
+   * "Request failed" tells you nothing about which of these it was, and each
+   * one has a different fix.
+   */
+  function explain(status, body) {
+    if (status === 401) return "That API key was refused. Check it in Settings.";
+    if (status === 403) return "That key is not allowed to use this model.";
+    if (status === 400) {
+      const m = body && body.error && body.error.message;
+      return m ? "The request was rejected: " + m : "The request was rejected.";
+    }
+    if (status === 429) return "Rate limited, or the spend cap is reached. Try again shortly.";
+    if (status === 402) return "There is a billing problem on the account.";
+    if (status >= 500) return "Anthropic had a problem. Try again shortly.";
+    return "That did not work (HTTP " + status + ").";
+  }
+
+  /**
+   * Improve `text`. Resolves with the new text, or throws with a readable
+   * reason - ui.js shows the message and leaves what you typed alone.
+   */
+  async function standardize(text, { kind = "description" } = {}) {
+    const { key, model } = cfg();
+    if (!key) throw new Error("Add an Anthropic API key in Settings to use this.");
+
+    let res;
+    try {
+      res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": VERSION,
+          // Without this the browser call is refused before it reaches the API.
+          "anthropic-dangerous-direct-browser-access": "true",
+          "x-api-key": key,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 2000,
+          // A rewrite of one paragraph is not a reasoning problem, and the
+          // button should feel immediate.
+          output_config: { effort: "low" },
+          system: SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description),
+          messages: [{ role: "user", content: text }],
+        }),
+      });
+    } catch {
+      // Fetch only rejects on a network-level failure, never on a 4xx.
+      throw new Error("Could not reach Anthropic. Check your connection.");
+    }
+
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(explain(res.status, body));
+
+    // A refusal comes back as a 200 with nothing useful in it, so the reply is
+    // checked rather than assumed.
+    if (body && body.stop_reason === "refusal") {
+      throw new Error("The model declined to rewrite that.");
+    }
+    const out = (body && Array.isArray(body.content) ? body.content : [])
+      .filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    if (!out) throw new Error("Nothing came back. Your text is unchanged.");
+    return out;
+  }
+
+  const hasKey = () => !!cfg().key;
+
+  window.TrackerAI = { standardize, hasKey, MODELS, DEFAULT_MODEL };
+})();
+
+</script>
+<script>
 /* Shared form dialog.
 
    Everything you author by hand in this tracker — a pinned Drive link, a
@@ -731,9 +900,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       control = `<input id="${id}" type="${f.type || "text"}" value="${esc(v)}"
         placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
     }
+    // The label row carries the field's own tools on the right. Today that
+    // is the standardize button; anything per-field goes here rather than
+    // floating over the control, which would sit on top of the text.
+    const tools = f.standardize
+      ? `<span class="fieldtools">
+           ${iconButton("wand", "Standardize text", `data-standardize="${id}"`)}
+         </span>`
+      : "";
     return `<div class="field">
-        <label for="${id}">${esc(f.label)}</label>
+        <div class="fieldhead"><label for="${id}">${esc(f.label)}</label>${tools}</div>
         ${control}
+        <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
   }
@@ -842,6 +1020,35 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       cancelLabel: "Cancel",
     }).then((r) => !!(r && r.choice === "confirm"));
 
+  /**
+   * Strip the dashes a model reaches for, whatever the prompt asked.
+   *
+   * The prompt says not to use them. This makes sure. An instruction is a
+   * request and a regex is a guarantee, and the difference shows up on the
+   * one rewrite in fifty where the model does it anyway.
+   *
+   * Deliberately narrow. A hyphen inside "well-known" and an en dash between
+   * "2024-2025" are not the problem and are left alone; only the dash used as
+   * punctuation between words is rewritten, as the comma it was standing in
+   * for.
+   */
+  function tidyDashes(text) {
+    return String(text ?? "")
+      // A range between numbers is not the problem. Handled first, or the
+      // rule below turns "2024-2025" into "2024, 2025" - which it did, and
+      // the check caught it.
+      .replace(/(\d)\s*[\u2014\u2013]\s*(?=\d)/g, "$1-")
+      // " word - word " and "word-word": the parenthetical dash becomes the
+      // comma it was standing in for.
+      .replace(/\s*[\u2014\u2013]\s*(?=[A-Za-z0-9])/g, (m, off, str) =>
+        /[A-Za-z0-9]$/.test(str.slice(0, off)) ? ", " : " ")
+      // A trailing one with nothing after it is just noise.
+      .replace(/\s*[\u2014\u2013]\s*$/g, "")
+      .replace(/ {2,}/g, " ")
+      .replace(/ +([,.;:!?])/g, "$1")
+      .trim();
+  }
+
   /* ---------- shared pager ----------
      Lifted out of drive.js, where it was private to that closure while two
      tables used it and a third needed it. One implementation, keyed per
@@ -946,6 +1153,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     // A drawing pin seen side on: head, shaft, point. It reads as pinned
     // when the button fills it, which is the whole point of the control.
     pin: '<path d="M9 3h6l-1 5 3.5 3.5H6.5L10 8z"/><path d="M12 11.5V21"/>',
+    // A wand with a spark: the conventional "let the machine have a go at
+    // this" mark, and distinct at 14px from the pencil that means "edit".
+    wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
   };
 
   /**
@@ -957,7 +1167,70 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
-  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
+  /* ---------- standardize a field ----------
+     The button belongs to the dialog, not to any one caller, so it is wired
+     once here. Whatever produces the improved text is injected as
+     window.TrackerAI, so this file stays free of any provider.
+
+     Two rules the whole thing is built around. What you typed is never lost:
+     the original is kept and Undo puts it back exactly. And a failure leaves
+     your text alone and says why in words, because a rewriter that eats a
+     paragraph on a flaky connection is worse than no rewriter. */
+  const originals = new Map();
+
+  const noteFor = (id) => document.querySelector(`[data-note="${id}"]`);
+  function setNote(id, html, kind = "") {
+    const el = noteFor(id);
+    if (!el) return;
+    el.className = "fieldnote" + (kind ? " " + kind : "");
+    el.innerHTML = html;
+    el.hidden = !html;
+  }
+
+  async function standardize(btn) {
+    const id = btn.dataset.standardize;
+    const field = document.getElementById(id);
+    if (!field) return;
+    const text = field.value.trim();
+    if (!text) return setNote(id, "Write something first.", "warn");
+    if (!window.TrackerAI) return setNote(id, "The text helper is not loaded.", "warn");
+
+    btn.disabled = true;
+    btn.classList.add("working");
+    setNote(id, "Standardizing…");
+    try {
+      const improved = tidyDashes(await window.TrackerAI.standardize(text, {
+        kind: field.tagName === "TEXTAREA" ? "description" : "title",
+      }));
+      if (!improved) throw new Error("Nothing came back.");
+      originals.set(id, text);            // only on success: nothing to undo otherwise
+      field.value = improved;
+      setNote(id, `Standardized. <button type="button" class="linkish"
+                     data-undo="${id}">Undo</button>`, "ok");
+    } catch (err) {
+      // The field is deliberately untouched here.
+      setNote(id, esc(err.message || "That did not work."), "warn");
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("working");
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-standardize]");
+    if (b) { e.preventDefault(); return standardize(b); }
+    const u = e.target.closest("[data-undo]");
+    if (u) {
+      e.preventDefault();
+      const id = u.dataset.undo;
+      const field = document.getElementById(id);
+      if (field && originals.has(id)) field.value = originals.get(id);
+      originals.delete(id);
+      return setNote(id, "");
+    }
+  });
+
+  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
                        iconButton, ICONS };
 })();
 
@@ -1042,11 +1315,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         { name: "no", label: "Task No.", value: cur ? cur.no : nextNo,
           help: "Numbered for you; change it if you keep your own numbering." },
         { name: "name", label: "Name of task", value: cur ? (cur.name || "") : "",
-          placeholder: "Short name shown in the table" },
+          placeholder: "Short name shown in the table", standardize: true },
         { name: "description", label: "Detailed description", type: "textarea", rows: 4,
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
-          placeholder: "What needs doing" },
+          placeholder: "What needs doing", standardize: true },
         { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
@@ -3059,12 +3332,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
       $("#clientId").value = window.TrackerStore.getText("tracker.clientId");
       $("#apiKey").value = window.TrackerStore.getText("tracker.apiKey");
+      // The Standardize button's settings live in the same dialog.
+      $("#aiKey").value = window.TrackerStore.getText("tracker.aiKey");
+      const models = (window.TrackerAI && window.TrackerAI.MODELS) || [];
+      const chosen = window.TrackerStore.getText("tracker.aiModel") ||
+                     (window.TrackerAI && window.TrackerAI.DEFAULT_MODEL) || "";
+      $("#aiModel").innerHTML = models.map((m) =>
+        `<option value="${m}"${m === chosen ? " selected" : ""}>${m}</option>`).join("");
       $("#settingsModal").hidden = false;
     }
     if (e.target.id === "settingsCancel" || e.target.id === "settingsModal") $("#settingsModal").hidden = true;
     if (e.target.id === "settingsSave") {
       window.TrackerStore.setText("tracker.clientId", $("#clientId").value.trim());
       window.TrackerStore.setText("tracker.apiKey", $("#apiKey").value.trim());
+      window.TrackerStore.setText("tracker.aiKey", $("#aiKey").value.trim());
+      window.TrackerStore.setText("tracker.aiModel", $("#aiModel").value);
       $("#settingsModal").hidden = true;
       notice = "Credentials saved in this browser.";
       window.TrackerRender();

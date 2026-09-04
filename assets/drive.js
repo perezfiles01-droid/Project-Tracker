@@ -303,12 +303,21 @@
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
       $("#clientId").value = window.TrackerStore.getText("tracker.clientId");
       $("#apiKey").value = window.TrackerStore.getText("tracker.apiKey");
+      // The Standardize button's settings live in the same dialog.
+      $("#aiKey").value = window.TrackerStore.getText("tracker.aiKey");
+      const models = (window.TrackerAI && window.TrackerAI.MODELS) || [];
+      const chosen = window.TrackerStore.getText("tracker.aiModel") ||
+                     (window.TrackerAI && window.TrackerAI.DEFAULT_MODEL) || "";
+      $("#aiModel").innerHTML = models.map((m) =>
+        `<option value="${m}"${m === chosen ? " selected" : ""}>${m}</option>`).join("");
       $("#settingsModal").hidden = false;
     }
     if (e.target.id === "settingsCancel" || e.target.id === "settingsModal") $("#settingsModal").hidden = true;
     if (e.target.id === "settingsSave") {
       window.TrackerStore.setText("tracker.clientId", $("#clientId").value.trim());
       window.TrackerStore.setText("tracker.apiKey", $("#apiKey").value.trim());
+      window.TrackerStore.setText("tracker.aiKey", $("#aiKey").value.trim());
+      window.TrackerStore.setText("tracker.aiModel", $("#aiModel").value);
       $("#settingsModal").hidden = true;
       notice = "Credentials saved in this browser.";
       window.TrackerRender();

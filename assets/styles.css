@@ -395,3 +395,16 @@ th.emailhead .accountpick{
 .navscroll::-webkit-scrollbar-track{background:transparent}
 .navscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .navscroll:hover::-webkit-scrollbar-thumb{background:var(--dim)}
+
+/* A field's label row, with its own tools on the right. */
+.fieldhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fieldtools{display:inline-flex;gap:6px;flex:0 0 auto}
+.fieldtools .btn.icon{padding:3px 6px}
+.fieldtools .btn.icon svg{width:14px;height:14px}
+.fieldtools .btn.icon.working{opacity:.6;pointer-events:none}
+/* What the button did, or why it could not. Never replaces the field. */
+.fieldnote{font-size:12px;margin-top:5px;color:var(--dim)}
+.fieldnote.ok{color:var(--ok,#3fb950)}
+.fieldnote.warn{color:var(--warn)}
+.linkish{background:none;border:0;padding:0;font:inherit;color:var(--accent);
+  text-decoration:underline;cursor:pointer}
