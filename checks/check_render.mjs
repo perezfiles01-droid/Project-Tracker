@@ -195,16 +195,20 @@ await page.click('[data-fd="save"]');
 await page.waitForSelector("table.tasktable");
 
 const taskHeads = await page.locator("table.tasktable thead th").allTextContents();
-// The description moved into the row's detail; the table names the task and
-// says which project it belongs to.
-const wantTasks = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
-ok("the task table carries exactly the six named columns",
+// The table is what you scan by; every other field lives in the pane beside
+// it, which check_task_split asserts field by field.
+const wantTasks = ["Task No.", "Name of task", "Project"];
+ok("the task table carries exactly the three named columns",
    JSON.stringify(taskHeads.map((h) => h.replace(/[ ↑↓]+$/, ""))) === JSON.stringify(wantTasks),
    taskHeads.join(" · "));
 ok("a new task appears as a row", (await page.locator("tr.taskrow").count()) === 1);
 ok("a past due date is flagged overdue", (await page.locator("tr.taskrow .tag.warn").count()) === 1);
+// The link left the table with its column. It is still a real tab-opening
+// anchor, now in the pane - the assertion followed it rather than going.
+await page.click("tr.taskrow td:nth-child(2)");
+await page.waitForTimeout(200);
 ok("the reference link opens in a tab",
-   (await page.getAttribute('tr.taskrow a.btn', "target")) === "_blank");
+   (await page.getAttribute('.taskpane a.btn', "target")) === "_blank");
 
 // Every field optional: a task with nothing filled in must still save.
 await page.click('[data-edit="task:new"]');
@@ -215,12 +219,12 @@ ok("a task saves with every field left blank", (await page.locator("tr.taskrow")
 ok("Task No. is filled in for you",
    (await page.locator("tr.taskrow td").first().textContent()).trim() !== "—");
 
-// Clicking a row shows the description.
-ok("no detail is shown before a row is clicked", (await page.locator("tr.detail").count()) === 0);
-await page.click("tr.taskrow td:nth-child(2)");
-await page.waitForTimeout(120);
-ok("clicking a row reveals its description",
-   (await page.locator("tr.detail").innerText()).includes("Draft the release note"));
+// The row opened above is still the one in the pane, and its description is
+// there. Not re-clicked: clicking an open row closes it, and the point here is
+// that the pane survives the re-render a new task causes.
+ok("the opened task's description is in the pane",
+   (await page.locator(".taskpane").innerText()).includes("Draft the release note"),
+   (await page.locator(".taskpane").innerText()).replace(/\s+/g, " ").slice(0, 70));
 
 // Sorting, from the shared helper.
 await page.click('table.tasktable th[data-sortfield="no"]');

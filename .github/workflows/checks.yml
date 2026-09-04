@@ -57,6 +57,8 @@ jobs:
         run: node checks/check_capitalize.mjs
       - name: Images and files attach, cap at five, and download
         run: node checks/check_attachments.mjs
+      - name: Three columns, and the rest of the task beside them
+        run: node checks/check_task_split.mjs
       - name: Artifacts and timeline behave
         run: node checks/check_projects.mjs
       - name: Every delete asks the same question

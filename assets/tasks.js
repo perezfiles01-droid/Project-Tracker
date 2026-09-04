@@ -218,8 +218,11 @@
 
   /* ---------- render ---------- */
   const ROWS_PER_PAGE = 10;
-  const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
-  let openRow = null;   // the task expanded in place
+  // The table carries what you scan by; everything else is in the pane beside
+  // it. A column removed from here must stay reachable there, which the guard
+  // asserts field by field.
+  const COLUMNS = ["Task No.", "Name of task", "Project"];
+  let openRow = null;   // the task shown in the pane
 
   /** Every link on a task, wherever it was entered. */
   function taskLinks(t) {
@@ -264,14 +267,25 @@
       </span>`;
   }
 
-  /** The expanded detail shown when a row is clicked. */
   /**
-   * The clicked task opens its OWN table of that task's details, one labelled
-   * row per field, rather than a loose block. Every field is listed even when
-   * empty, so what is missing is as visible as what is filled in.
+   * The clicked task fills the pane beside the table: its own table of that
+   * task's details, one labelled row per field, rather than a loose block.
+   * Every field is listed even when empty, so what is missing is as visible as
+   * what is filled in - and since the table itself now shows three columns,
+   * this is the only place the rest of them exist.
    */
-  function detailRow(t) {
+  function detailPane(t) {
+    if (!t) {
+      return `<aside class="taskpane empty-pane">
+          <div class="empty">Click a task to see everything on it.</div>
+        </aside>`;
+    }
+    return `<aside class="taskpane">${detailBody(t)}</aside>`;
+  }
+
+  function detailBody(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
+    const shots = (t.attachments || []).filter((a) => /^image\//.test(a.type || ""));
     const dash = `<span class="tag dead">—</span>`;
     const val = (v) => (v ? esc(v) : dash);
     const rows = [
@@ -289,20 +303,31 @@
       ["Assignee", val(t.assignee)],
       ["Attachments", atts || dash],
     ];
-    return `<tr class="detail"><td colspan="${COLUMNS.length}">
-        <div class="taskdetail">
+    // Images get a strip of their own above the list. A thumbnail you can
+    // click is how you tell one screenshot from four, which a row of filenames
+    // never does. The src is filled in after render, since the bytes live in
+    // IndexedDB and reading them is asynchronous.
+    if (shots.length) {
+      rows.splice(rows.length - 1, 0, ["Images", shots.map((a) =>
+        `<button class="shot" data-att="${esc(a.id)}" title="${esc(a.name)}">
+           <img data-shot="${esc(a.id)}" alt="${esc(a.name)}">
+         </button>`).join("")]);
+    }
+    return `<div class="taskdetail">
+          <div class="panehead">
+            <h3>${t.name ? esc(t.name) : "Task " + esc(t.no || "")}</h3>
+            <div class="row">
+              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
+              ${t.status === "Done" ? "" :
+                `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
+            </div>
+          </div>
           <div class="tablewrap"><table class="detailtable">
             <tbody>${rows.map(([k, v]) =>
               `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
           </table></div>
-          <div class="row">
-            ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
-            ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
-            ${t.status === "Done" ? "" :
-              `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
-          </div>
-        </div>
-      </td></tr>`;
+        </div>`;
   }
 
   function taskRow(t) {
@@ -313,11 +338,9 @@
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>
         <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>
-        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}</td>
-        <td>${t.given ? esc(t.given) : dash}</td>
-        <td>${t.due ? esc(t.due) : dash}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
-        <td>${refCell(t)}</td>
-      </tr>${openRow === t.id ? detailRow(t) : ""}`;
+        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
+          overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
+      </tr>`;
   }
 
   /**
@@ -346,27 +369,55 @@
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
+    // The pane's thumbnails need the DOM this string becomes, so they are
+    // filled on the next tick rather than here.
+    setTimeout(paintShots, 0);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Click a row to see its description. Tasks are stored in this browser only.</p>
+        Click a task to see everything on it, beside the list.
+        Tasks are stored in this browser only.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
-        ? `<div class="tablewrap"><table class="tasktable">
-             <thead><tr>
-               ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
-               ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-               ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
-               ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[3])}
-               ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[4])}
-               <th>${COLUMNS[5]}</th>
-             </tr></thead>
-             <tbody>${slice.map(taskRow).join("")}</tbody>
-           </table></div>${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}`
+        ? `<div class="tasksplit">
+             <div class="tasklist">
+               <div class="tablewrap"><table class="tasktable">
+                 <thead><tr>
+                   ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
+                   ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
+                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                 </tr></thead>
+                 <tbody>${slice.map(taskRow).join("")}</tbody>
+               </table></div>
+               ${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}
+             </div>
+             ${detailPane(all.find((t) => t.id === openRow) || null)}
+           </div>`
         : `<div class="empty">No tasks yet.</div>`}`;
+  }
+
+  /**
+   * Fill in the thumbnails once the pane is on screen.
+   *
+   * The bytes are in IndexedDB, so a src cannot be written during render. Each
+   * blob URL is revoked when the pane is replaced, which is every render - a
+   * task list left open would otherwise hold one URL per image per click.
+   */
+  let shotUrls = [];
+  function paintShots() {
+    for (const u of shotUrls) URL.revokeObjectURL(u);
+    shotUrls = [];
+    for (const img of document.querySelectorAll("img[data-shot]")) {
+      getBlob(img.dataset.shot).then((blob) => {
+        if (!blob || !img.isConnected) return;
+        const u = URL.createObjectURL(blob);
+        shotUrls.push(u);
+        img.src = u;
+      }).catch(() => { /* a missing blob simply shows no thumbnail */ });
+    }
   }
 
   /* ---------- wiring ---------- */
