@@ -437,10 +437,18 @@ th.emailhead .accountpick{
 /* The To Do List is a list beside a pane: the table carries what you scan by,
    the pane carries everything else about the task you clicked. Below 900px
    they stack, because a split pane on a phone is two unusable columns. */
-.tasksplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
-.tasklist{min-width:0}
+/* Both halves share the row's height rather than each taking its own, which is
+   what left a 130px list beside a 535px pane. The pane cannot be sticky and
+   stretch at the same time - sticky is what made it size itself independently -
+   so it scrolls inside its own box instead. */
+.tasksplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;
+           align-items:stretch}
+.tasklist{min-width:0;display:flex;flex-direction:column;
+          background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+          padding:14px}
+.tasklist .tablewrap{flex:1;border:0;background:none;border-radius:0}
 .taskpane{min-width:0;background:var(--panel-2);border:1px solid var(--line);
-          border-radius:10px;padding:14px;position:sticky;top:12px;max-height:calc(100vh - 90px);
+          border-radius:10px;padding:14px;max-height:calc(100vh - 90px);
           overflow:auto}
 .taskpane .panehead{display:flex;align-items:center;justify-content:space-between;gap:10px;
                     margin-bottom:10px}
@@ -453,8 +461,21 @@ table.tasktable{min-width:0}
 .shot img{width:84px;height:84px;object-fit:cover;border-radius:7px;display:block}
 @media (max-width:900px){
   .tasksplit{grid-template-columns:minmax(0,1fr)}
-  .taskpane{position:static;max-height:none}
+  .taskpane{max-height:none}
 }
+
+/* A column header that filters its own column, the shape Email Access uses. */
+th.filterhead{white-space:nowrap}
+th.filterhead .filterlabel{margin-right:6px}
+th.filterhead .colpick{
+  font:inherit;font-size:11px;color:var(--dim);background:var(--panel);
+  border:1px solid var(--line);border-radius:6px;padding:1px 4px;max-width:120px}
+th.filterhead .colpick:focus{border-color:var(--accent)}
+
+/* The status is set in the pane, in the row that names it. */
+.statuspick{font:inherit;font-size:12px;color:var(--text);background:var(--panel);
+  border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+.statuspick:focus{border-color:var(--accent)}
 
 </style>
 </head>
@@ -1340,12 +1361,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       paint(f);
     }
 
-    box.addEventListener("paste", (e) => {
+    /* Bound on the document, not on the dialog.
+     *
+     * A paste event fires at whatever has focus. With the caret in a field it
+     * bubbles through the dialog either way, but a paste with nothing focused
+     * lands on the body and never reaches the dialog element - so Ctrl+V did
+     * nothing, silently, in exactly the case where a person expects it to work
+     * most. Removed again when the dialog closes, so it cannot outlive the
+     * fields it stages into. */
+    const onPaste = (e) => {
       const files = (e.clipboardData && e.clipboardData.files) || [];
       if (!files.length) return;
       e.preventDefault();
       add(specs[0], files);
-    });
+    };
+    document.addEventListener("paste", onPaste);
 
     box.addEventListener("click", (e) => {
       const un = e.target.closest("[data-unstage]");
@@ -1360,7 +1390,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       if (e.target.matches("[data-drop]")) specs.forEach(paint);
     });
 
-    return { staged, revoke: () => urls.forEach((u) => URL.revokeObjectURL(u)) };
+    return {
+      staged,
+      revoke: () => {
+        document.removeEventListener("paste", onPaste);
+        urls.forEach((u) => URL.revokeObjectURL(u));
+      },
+    };
   }
 
   /** Escape a value for use inside a CSS attribute selector. */
@@ -1585,6 +1621,41 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return `<th data-sortkey="${key}" data-sortfield="${field}">${label}${arrow}</th>`;
   };
 
+  /**
+   * A column header that also filters its own column.
+   *
+   * The same shape the Email Access column uses, made shared rather than
+   * copied: the filter belongs to the column it acts on, because a lone
+   * "All projects" select above a table gives no clue which column it filters.
+   * `values` are the ones actually present in the data, so a project with no
+   * tasks is never offered.
+   */
+  const filterHeader = (key, field, label, values, chosen, hint) =>
+    `<th class="filterhead" data-sortkey="${key}" data-sortfield="${field}">
+       <span class="filterlabel">${label}</span>
+       ${values.length ? `<select class="colpick" data-colfilter="${key}:${field}"
+         title="${hint}" aria-label="${hint}">
+         <option value="">All</option>
+         ${values.map((v) =>
+           `<option value="${v}"${v === chosen ? " selected" : ""}>${v}</option>`).join("")}
+       </select>` : ""}
+     </th>`;
+
+  /* Which value each filtering column is set to, keyed "route:field". Held in
+     memory like the account filter, so a reload shows everything again. */
+  const colFilters = {};
+  const colFilter = (key, field) => colFilters[`${key}:${field}`] || "";
+  document.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-colfilter]");
+    if (!sel) return;
+    colFilters[sel.dataset.colfilter] = sel.value;
+    window.TrackerRender();
+  });
+  // The select lives inside a sortable header; clicking it must not also sort.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-colfilter]")) e.stopPropagation();
+  }, true);
+
   /** Apply the current sort for `key`. Alphabetical, numbers read as numbers. */
   const sortRows = (key, rows) => {
     const s2 = sorts[key];
@@ -1710,7 +1781,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
 
@@ -1727,7 +1798,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 (() => {
   const KEY = "tracker.tasks";
   const DB = "tracker-files", STORE = "blobs";
+  /* One vocabulary, used by the task pane, the task dialog and the Daily
+     activity dialog. They were three separate lists, and the log wrote
+     "Completed" for a status the task list called "Done". */
   const STATUSES = ["To do", "In progress", "Blocked", "Done"];
+  const DONE = "Done";
   const DEFAULT_ASSIGNEE = "Jim";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1803,7 +1878,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
           placeholder: "What needs doing", standardize: true, capitalize: true },
-        { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
+        // Filled in with today for a new task, and only as a default: editing
+        // shows the task's own date, including one deliberately cleared. The
+        // stored key stays `given` - renaming it would blank this column for
+        // every task already saved, which is data loss dressed as a rename.
+        { name: "given", label: "Task Create Date", type: "date",
+          value: cur ? (cur.given || "") : today() },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
         { name: "status", label: "Status", type: "select", options: STATUSES,
@@ -1857,18 +1937,26 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
       task: t.description || t.name || "Task",
-      status: "Completed", url: t.ref || "", origin: "task",
+      status: DONE, url: t.ref || "", origin: "task",
     });
     logWrite(log);
   }
 
-  function markDone(id) {
+  /**
+   * Set a task's status from the pane, and log it the first time it is Done.
+   *
+   * markDone was one direction only. This is every direction, and it keeps the
+   * same promise: the activity log gets one entry per task, guarded on the
+   * task id inside logDone, so moving a task out of Done and back does not
+   * write a second one.
+   */
+  function setStatus(id, status) {
     const list = load();
     const t = list.find((x) => x.id === id);
-    if (!t || t.status === "Done") return;
-    t.status = "Done";
+    if (!t || t.status === status) return;
+    t.status = status;
     save(list);
-    logDone(t);
+    if (status === DONE) logDone(t);
     window.TrackerRender();
   }
 
@@ -2012,12 +2100,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
       ["Description", t.description
         ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
-      ["Task Given Date", val(t.given)],
+      ["Task Create Date", val(t.given)],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
       ["Reference link", t.ref
         ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>` : dash],
-      ["Status", `<span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>`],
+      // The status is set here rather than by a separate tick. A tick could
+      // only ever say "Done"; the four statuses a task can be in all belong in
+      // one control, in the row that names them. Any status already saved that
+      // is not in the list is kept and offered on that record, so nothing
+      // written before this change is rewritten or silently dropped.
+      ["Status", `<select class="statuspick" data-status="${esc(t.id)}"
+          aria-label="Status">${
+          [...new Set([...STATUSES, t.status].filter(Boolean))].map((s) =>
+            `<option value="${esc(s)}"${s === (t.status || STATUSES[0]) ? " selected" : ""}>${esc(s)}</option>`
+          ).join("")}</select>`],
       ["Assignee", val(t.assignee)],
       ["Attachments", atts || dash],
     ];
@@ -2037,8 +2134,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
             <div class="row">
               ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
               ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
-              ${t.status === "Done" ? "" :
-                `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
             </div>
           </div>
           <div class="tablewrap"><table class="detailtable">
@@ -2082,8 +2177,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   function view(q) {
     const all = numbered(load());
+    // Only the projects tasks actually carry, so a project with no task is
+    // never offered as a filter that would empty the table.
+    const projects = [...new Set(all.map((t) => t.project).filter(Boolean))].sort();
+    const picked = window.TrackerUI.colFilter("tasks", "project");
     const rows = window.TrackerUI.sortRows("tasks",
-      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
+      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q))
+         .filter((t) => !picked || t.project === picked));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -2093,8 +2193,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Click a task to see everything on it, beside the list.
-        Tasks are stored in this browser only.</p>
+        Click a task to see everything on it, beside the list.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
@@ -2106,7 +2205,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                  <thead><tr>
                    ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
                    ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                   ${window.TrackerUI.filterHeader("tasks", "project", COLUMNS[2],
+                       projects, picked, "Filter by project")}
                  </tr></thead>
                  <tbody>${slice.map(taskRow).join("")}</tbody>
                </table></div>
@@ -2140,8 +2240,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   /* ---------- wiring ---------- */
   document.addEventListener("click", (e) => {
-    const dn = e.target.closest("[data-done]");
-    if (dn) return markDone(dn.dataset.done);
     const row = e.target.closest("[data-open]");
     if (row && !e.target.closest("a,button")) {
       openRow = openRow === row.dataset.open ? null : row.dataset.open;
@@ -2183,8 +2281,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       fields: [
         { name: "date", label: "Date", type: "date", value: cur ? cur.date : today() },
         { name: "task", label: "Activity", type: "textarea", rows: 3, value: cur ? cur.task : "" },
+        // The same list the tasks use, not a second one that means the same
+        // things in different words. A status already saved outside it is kept
+        // and offered, so old entries are readable and editable as they are.
         { name: "status", label: "Status", type: "select",
-          options: ["Completed", "In Progress", "Pending"], value: cur ? cur.status : "Completed" },
+          options: [...new Set([...STATUSES, cur && cur.status].filter(Boolean))],
+          value: cur ? cur.status : DONE },
         { name: "url", label: "Reference link", value: cur ? cur.url : "", placeholder: "https://…" },
       ],
     });
@@ -2194,6 +2296,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     logWrite(log);
     window.TrackerRender();
   }
+
+  document.addEventListener("change", (e) => {
+    const st = e.target.closest("[data-status]");
+    if (st) return setStatus(st.dataset.status, st.value);
+  });
 
   document.addEventListener("click", (e) => {
     const ed = e.target.closest('[data-edit^="act:"]');
@@ -2205,7 +2312,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (rm) return logRemove(window.TrackerUI.actionId(rm, "remove"));
   });
 
-  window.TrackerTasks = { view, load, editTask, markDone, STATUSES, COLUMNS,
+  window.TrackerTasks = { view, load, editTask, setStatus, STATUSES, COLUMNS,
                           logAll, logEdit, logRemove };
 })();
 
@@ -3248,9 +3355,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function statusTag(s) {
     if (!s) return "";
     const v = s.toLowerCase();
-    const cls = v.includes("complete") ? "ok"
+    // "done" is here because the task statuses and the activity statuses are
+    // one list now. Without it every completed activity rendered as a
+    // colourless tag - the list would have unified and the colour would have
+    // quietly stopped meaning anything.
+    const cls = v.includes("complete") || v.includes("done") ? "ok"
       : v.includes("progress") ? "info"
-      : v.includes("pending") || v.includes("block") ? "warn" : "";
+      : v.includes("pending") || v.includes("block") || v.includes("to do") ? "warn" : "";
     return `<span class="tag ${cls}">${esc(s)}</span>`;
   }
 
@@ -3621,6 +3732,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   });
   applyTheme(themeMode());
   window.TrackerTheme = { applyTheme, themeMode };
+  /* statusTag colours by substring, so it is the piece most likely to fall out
+     of step with the status list without anything looking wrong. Exported so a
+     check can put every status through it rather than inferring the colour
+     from whatever happens to be on screen. */
+  window.TrackerApp = { statusTag };
 
   window.addEventListener("hashchange", () => {
     const r = location.hash.slice(1) || "overview";

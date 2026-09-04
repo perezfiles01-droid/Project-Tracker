@@ -199,8 +199,10 @@ const taskHeads = await page.locator("table.tasktable thead th").allTextContents
 // it, which check_task_split asserts field by field.
 const wantTasks = ["Task No.", "Name of task", "Project"];
 ok("the task table carries exactly the three named columns",
-   JSON.stringify(taskHeads.map((h) => h.replace(/[ ↑↓]+$/, ""))) === JSON.stringify(wantTasks),
-   taskHeads.join(" · "));
+   // Trimmed: a filtering header spans several lines of markup, so its text
+   // carries the surrounding whitespace that a trailing-space strip misses.
+   JSON.stringify(taskHeads.map((h) => h.trim().replace(/[ ↑↓]+$/, ""))) === JSON.stringify(wantTasks),
+   taskHeads.map((h) => JSON.stringify(h.trim())).join(" · "));
 ok("a new task appears as a row", (await page.locator("tr.taskrow").count()) === 1);
 ok("a past due date is flagged overdue", (await page.locator("tr.taskrow .tag.warn").count()) === 1);
 // The link left the table with its column. It is still a real tab-opening
@@ -252,9 +254,10 @@ ok("Daily activity starts empty — the 34 workbook rows are gone",
 await page.click('button[data-route="todo"]');
 await page.waitForSelector("table.tasktable");
 await page.click("tr.taskrow td:nth-child(2)");
-await page.waitForSelector("[data-done]");
-await page.click("[data-done]");
-await page.waitForTimeout(150);
+// A task is finished from the Status dropdown in the pane now, not a tick.
+await page.waitForSelector("[data-status]");
+await page.selectOption("[data-status]", "Done");
+await page.waitForTimeout(250);
 await page.click('button[data-route="daily"]');
 await page.waitForTimeout(150);
 ok("finishing a task logs exactly one activity",
@@ -474,7 +477,7 @@ ok("clicking the task opens a detail TABLE",
    String(await page.locator("table.detailtable").count()));
 const labels = await page.$$eval("table.detailtable th", (ts) => ts.map((t) => t.textContent.trim()));
 for (const want of ["Task No.", "Name of task", "Project", "Description",
-                    "Task Given Date", "Due Date", "Reference link", "Status"]) {
+                    "Task Create Date", "Due Date", "Reference link", "Status"]) {
   ok(`the detail table lists "${want}"`, labels.includes(want), labels.join(" · "));
 }
 ok("the detail table shows the description",

@@ -76,7 +76,7 @@ ok("the pane sits beside the list, not under it",
 
 /* --- every field the table dropped is still reachable --------------------- */
 const paneText = await page.locator(".taskpane").innerText();
-for (const label of ["Task Given Date", "Due Date", "Reference link", "Status",
+for (const label of ["Task Create Date", "Due Date", "Reference link", "Status",
                      "Assignee", "Description", "Attachments"]) {
   ok(`the pane still carries ${label}`, paneText.includes(label),
      paneText.replace(/\s+/g, " ").slice(0, 70));
@@ -93,6 +93,52 @@ const second = await page.locator(".taskpane").innerText();
 ok("clicking another task shows that one instead",
    second.includes("Second task") && !second.includes("Something to do"),
    second.replace(/\s+/g, " ").slice(0, 70));
+
+/* --- the page does not repeat where things are stored --------------------
+   It was true, and it is still recorded in docs/ and in the Settings copy;
+   what went is a caption on this page, not the knowledge. */
+ok("the lede no longer says tasks are stored in this browser only",
+   !(await page.locator("#view p.lede").first().innerText()).includes("stored in this browser"),
+   await page.locator("#view p.lede").first().innerText());
+
+/* --- the two halves are the same size, both ways round -------------------
+   They each took their own height, so a short list sat beside a tall pane and
+   a ten-row list sat beside a short one: 130px against 535px, measured. */
+const boxes = () => page.evaluate(() => {
+  const l = document.querySelector(".tasklist").getBoundingClientRect();
+  const p = document.querySelector(".taskpane").getBoundingClientRect();
+  return { lt: Math.round(l.top), lh: Math.round(l.height), lw: Math.round(l.width),
+           pt: Math.round(p.top), ph: Math.round(p.height), pw: Math.round(p.width) };
+});
+
+// Case one: a short list, a long task.
+const short = await boxes();
+ok("with a short list the two halves start level", Math.abs(short.lt - short.pt) <= 2,
+   JSON.stringify(short));
+ok("with a short list the two halves are the same height",
+   Math.abs(short.lh - short.ph) <= 2, JSON.stringify(short));
+ok("and the same width", Math.abs(short.lw - short.pw) <= 2, JSON.stringify(short));
+
+// Case two: a long list, a short task.
+await page.evaluate(() => {
+  const many = [];
+  for (let i = 1; i <= 12; i++) {
+    many.push({ id: "t-m" + i, name: "Task " + i, project: "GLASS",
+                attachments: [], status: "To do" });
+  }
+  localStorage.setItem("tracker.tasks", JSON.stringify(many));
+});
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.click('#nav button[data-route="todo"]');
+await page.waitForTimeout(300);
+await page.locator("tr.taskrow").first().click();
+await page.waitForTimeout(300);
+const long = await boxes();
+ok("with a long list they still start level", Math.abs(long.lt - long.pt) <= 2,
+   JSON.stringify(long));
+ok("with a long list they are still the same height",
+   Math.abs(long.lh - long.ph) <= 2, JSON.stringify(long));
 
 /* --- narrow screens stack rather than splitting --------------------------- */
 await page.setViewportSize({ width: 700, height: 1000 });

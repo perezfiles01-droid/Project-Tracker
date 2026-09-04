@@ -9,7 +9,11 @@
 (() => {
   const KEY = "tracker.tasks";
   const DB = "tracker-files", STORE = "blobs";
+  /* One vocabulary, used by the task pane, the task dialog and the Daily
+     activity dialog. They were three separate lists, and the log wrote
+     "Completed" for a status the task list called "Done". */
   const STATUSES = ["To do", "In progress", "Blocked", "Done"];
+  const DONE = "Done";
   const DEFAULT_ASSIGNEE = "Jim";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -85,7 +89,12 @@
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
           placeholder: "What needs doing", standardize: true, capitalize: true },
-        { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
+        // Filled in with today for a new task, and only as a default: editing
+        // shows the task's own date, including one deliberately cleared. The
+        // stored key stays `given` - renaming it would blank this column for
+        // every task already saved, which is data loss dressed as a rename.
+        { name: "given", label: "Task Create Date", type: "date",
+          value: cur ? (cur.given || "") : today() },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
         { name: "status", label: "Status", type: "select", options: STATUSES,
@@ -139,18 +148,26 @@
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
       task: t.description || t.name || "Task",
-      status: "Completed", url: t.ref || "", origin: "task",
+      status: DONE, url: t.ref || "", origin: "task",
     });
     logWrite(log);
   }
 
-  function markDone(id) {
+  /**
+   * Set a task's status from the pane, and log it the first time it is Done.
+   *
+   * markDone was one direction only. This is every direction, and it keeps the
+   * same promise: the activity log gets one entry per task, guarded on the
+   * task id inside logDone, so moving a task out of Done and back does not
+   * write a second one.
+   */
+  function setStatus(id, status) {
     const list = load();
     const t = list.find((x) => x.id === id);
-    if (!t || t.status === "Done") return;
-    t.status = "Done";
+    if (!t || t.status === status) return;
+    t.status = status;
     save(list);
-    logDone(t);
+    if (status === DONE) logDone(t);
     window.TrackerRender();
   }
 
@@ -294,12 +311,21 @@
       ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
       ["Description", t.description
         ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
-      ["Task Given Date", val(t.given)],
+      ["Task Create Date", val(t.given)],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
       ["Reference link", t.ref
         ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>` : dash],
-      ["Status", `<span class="tag${t.status === "Done" ? " ok" : ""}">${esc(t.status || STATUSES[0])}</span>`],
+      // The status is set here rather than by a separate tick. A tick could
+      // only ever say "Done"; the four statuses a task can be in all belong in
+      // one control, in the row that names them. Any status already saved that
+      // is not in the list is kept and offered on that record, so nothing
+      // written before this change is rewritten or silently dropped.
+      ["Status", `<select class="statuspick" data-status="${esc(t.id)}"
+          aria-label="Status">${
+          [...new Set([...STATUSES, t.status].filter(Boolean))].map((s) =>
+            `<option value="${esc(s)}"${s === (t.status || STATUSES[0]) ? " selected" : ""}>${esc(s)}</option>`
+          ).join("")}</select>`],
       ["Assignee", val(t.assignee)],
       ["Attachments", atts || dash],
     ];
@@ -319,8 +345,6 @@
             <div class="row">
               ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
               ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
-              ${t.status === "Done" ? "" :
-                `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
             </div>
           </div>
           <div class="tablewrap"><table class="detailtable">
@@ -364,8 +388,13 @@
 
   function view(q) {
     const all = numbered(load());
+    // Only the projects tasks actually carry, so a project with no task is
+    // never offered as a filter that would empty the table.
+    const projects = [...new Set(all.map((t) => t.project).filter(Boolean))].sort();
+    const picked = window.TrackerUI.colFilter("tasks", "project");
     const rows = window.TrackerUI.sortRows("tasks",
-      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
+      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q))
+         .filter((t) => !picked || t.project === picked));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -375,8 +404,7 @@
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Click a task to see everything on it, beside the list.
-        Tasks are stored in this browser only.</p>
+        Click a task to see everything on it, beside the list.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
@@ -388,7 +416,8 @@
                  <thead><tr>
                    ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
                    ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                   ${window.TrackerUI.filterHeader("tasks", "project", COLUMNS[2],
+                       projects, picked, "Filter by project")}
                  </tr></thead>
                  <tbody>${slice.map(taskRow).join("")}</tbody>
                </table></div>
@@ -422,8 +451,6 @@
 
   /* ---------- wiring ---------- */
   document.addEventListener("click", (e) => {
-    const dn = e.target.closest("[data-done]");
-    if (dn) return markDone(dn.dataset.done);
     const row = e.target.closest("[data-open]");
     if (row && !e.target.closest("a,button")) {
       openRow = openRow === row.dataset.open ? null : row.dataset.open;
@@ -465,8 +492,12 @@
       fields: [
         { name: "date", label: "Date", type: "date", value: cur ? cur.date : today() },
         { name: "task", label: "Activity", type: "textarea", rows: 3, value: cur ? cur.task : "" },
+        // The same list the tasks use, not a second one that means the same
+        // things in different words. A status already saved outside it is kept
+        // and offered, so old entries are readable and editable as they are.
         { name: "status", label: "Status", type: "select",
-          options: ["Completed", "In Progress", "Pending"], value: cur ? cur.status : "Completed" },
+          options: [...new Set([...STATUSES, cur && cur.status].filter(Boolean))],
+          value: cur ? cur.status : DONE },
         { name: "url", label: "Reference link", value: cur ? cur.url : "", placeholder: "https://…" },
       ],
     });
@@ -476,6 +507,11 @@
     logWrite(log);
     window.TrackerRender();
   }
+
+  document.addEventListener("change", (e) => {
+    const st = e.target.closest("[data-status]");
+    if (st) return setStatus(st.dataset.status, st.value);
+  });
 
   document.addEventListener("click", (e) => {
     const ed = e.target.closest('[data-edit^="act:"]');
@@ -487,6 +523,6 @@
     if (rm) return logRemove(window.TrackerUI.actionId(rm, "remove"));
   });
 
-  window.TrackerTasks = { view, load, editTask, markDone, STATUSES, COLUMNS,
+  window.TrackerTasks = { view, load, editTask, setStatus, STATUSES, COLUMNS,
                           logAll, logEdit, logRemove };
 })();
