@@ -7,10 +7,11 @@ The question that prompted this: *"can we add a button that fixes the grammar
 in a task's Detailed description, simplifies the thought, and never uses an em
 dash?"*
 
-**Update, same day: it was built, and then made free.** The Standardize
-button beside a task's name and description is live. It runs on Google
-Gemini's free tier, so it costs nothing. Anthropic was removed once the free
-path worked. See [`free-engine.md`](free-engine.md) to set it up. See
+**Update, same day: it was built, made free, and then given a second free
+engine.** The Standardize button beside a task's name and description is live.
+It runs on Google Gemini's free tier or on OpenRouter's `:free` models, so it
+costs nothing either way, and All engines lists both at once. Anthropic was
+removed once a free path worked. See [`free-engine.md`](free-engine.md) to set it up. See
 [`api-key-options.md`](api-key-options.md) for how it works and
 `assets/ai.js` for the code. The rest of this folder is kept because the
 reasoning still applies to the next AI request.

@@ -482,8 +482,10 @@ th.emailhead .accountpick{
     <h3 style="margin-top:22px">Standardize text</h3>
     <p class="lede">Powers the wand button beside a task's name and description.
       Keys are stored in this browser only and are deliberately left out of the
-      backup file. Google AI Studio issues a key with no card and a free tier,
-      which is the default.</p>
+      backup file. Two engines, both free to run: Google AI Studio issues a key
+      with no card and a free tier, which is the default, and OpenRouter's
+      ":free" models cost nothing per token. All engines lists both at once, and
+      picking a model fills the Engine box with the engine that owns it.</p>
     <div class="field">
       <label for="aiEngine">Engine</label>
       <select id="aiEngine"></select>
@@ -496,10 +498,13 @@ th.emailhead .accountpick{
         <label><input type="radio" name="aiTier" value="paid"> Paid (billing required)</label>
         <label><input type="radio" name="aiTier" value="all"> Show everything</label>
       </div>
-      <small>Free or paid is this app's own labelling by model name: Google's
-        model list carries no billing information, so your account's actual
-        entitlement is what decides. Nothing is ever hidden for good — Show
-        everything lists all of them.</small>
+      <small>For Gemini this is the app's own labelling by model name, because
+        Google's model list carries no billing information; OpenRouter publishes
+        its prices, so its split is read from the account. Every "pro" model
+        counts as paid. Nothing is hidden for good — Show everything lists all
+        of them. The one exception is Google's 2.5 flash family, which is
+        withdrawn rather than hidden: it now answers "no longer available to new
+        users".</small>
     </div>
     <div class="field">
       <label for="aiModel">Model</label>
