@@ -35,23 +35,36 @@
       </label>`;
   }
 
+  const ATT_MAX = 5;
+  const isImage = (t) => /^image\//.test(String(t || ""));
+
   function fieldHtml(f) {
     const id = "fd_" + f.name;
     const v = f.value ?? "";
+    // Opt-in, never blanket: fieldHtml renders every field in the app, and a
+    // capitalised URL is a broken URL. Marked fields are wired in formDialog.
+    const cap = f.capitalize ? ' data-capitalize="1"' : "";
     let control;
     if (f.type === "textarea") {
-      control = `<textarea id="${id}" rows="${f.rows || 4}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
+      control = `<textarea id="${id}"${cap} rows="${f.rows || 4}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
     } else if (f.type === "select") {
       control = `<select id="${id}">${(f.options || []).map((o) =>
         `<option value="${esc(o)}"${String(o) === String(v) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
     } else if (f.type === "attachments") {
       const list = (f.value || []).map(attachmentRow).join("");
-      control = `<div class="attachments">
-          ${list || `<div class="m">Nothing attached yet.</div>`}
-          <input id="${id}" type="file" multiple>
+      // Three parts: what is already attached, what you have just added in this
+      // dialog, and the picker. The staged list is filled by wireAttachments,
+      // because a file input's FileList cannot be appended to - picking twice
+      // would otherwise replace the first pick rather than add to it, which is
+      // exactly what "select up to 5" needs.
+      control = `<div class="attachments" data-attfield="${esc(f.name)}">
+          ${list || `<div class="m nothingyet">Nothing attached yet.</div>`}
+          <div class="attstaged" data-staged="${esc(f.name)}"></div>
+          <input id="${id}" type="file" multiple accept="image/*,*/*">
+          <div class="attcount" data-attcount="${esc(f.name)}"></div>
         </div>`;
     } else {
-      control = `<input id="${id}" type="${f.type || "text"}" value="${esc(v)}"
+      control = `<input id="${id}"${cap} type="${f.type || "text"}" value="${esc(v)}"
         placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
     }
     // The label row carries the field's own tools on the right. Today that
@@ -68,6 +81,147 @@
         <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
+  }
+
+  /**
+   * The attachment picker: paste, choose, count, and a hard ceiling.
+   *
+   * Files added in this dialog are held here rather than in the file input,
+   * because a FileList is read-only: choosing a second time replaces the first
+   * choice instead of adding to it. Staging them makes "up to five" mean five
+   * across every way of adding one.
+   *
+   * Pasting is the point of the change - a screenshot on the clipboard is a
+   * file in clipboardData.files, and it arrives with a useless name, so it is
+   * renamed to something a download can be saved as. A tool that pastes a path
+   * or HTML instead of a file cannot be caught here; Choose Files still works.
+   */
+  function wireAttachments(box, fields) {
+    const staged = new Map();
+    const urls = [];
+    const specs = fields.filter((f) => f.type === "attachments");
+    if (!specs.length) return { staged, revoke: () => {} };
+
+    const kept = (f) => (f.value || [])
+      .filter((a) => !box.querySelector(`[data-drop="${cssEsc(a.id)}"]`)?.checked).length;
+
+    function paint(f) {
+      const list = staged.get(f.name) || [];
+      const host = box.querySelector(`[data-staged="${cssEsc(f.name)}"]`);
+      if (host) {
+        host.innerHTML = list.map((file, i) => {
+          let thumb = "";
+          if (isImage(file.type)) {
+            const u = URL.createObjectURL(file);
+            urls.push(u);
+            thumb = `<img class="attthumb" src="${u}" alt="">`;
+          }
+          return `<div class="attrow staged">
+              ${thumb}
+              <span class="attname">${esc(file.name)}</span>
+              <span class="tag dead">${Math.ceil(file.size / 1024)} KB</span>
+              <button type="button" class="attdrop" data-unstage="${esc(f.name)}:${i}">remove</button>
+            </div>`;
+        }).join("");
+      }
+      const total = kept(f) + list.length;
+      const max = f.max || ATT_MAX;
+      const note = box.querySelector(`[data-attcount="${cssEsc(f.name)}"]`);
+      if (note) note.textContent = `${total} of ${max} attached.` +
+        (total >= max ? " Remove one to add another." : " Paste a screenshot, or choose files.");
+      const picker = box.querySelector("#fd_" + f.name);
+      if (picker) picker.disabled = total >= max;
+      const empty = box.querySelector(".nothingyet");
+      if (empty) empty.hidden = list.length > 0;
+    }
+
+    /** Add what we can, and say plainly what would not fit. */
+    function add(f, files) {
+      const max = f.max || ATT_MAX;
+      const list = staged.get(f.name) || [];
+      const room = Math.max(0, max - kept(f) - list.length);
+      const taking = [...files].slice(0, room);
+      const refused = [...files].length - taking.length;
+      let n = list.length;
+      for (const file of taking) {
+        // A pasted screenshot arrives as "image.png" or with no name at all.
+        const named = (!file.name || /^image\.[a-z]+$/i.test(file.name)) && isImage(file.type)
+          ? new File([file], `Pasted image ${++n}.${(file.type.split("/")[1] || "png")}`,
+                     { type: file.type })
+          : file;
+        list.push(named);
+      }
+      staged.set(f.name, list);
+      paint(f);
+      const note = box.querySelector(`[data-note="fd_${cssEsc(f.name)}"]`);
+      if (note) {
+        note.hidden = !refused;
+        note.textContent = refused
+          ? `${refused} file${refused === 1 ? "" : "s"} not attached: the limit is ${max}.`
+          : "";
+      }
+    }
+
+    for (const f of specs) {
+      staged.set(f.name, []);
+      const picker = box.querySelector("#fd_" + f.name);
+      if (picker) picker.addEventListener("change", () => {
+        add(f, picker.files || []);
+        picker.value = "";   // so choosing the same file twice still registers
+      });
+      paint(f);
+    }
+
+    box.addEventListener("paste", (e) => {
+      const files = (e.clipboardData && e.clipboardData.files) || [];
+      if (!files.length) return;
+      e.preventDefault();
+      add(specs[0], files);
+    });
+
+    box.addEventListener("click", (e) => {
+      const un = e.target.closest("[data-unstage]");
+      if (un) {
+        const [name, i] = un.dataset.unstage.split(":");
+        const list = staged.get(name) || [];
+        list.splice(Number(i), 1);
+        staged.set(name, list);
+        paint(specs.find((f) => f.name === name));
+      }
+      // Ticking an existing attachment to remove it frees a slot immediately.
+      if (e.target.matches("[data-drop]")) specs.forEach(paint);
+    });
+
+    return { staged, revoke: () => urls.forEach((u) => URL.revokeObjectURL(u)) };
+  }
+
+  /** Escape a value for use inside a CSS attribute selector. */
+  const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
+
+  /**
+   * Upper-case the first letter of a marked field, as it is typed or pasted.
+   *
+   * Only the first character, and only when it is a lower-case letter: a name
+   * starting with a digit, a bracket or an already-capital initial is left
+   * exactly as it is. Everything after it is untouched, so "check the iOS
+   * build" keeps its iOS.
+   *
+   * The caret is not moved, because only index 0 changes and the value stays
+   * the same length. Setting .value would otherwise send the caret to the end
+   * and make typing impossible.
+   */
+  function wireCapitals(box) {
+    for (const el of box.querySelectorAll("[data-capitalize]")) {
+      el.addEventListener("input", () => {
+        const v = el.value;
+        if (!v) return;
+        const up = v[0].toUpperCase();
+        if (up === v[0]) return;
+        const at = el.selectionStart, to = el.selectionEnd;
+        el.value = up + v.slice(1);
+        try { el.setSelectionRange(at, to); } catch { /* a date input has no range */ }
+      });
+    }
   }
 
   /**
@@ -100,11 +254,14 @@
         </div>
       </div>`;
     box.hidden = false;
+    wireCapitals(box);
+    const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
 
     return new Promise((resolve) => {
       const close = (value) => {
+        atts.revoke();
         box.hidden = true;
         box.innerHTML = "";
         document.removeEventListener("keydown", onKey);
@@ -119,7 +276,8 @@
             const dropped = [...box.querySelectorAll("[data-drop]:checked")].map((c) => c.dataset.drop);
             out[f.name] = {
               keep: (f.value || []).map((a) => a.id).filter((id) => !dropped.includes(id)),
-              added: el && el.files ? [...el.files] : [],
+              // Staged, not el.files: a file input only remembers the last pick.
+              added: [...(atts.staged.get(f.name) || [])],
             };
           } else {
             out[f.name] = el ? el.value.trim() : "";

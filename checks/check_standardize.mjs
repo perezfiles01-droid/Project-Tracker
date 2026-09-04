@@ -149,7 +149,18 @@ for (const p of providers) {
   ok(`${p.id}: declares a reply shape the guard can build`, !!WIRES[p.wire], p.wire || "(none)");
 }
 
+/* The Detailed description capitalises its own first letter as you type, so
+   what the field holds is not byte-identical to what was passed to fill().
+   These assertions are about Undo restoring EXACTLY what was in the field, so
+   they read it back rather than assuming it: comparing against the literal
+   would fail on a first byte the app changes on purpose. */
 const typed = "the report is not yet done i need to finish it and send to the team";
+const inField = () => page.inputValue("#fd_description");
+/** Fill the field and return what it actually ended up holding. */
+async function typeIn(text = typed) {
+  await page.fill("#fd_description", text);
+  return inField();
+}
 
 /* --- the button is where it was asked for --- */
 await openTask();
@@ -169,7 +180,7 @@ ok("the tooltip reads Standardize text",
 for (const p of providers) {
   await openTask({ engine: p.id, key: "key-for-" + p.id });
   await stub(replyFor(p.id, "The report is not finished."));
-  await page.fill("#fd_description", typed);
+  const before = await typeIn();
   await page.click('[data-standardize="fd_description"]');
   await page.waitForTimeout(400);
 
@@ -182,7 +193,7 @@ for (const p of providers) {
   const body = call.init.body || "";
   const everything = call.url + " " + JSON.stringify(headers) + " " + body;
   ok(`${p.id}: the request carries its key`, everything.includes("key-for-" + p.id));
-  ok(`${p.id}: it sends the typed text`, body.includes(typed.slice(0, 30)));
+  ok(`${p.id}: it sends the typed text`, body.includes(before.slice(1, 30)));
   ok(`${p.id}: the instruction forbids the dashes`, /em dash/i.test(body));
   ok(`${p.id}: the reply lands in the field`,
      (await page.inputValue("#fd_description")).startsWith("The report is not finished"));
@@ -190,8 +201,7 @@ for (const p of providers) {
   // Undo is the promise that matters most, so it is checked per engine.
   await page.click('[data-undo="fd_description"]');
   await page.waitForTimeout(250);
-  ok(`${p.id}: Undo restores the original byte for byte`,
-     (await page.inputValue("#fd_description")) === typed);
+  ok(`${p.id}: Undo restores the original byte for byte`, (await inField()) === before);
 }
 
 /* --- a key stranded by the removed engine is adopted, once ---
@@ -267,11 +277,10 @@ for (const [label, spec] of [
 ]) {
   await openTask({ engine: first.id });
   await stub(spec);
-  await page.fill("#fd_description", typed);
+  const kept = await typeIn();
   await page.click('[data-standardize="fd_description"]');
   await page.waitForTimeout(400);
-  ok(`${label} leaves the text untouched`,
-     (await page.inputValue("#fd_description")) === typed);
+  ok(`${label} leaves the text untouched`, (await inField()) === kept);
   const note = (await page.locator('[data-note="fd_description"]').textContent()).trim();
   ok(`${label} says what went wrong`, note.length > 0 && !/undefined|\[object/.test(note), note);
 }

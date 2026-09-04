@@ -4,9 +4,12 @@
  *
  * Two faults this covers, both of which produced "I added a link but it
  * shows no link":
- *   1. A link entered through "Attach a link" rendered only inside the
- *      expanded detail row. The Reference link column showed a dash, so a
- *      link that had been saved correctly read as missing.
+ *   1. A link that had been saved read as missing. It was first reported
+ *      against a Reference link COLUMN that showed a dash; the table now
+ *      carries three columns and the link lives in the pane beside it, so the
+ *      assertion followed it there rather than being deleted. The field it was
+ *      reported through, "Attach a link", is an image/file picker now, and its
+ *      saved records are covered by check_attachments.
  *   2. Enter submitted the whole dialog from any input. On a ten-field form
  *      that saves every field below the caret as blank.
  */
@@ -58,39 +61,41 @@ await page.waitForTimeout(200);
 ok("Enter in a field does not submit the dialog",
    await page.locator("#formDialog").isVisible());
 
-// --- fault 1: a link entered ONLY as an attachment must show in the column ---
-await page.fill("#fd_linkUrl", "https://example.test/attached-only");
+// --- fault 1: a saved link must show in the Reference link column -----------
+await page.fill("#fd_ref", "https://example.test/attached-only");
 await page.click("#formDialog .actions button.primary");
 await page.waitForTimeout(400);
 
 ok("the task was created", (await page.locator("tr.taskrow").count()) === 1);
-const refCell = (await page.locator("tr.taskrow td").last().innerText()).trim();
-ok("an attached link shows in the Reference link column", /↗/.test(refCell),
-   `column reads ${JSON.stringify(refCell)}`);
 const nameCell = (await page.locator("tr.taskrow td").nth(1).innerText()).trim();
 ok("the name column shows the task name", nameCell === "Guarded task", nameCell);
 
-// --- clicking a task opens its detail ---------------------------------------
+// --- clicking a task fills the pane beside the list -------------------------
 await page.click("tr.taskrow");
-await page.waitForTimeout(250);
-ok("clicking a task opens a detail row", (await page.locator("tr.detail").count()) === 1);
-const detail = await page.locator("tr.detail").innerText();
+await page.waitForTimeout(300);
+ok("clicking a task fills the detail pane",
+   (await page.locator(".taskpane .taskdetail").count()) === 1);
+const pane = await page.locator(".taskpane").innerText();
+ok("the saved link is reachable in the pane", /↗/.test(pane),
+   pane.replace(/\s+/g, " ").slice(0, 80));
 // Asserted by control, not by label: the actions are icon buttons now, so
 // their accessible name carries the meaning rather than visible text.
-const detailActions = await page.$$eval("tr.detail button[aria-label]",
+const detailActions = await page.$$eval(".taskpane button[aria-label]",
   (bs) => bs.map((b) => b.getAttribute("aria-label")));
-ok("the detail offers edit and remove",
+ok("the pane offers edit and remove",
    detailActions.includes("Edit") && detailActions.includes("Remove"),
-   detailActions.join(", ") || detail.replace(/\s+/g, " ").slice(0, 60));
+   detailActions.join(", ") || pane.replace(/\s+/g, " ").slice(0, 60));
 
 // --- and it survives a reload ------------------------------------------------
 await page.reload({ waitUntil: "load" });
 await page.waitForTimeout(300);
 await page.click('#nav button[data-route="todo"]');
 await page.waitForTimeout(250);
+await page.click("tr.taskrow");
+await page.waitForTimeout(300);
 ok("the task and its link survive a reload",
    (await page.locator("tr.taskrow").count()) === 1 &&
-   /↗/.test((await page.locator("tr.taskrow td").last().innerText())));
+   /↗/.test(await page.locator(".taskpane").innerText()));
 
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

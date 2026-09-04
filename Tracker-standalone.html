@@ -425,6 +425,37 @@ th.emailhead .accountpick{
 .linkish{background:none;border:0;padding:0;font:inherit;color:var(--accent);
   text-decoration:underline;cursor:pointer}
 
+/* Attachments in the dialog: staged files with a thumbnail, and the count. */
+.attstaged{display:flex;flex-direction:column;gap:6px}
+.attrow.staged{display:flex;align-items:center;gap:8px;font-size:13px}
+.attthumb{width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.attrow.staged .attdrop{background:none;border:0;cursor:pointer;color:var(--dim);font-size:11px}
+.attcount{color:var(--dim);font-size:12px}
+.attitem{display:inline-flex;align-items:center;gap:4px;margin:0 6px 6px 0}
+.attitem .attdl{cursor:pointer}
+
+/* The To Do List is a list beside a pane: the table carries what you scan by,
+   the pane carries everything else about the task you clicked. Below 900px
+   they stack, because a split pane on a phone is two unusable columns. */
+.tasksplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.tasklist{min-width:0}
+.taskpane{min-width:0;background:var(--panel-2);border:1px solid var(--line);
+          border-radius:10px;padding:14px;position:sticky;top:12px;max-height:calc(100vh - 90px);
+          overflow:auto}
+.taskpane .panehead{display:flex;align-items:center;justify-content:space-between;gap:10px;
+                    margin-bottom:10px}
+.taskpane .panehead h3{margin:0;font-size:15px;word-break:break-word}
+.taskpane.empty-pane{display:flex;align-items:center;justify-content:center;min-height:160px}
+.taskpane .detailtable{min-width:0}
+table.tasktable{min-width:0}
+.shot{padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;
+      margin:0 6px 6px 0;line-height:0}
+.shot img{width:84px;height:84px;object-fit:cover;border-radius:7px;display:block}
+@media (max-width:900px){
+  .tasksplit{grid-template-columns:minmax(0,1fr)}
+  .taskpane{position:static;max-height:none}
+}
+
 </style>
 </head>
 <body>
@@ -1172,23 +1203,36 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       </label>`;
   }
 
+  const ATT_MAX = 5;
+  const isImage = (t) => /^image\//.test(String(t || ""));
+
   function fieldHtml(f) {
     const id = "fd_" + f.name;
     const v = f.value ?? "";
+    // Opt-in, never blanket: fieldHtml renders every field in the app, and a
+    // capitalised URL is a broken URL. Marked fields are wired in formDialog.
+    const cap = f.capitalize ? ' data-capitalize="1"' : "";
     let control;
     if (f.type === "textarea") {
-      control = `<textarea id="${id}" rows="${f.rows || 4}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
+      control = `<textarea id="${id}"${cap} rows="${f.rows || 4}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
     } else if (f.type === "select") {
       control = `<select id="${id}">${(f.options || []).map((o) =>
         `<option value="${esc(o)}"${String(o) === String(v) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
     } else if (f.type === "attachments") {
       const list = (f.value || []).map(attachmentRow).join("");
-      control = `<div class="attachments">
-          ${list || `<div class="m">Nothing attached yet.</div>`}
-          <input id="${id}" type="file" multiple>
+      // Three parts: what is already attached, what you have just added in this
+      // dialog, and the picker. The staged list is filled by wireAttachments,
+      // because a file input's FileList cannot be appended to - picking twice
+      // would otherwise replace the first pick rather than add to it, which is
+      // exactly what "select up to 5" needs.
+      control = `<div class="attachments" data-attfield="${esc(f.name)}">
+          ${list || `<div class="m nothingyet">Nothing attached yet.</div>`}
+          <div class="attstaged" data-staged="${esc(f.name)}"></div>
+          <input id="${id}" type="file" multiple accept="image/*,*/*">
+          <div class="attcount" data-attcount="${esc(f.name)}"></div>
         </div>`;
     } else {
-      control = `<input id="${id}" type="${f.type || "text"}" value="${esc(v)}"
+      control = `<input id="${id}"${cap} type="${f.type || "text"}" value="${esc(v)}"
         placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
     }
     // The label row carries the field's own tools on the right. Today that
@@ -1205,6 +1249,147 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
+  }
+
+  /**
+   * The attachment picker: paste, choose, count, and a hard ceiling.
+   *
+   * Files added in this dialog are held here rather than in the file input,
+   * because a FileList is read-only: choosing a second time replaces the first
+   * choice instead of adding to it. Staging them makes "up to five" mean five
+   * across every way of adding one.
+   *
+   * Pasting is the point of the change - a screenshot on the clipboard is a
+   * file in clipboardData.files, and it arrives with a useless name, so it is
+   * renamed to something a download can be saved as. A tool that pastes a path
+   * or HTML instead of a file cannot be caught here; Choose Files still works.
+   */
+  function wireAttachments(box, fields) {
+    const staged = new Map();
+    const urls = [];
+    const specs = fields.filter((f) => f.type === "attachments");
+    if (!specs.length) return { staged, revoke: () => {} };
+
+    const kept = (f) => (f.value || [])
+      .filter((a) => !box.querySelector(`[data-drop="${cssEsc(a.id)}"]`)?.checked).length;
+
+    function paint(f) {
+      const list = staged.get(f.name) || [];
+      const host = box.querySelector(`[data-staged="${cssEsc(f.name)}"]`);
+      if (host) {
+        host.innerHTML = list.map((file, i) => {
+          let thumb = "";
+          if (isImage(file.type)) {
+            const u = URL.createObjectURL(file);
+            urls.push(u);
+            thumb = `<img class="attthumb" src="${u}" alt="">`;
+          }
+          return `<div class="attrow staged">
+              ${thumb}
+              <span class="attname">${esc(file.name)}</span>
+              <span class="tag dead">${Math.ceil(file.size / 1024)} KB</span>
+              <button type="button" class="attdrop" data-unstage="${esc(f.name)}:${i}">remove</button>
+            </div>`;
+        }).join("");
+      }
+      const total = kept(f) + list.length;
+      const max = f.max || ATT_MAX;
+      const note = box.querySelector(`[data-attcount="${cssEsc(f.name)}"]`);
+      if (note) note.textContent = `${total} of ${max} attached.` +
+        (total >= max ? " Remove one to add another." : " Paste a screenshot, or choose files.");
+      const picker = box.querySelector("#fd_" + f.name);
+      if (picker) picker.disabled = total >= max;
+      const empty = box.querySelector(".nothingyet");
+      if (empty) empty.hidden = list.length > 0;
+    }
+
+    /** Add what we can, and say plainly what would not fit. */
+    function add(f, files) {
+      const max = f.max || ATT_MAX;
+      const list = staged.get(f.name) || [];
+      const room = Math.max(0, max - kept(f) - list.length);
+      const taking = [...files].slice(0, room);
+      const refused = [...files].length - taking.length;
+      let n = list.length;
+      for (const file of taking) {
+        // A pasted screenshot arrives as "image.png" or with no name at all.
+        const named = (!file.name || /^image\.[a-z]+$/i.test(file.name)) && isImage(file.type)
+          ? new File([file], `Pasted image ${++n}.${(file.type.split("/")[1] || "png")}`,
+                     { type: file.type })
+          : file;
+        list.push(named);
+      }
+      staged.set(f.name, list);
+      paint(f);
+      const note = box.querySelector(`[data-note="fd_${cssEsc(f.name)}"]`);
+      if (note) {
+        note.hidden = !refused;
+        note.textContent = refused
+          ? `${refused} file${refused === 1 ? "" : "s"} not attached: the limit is ${max}.`
+          : "";
+      }
+    }
+
+    for (const f of specs) {
+      staged.set(f.name, []);
+      const picker = box.querySelector("#fd_" + f.name);
+      if (picker) picker.addEventListener("change", () => {
+        add(f, picker.files || []);
+        picker.value = "";   // so choosing the same file twice still registers
+      });
+      paint(f);
+    }
+
+    box.addEventListener("paste", (e) => {
+      const files = (e.clipboardData && e.clipboardData.files) || [];
+      if (!files.length) return;
+      e.preventDefault();
+      add(specs[0], files);
+    });
+
+    box.addEventListener("click", (e) => {
+      const un = e.target.closest("[data-unstage]");
+      if (un) {
+        const [name, i] = un.dataset.unstage.split(":");
+        const list = staged.get(name) || [];
+        list.splice(Number(i), 1);
+        staged.set(name, list);
+        paint(specs.find((f) => f.name === name));
+      }
+      // Ticking an existing attachment to remove it frees a slot immediately.
+      if (e.target.matches("[data-drop]")) specs.forEach(paint);
+    });
+
+    return { staged, revoke: () => urls.forEach((u) => URL.revokeObjectURL(u)) };
+  }
+
+  /** Escape a value for use inside a CSS attribute selector. */
+  const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
+
+  /**
+   * Upper-case the first letter of a marked field, as it is typed or pasted.
+   *
+   * Only the first character, and only when it is a lower-case letter: a name
+   * starting with a digit, a bracket or an already-capital initial is left
+   * exactly as it is. Everything after it is untouched, so "check the iOS
+   * build" keeps its iOS.
+   *
+   * The caret is not moved, because only index 0 changes and the value stays
+   * the same length. Setting .value would otherwise send the caret to the end
+   * and make typing impossible.
+   */
+  function wireCapitals(box) {
+    for (const el of box.querySelectorAll("[data-capitalize]")) {
+      el.addEventListener("input", () => {
+        const v = el.value;
+        if (!v) return;
+        const up = v[0].toUpperCase();
+        if (up === v[0]) return;
+        const at = el.selectionStart, to = el.selectionEnd;
+        el.value = up + v.slice(1);
+        try { el.setSelectionRange(at, to); } catch { /* a date input has no range */ }
+      });
+    }
   }
 
   /**
@@ -1237,11 +1422,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         </div>
       </div>`;
     box.hidden = false;
+    wireCapitals(box);
+    const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
 
     return new Promise((resolve) => {
       const close = (value) => {
+        atts.revoke();
         box.hidden = true;
         box.innerHTML = "";
         document.removeEventListener("keydown", onKey);
@@ -1256,7 +1444,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
             const dropped = [...box.querySelectorAll("[data-drop]:checked")].map((c) => c.dataset.drop);
             out[f.name] = {
               keep: (f.value || []).map((a) => a.id).filter((id) => !dropped.includes(id)),
-              added: el && el.files ? [...el.files] : [],
+              // Staged, not el.files: a file input only remembers the last pick.
+              added: [...(atts.staged.get(f.name) || [])],
             };
           } else {
             out[f.name] = el ? el.value.trim() : "";
@@ -1539,6 +1728,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const KEY = "tracker.tasks";
   const DB = "tracker-files", STORE = "blobs";
   const STATUSES = ["To do", "In progress", "Blocked", "Done"];
+  const DEFAULT_ASSIGNEE = "Jim";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -1596,33 +1786,37 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const cur = id ? list.find((t) => t.id === id) : null;
     if (id && !cur) return;
     const projects = (window.TrackerProjectNames ? window.TrackerProjectNames() : []);
-    // Every field is optional: a task with nothing but a number is valid, so
-    // the only thing that stops a save is cancelling the dialog.
-    const nextNo = String(list.reduce((n, t) => Math.max(n, Number(t.no) || 0), 0) + 1);
+    // Every field is optional: a task with nothing filled in at all is valid,
+    // so the only thing that stops a save is cancelling the dialog.
     const values = await window.TrackerUI.formDialog({
       title: cur ? "Edit task" : "New task",
       submitLabel: cur ? "Save changes" : "Add task",
       fields: [
-        { name: "no", label: "Task No.", value: cur ? cur.no : nextNo,
-          help: "Numbered for you; change it if you keep your own numbering." },
+        // Project leads, because it is what the number is followed by in the
+        // table and it is chosen before anything is written.
+        { name: "project", label: "Project", type: "select",
+          options: ["", ...projects, "Other"], value: cur ? cur.project : "",
+          help: "The projects listed on the Overview page." },
         { name: "name", label: "Name of task", value: cur ? (cur.name || "") : "",
-          placeholder: "Short name shown in the table", standardize: true },
+          placeholder: "Short name shown in the table", standardize: true, capitalize: true },
         { name: "description", label: "Detailed description", type: "textarea", rows: 4,
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
-          placeholder: "What needs doing", standardize: true },
+          placeholder: "What needs doing", standardize: true, capitalize: true },
         { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
         { name: "status", label: "Status", type: "select", options: STATUSES,
           value: cur ? cur.status : STATUSES[0] },
-        { name: "assignee", label: "Assignee", value: cur ? cur.assignee : "" },
-        { name: "project", label: "Project", type: "select",
-          options: ["", ...projects, "Other"], value: cur ? cur.project : "" },
-        { name: "linkUrl", label: "Attach a link", value: "", placeholder: "https://…" },
-        { name: "files", label: "Attachments", type: "attachments",
+        // A new task is assigned to Jim unless you say otherwise. Editing shows
+        // the task's own assignee, including a deliberately empty one: a
+        // default that overwrites what you already saved is a different
+        // feature, and a worse one.
+        { name: "assignee", label: "Assignee", value: cur ? (cur.assignee || "") : DEFAULT_ASSIGNEE },
+        { name: "files", label: "Attach an image/file", type: "attachments",
           value: cur ? cur.attachments || [] : [],
-          help: "Files are stored in this browser only." },
+          help: "Paste a screenshot with Ctrl+V, or choose files. Up to five. " +
+                "Stored in this browser only, and never in the backup file." },
       ],
     });
     if (!values) return;
@@ -1630,7 +1824,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const wasDone = cur ? cur.status === "Done" : false;
     const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
     Object.assign(target, {
-      no: values.no, name: values.name, description: values.description, given: values.given,
+      // No "no" here: the number is the task's position, worked out at render.
+      name: values.name, description: values.description, given: values.given,
       due: values.due, ref: values.ref, status: values.status || STATUSES[0],
       assignee: values.assignee, project: values.project,
     });
@@ -1643,9 +1838,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       const aid = "a-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
       kept.push({ id: aid, name: file.name, size: file.size, type: file.type, kind: "file" });
-    }
-    if (values.linkUrl) {
-      kept.push({ id: "l-" + Date.now(), name: values.linkUrl, url: values.linkUrl, kind: "link" });
     }
     target.attachments = kept;
 
@@ -1664,7 +1856,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (log.some((e) => e.taskId === t.id)) return;
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
-      task: t.description || ("Task " + (t.no || "")),
+      task: t.description || t.name || "Task",
       status: "Completed", url: t.ref || "", origin: "task",
     });
     logWrite(log);
@@ -1720,10 +1912,35 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
+  /**
+   * Save an attachment to disk, under the name it was attached with.
+   *
+   * An anchor carrying `download` on a blob URL saves immediately rather than
+   * navigating, which is what makes an attachment behave like a file again
+   * once it is inside IndexedDB.
+   */
+  async function downloadAttachment(id) {
+    const list = load();
+    const meta = list.flatMap((t) => t.attachments || []).find((a) => a.id === id);
+    const blob = await getBlob(id);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (meta && meta.name) || "attachment";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   /* ---------- render ---------- */
   const ROWS_PER_PAGE = 10;
-  const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
-  let openRow = null;   // the task expanded in place
+  // The table carries what you scan by; everything else is in the pane beside
+  // it. A column removed from here must stay reachable there, which the guard
+  // asserts field by field.
+  const COLUMNS = ["Task No.", "Name of task", "Project"];
+  let openRow = null;   // the task shown in the pane
 
   /** Every link on a task, wherever it was entered. */
   function taskLinks(t) {
@@ -1743,20 +1960,50 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     ).join(" ");
   }
 
+  /**
+   * One attachment, as View and Download.
+   *
+   * Two actions rather than one, because they are different jobs: View opens
+   * the blob in a tab to look at, Download saves it under its own name. The
+   * bytes are in IndexedDB either way, so both are resolved on click - a blob
+   * URL minted at render time for every attachment on the page would leak one
+   * per row per render.
+   *
+   * Links attached under the old "Attach a link" field are still shown. That
+   * field is gone, but records that carry one are not, and a saved link that
+   * stopped rendering would read as lost data.
+   */
   function attachmentChip(a) {
-    return a.kind === "link"
-      ? `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">link</a>`
-      : `<button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">${esc(a.name)}</button>`;
+    if (a.kind === "link") {
+      return `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name || "link")} ↗</a>`;
+    }
+    const img = /^image\//.test(a.type || "");
+    return `<span class="attitem">
+        <button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">
+          ${img ? "🖼 " : ""}${esc(a.name)}</button>
+        <button class="tag attdl" data-attdl="${esc(a.id)}" title="Download ${esc(a.name)}">Download</button>
+      </span>`;
   }
 
-  /** The expanded detail shown when a row is clicked. */
   /**
-   * The clicked task opens its OWN table of that task's details, one labelled
-   * row per field, rather than a loose block. Every field is listed even when
-   * empty, so what is missing is as visible as what is filled in.
+   * The clicked task fills the pane beside the table: its own table of that
+   * task's details, one labelled row per field, rather than a loose block.
+   * Every field is listed even when empty, so what is missing is as visible as
+   * what is filled in - and since the table itself now shows three columns,
+   * this is the only place the rest of them exist.
    */
-  function detailRow(t) {
+  function detailPane(t) {
+    if (!t) {
+      return `<aside class="taskpane empty-pane">
+          <div class="empty">Click a task to see everything on it.</div>
+        </aside>`;
+    }
+    return `<aside class="taskpane">${detailBody(t)}</aside>`;
+  }
+
+  function detailBody(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
+    const shots = (t.attachments || []).filter((a) => /^image\//.test(a.type || ""));
     const dash = `<span class="tag dead">—</span>`;
     const val = (v) => (v ? esc(v) : dash);
     const rows = [
@@ -1774,20 +2021,31 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       ["Assignee", val(t.assignee)],
       ["Attachments", atts || dash],
     ];
-    return `<tr class="detail"><td colspan="${COLUMNS.length}">
-        <div class="taskdetail">
+    // Images get a strip of their own above the list. A thumbnail you can
+    // click is how you tell one screenshot from four, which a row of filenames
+    // never does. The src is filled in after render, since the bytes live in
+    // IndexedDB and reading them is asynchronous.
+    if (shots.length) {
+      rows.splice(rows.length - 1, 0, ["Images", shots.map((a) =>
+        `<button class="shot" data-att="${esc(a.id)}" title="${esc(a.name)}">
+           <img data-shot="${esc(a.id)}" alt="${esc(a.name)}">
+         </button>`).join("")]);
+    }
+    return `<div class="taskdetail">
+          <div class="panehead">
+            <h3>${t.name ? esc(t.name) : "Task " + esc(t.no || "")}</h3>
+            <div class="row">
+              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
+              ${t.status === "Done" ? "" :
+                `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
+            </div>
+          </div>
           <div class="tablewrap"><table class="detailtable">
             <tbody>${rows.map(([k, v]) =>
               `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
           </table></div>
-          <div class="row">
-            ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
-            ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
-            ${t.status === "Done" ? "" :
-              `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
-          </div>
-        </div>
-      </td></tr>`;
+        </div>`;
   }
 
   function taskRow(t) {
@@ -1798,41 +2056,86 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>
         <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>
-        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}</td>
-        <td>${t.given ? esc(t.given) : dash}</td>
-        <td>${t.due ? esc(t.due) : dash}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
-        <td>${refCell(t)}</td>
-      </tr>${openRow === t.id ? detailRow(t) : ""}`;
+        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
+          overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
+      </tr>`;
+  }
+
+  /**
+   * The number in the Task No. column.
+   *
+   * It is the task's position in creation order, worked out here and attached
+   * to this render's own copies - never stored. It used to be an editable
+   * field pre-filled with max+1, which is how a list came to read 1, 2, 3, 4,
+   * 1: nothing checked what you typed. Derived, it cannot collide, cannot be
+   * edited into a duplicate, and closes its own gaps when a task is deleted.
+   *
+   * Attaching it as `no` rather than keeping a separate map is deliberate:
+   * sorting, searching and the detail table all read fields off the task, so
+   * they keep working untouched. load() parses fresh objects on every call, so
+   * this cannot leak back into storage.
+   */
+  function numbered(list) {
+    list.forEach((t, i) => { t.no = String(i + 1); });
+    return list;
   }
 
   function view(q) {
-    const all = load();
+    const all = numbered(load());
     const rows = window.TrackerUI.sortRows("tasks",
       all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
+    // The pane's thumbnails need the DOM this string becomes, so they are
+    // filled on the next tick rather than here.
+    setTimeout(paintShots, 0);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Click a row to see its description. Tasks are stored in this browser only.</p>
+        Click a task to see everything on it, beside the list.
+        Tasks are stored in this browser only.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
-        ? `<div class="tablewrap"><table class="tasktable">
-             <thead><tr>
-               ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
-               ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-               ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
-               ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[3])}
-               ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[4])}
-               <th>${COLUMNS[5]}</th>
-             </tr></thead>
-             <tbody>${slice.map(taskRow).join("")}</tbody>
-           </table></div>${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}`
+        ? `<div class="tasksplit">
+             <div class="tasklist">
+               <div class="tablewrap"><table class="tasktable">
+                 <thead><tr>
+                   ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
+                   ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
+                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                 </tr></thead>
+                 <tbody>${slice.map(taskRow).join("")}</tbody>
+               </table></div>
+               ${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}
+             </div>
+             ${detailPane(all.find((t) => t.id === openRow) || null)}
+           </div>`
         : `<div class="empty">No tasks yet.</div>`}`;
+  }
+
+  /**
+   * Fill in the thumbnails once the pane is on screen.
+   *
+   * The bytes are in IndexedDB, so a src cannot be written during render. Each
+   * blob URL is revoked when the pane is replaced, which is every render - a
+   * task list left open would otherwise hold one URL per image per click.
+   */
+  let shotUrls = [];
+  function paintShots() {
+    for (const u of shotUrls) URL.revokeObjectURL(u);
+    shotUrls = [];
+    for (const img of document.querySelectorAll("img[data-shot]")) {
+      getBlob(img.dataset.shot).then((blob) => {
+        if (!blob || !img.isConnected) return;
+        const u = URL.createObjectURL(blob);
+        shotUrls.push(u);
+        img.src = u;
+      }).catch(() => { /* a missing blob simply shows no thumbnail */ });
+    }
   }
 
   /* ---------- wiring ---------- */
@@ -1851,6 +2154,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
     const rm = e.target.closest('[data-remove^="task:"]');
     if (rm) return removeTask(window.TrackerUI.actionId(rm, "remove"));
+    const dl = e.target.closest("[data-attdl]");
+    if (dl) return downloadAttachment(dl.dataset.attdl);
     const att = e.target.closest("[data-att]");
     if (att) return openAttachment(att.dataset.att);
   });
@@ -3009,7 +3314,26 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * a finished engagement comes back by flipping one flag.
    */
   const activeProjects = () => state.data.projects.filter((p) => p.active !== false);
-  window.TrackerProjectNames = () => activeProjects().map((p) => p.name);
+
+  /**
+   * The projects, as the page itself lists them.
+   *
+   * This used to return the seeded JSON alone, which is not what anybody sees:
+   * TrackerLinks.groups() is what renders the sidebar and the tiles, and it
+   * also honours the projects you create, the ones you delete and the ones you
+   * rename. Reading a different list here produced three faults from one line -
+   * a created project missing from the task dialog, a deleted one still
+   * offered, and a renamed one offered under its old name - and only the first
+   * was ever noticed.
+   *
+   * The JSON list stays as the fallback for the moment before links.js has
+   * defined itself, rather than returning nothing and rendering an empty
+   * dropdown that looks like "you have no projects".
+   */
+  window.TrackerProjectNames = () =>
+    (window.TrackerLinks && window.TrackerLinks.groups)
+      ? window.TrackerLinks.groups().map((g) => g.name)
+      : activeProjects().map((p) => p.name);
 
   function allLinks() {
     const out = [];

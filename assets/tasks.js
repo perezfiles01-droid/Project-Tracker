@@ -10,6 +10,7 @@
   const KEY = "tracker.tasks";
   const DB = "tracker-files", STORE = "blobs";
   const STATUSES = ["To do", "In progress", "Blocked", "Done"];
+  const DEFAULT_ASSIGNEE = "Jim";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -67,33 +68,37 @@
     const cur = id ? list.find((t) => t.id === id) : null;
     if (id && !cur) return;
     const projects = (window.TrackerProjectNames ? window.TrackerProjectNames() : []);
-    // Every field is optional: a task with nothing but a number is valid, so
-    // the only thing that stops a save is cancelling the dialog.
-    const nextNo = String(list.reduce((n, t) => Math.max(n, Number(t.no) || 0), 0) + 1);
+    // Every field is optional: a task with nothing filled in at all is valid,
+    // so the only thing that stops a save is cancelling the dialog.
     const values = await window.TrackerUI.formDialog({
       title: cur ? "Edit task" : "New task",
       submitLabel: cur ? "Save changes" : "Add task",
       fields: [
-        { name: "no", label: "Task No.", value: cur ? cur.no : nextNo,
-          help: "Numbered for you; change it if you keep your own numbering." },
+        // Project leads, because it is what the number is followed by in the
+        // table and it is chosen before anything is written.
+        { name: "project", label: "Project", type: "select",
+          options: ["", ...projects, "Other"], value: cur ? cur.project : "",
+          help: "The projects listed on the Overview page." },
         { name: "name", label: "Name of task", value: cur ? (cur.name || "") : "",
-          placeholder: "Short name shown in the table", standardize: true },
+          placeholder: "Short name shown in the table", standardize: true, capitalize: true },
         { name: "description", label: "Detailed description", type: "textarea", rows: 4,
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
-          placeholder: "What needs doing", standardize: true },
+          placeholder: "What needs doing", standardize: true, capitalize: true },
         { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
         { name: "status", label: "Status", type: "select", options: STATUSES,
           value: cur ? cur.status : STATUSES[0] },
-        { name: "assignee", label: "Assignee", value: cur ? cur.assignee : "" },
-        { name: "project", label: "Project", type: "select",
-          options: ["", ...projects, "Other"], value: cur ? cur.project : "" },
-        { name: "linkUrl", label: "Attach a link", value: "", placeholder: "https://…" },
-        { name: "files", label: "Attachments", type: "attachments",
+        // A new task is assigned to Jim unless you say otherwise. Editing shows
+        // the task's own assignee, including a deliberately empty one: a
+        // default that overwrites what you already saved is a different
+        // feature, and a worse one.
+        { name: "assignee", label: "Assignee", value: cur ? (cur.assignee || "") : DEFAULT_ASSIGNEE },
+        { name: "files", label: "Attach an image/file", type: "attachments",
           value: cur ? cur.attachments || [] : [],
-          help: "Files are stored in this browser only." },
+          help: "Paste a screenshot with Ctrl+V, or choose files. Up to five. " +
+                "Stored in this browser only, and never in the backup file." },
       ],
     });
     if (!values) return;
@@ -101,7 +106,8 @@
     const wasDone = cur ? cur.status === "Done" : false;
     const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
     Object.assign(target, {
-      no: values.no, name: values.name, description: values.description, given: values.given,
+      // No "no" here: the number is the task's position, worked out at render.
+      name: values.name, description: values.description, given: values.given,
       due: values.due, ref: values.ref, status: values.status || STATUSES[0],
       assignee: values.assignee, project: values.project,
     });
@@ -114,9 +120,6 @@
       const aid = "a-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
       kept.push({ id: aid, name: file.name, size: file.size, type: file.type, kind: "file" });
-    }
-    if (values.linkUrl) {
-      kept.push({ id: "l-" + Date.now(), name: values.linkUrl, url: values.linkUrl, kind: "link" });
     }
     target.attachments = kept;
 
@@ -135,7 +138,7 @@
     if (log.some((e) => e.taskId === t.id)) return;
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
-      task: t.description || ("Task " + (t.no || "")),
+      task: t.description || t.name || "Task",
       status: "Completed", url: t.ref || "", origin: "task",
     });
     logWrite(log);
@@ -191,10 +194,35 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
+  /**
+   * Save an attachment to disk, under the name it was attached with.
+   *
+   * An anchor carrying `download` on a blob URL saves immediately rather than
+   * navigating, which is what makes an attachment behave like a file again
+   * once it is inside IndexedDB.
+   */
+  async function downloadAttachment(id) {
+    const list = load();
+    const meta = list.flatMap((t) => t.attachments || []).find((a) => a.id === id);
+    const blob = await getBlob(id);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (meta && meta.name) || "attachment";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   /* ---------- render ---------- */
   const ROWS_PER_PAGE = 10;
-  const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
-  let openRow = null;   // the task expanded in place
+  // The table carries what you scan by; everything else is in the pane beside
+  // it. A column removed from here must stay reachable there, which the guard
+  // asserts field by field.
+  const COLUMNS = ["Task No.", "Name of task", "Project"];
+  let openRow = null;   // the task shown in the pane
 
   /** Every link on a task, wherever it was entered. */
   function taskLinks(t) {
@@ -214,20 +242,50 @@
     ).join(" ");
   }
 
+  /**
+   * One attachment, as View and Download.
+   *
+   * Two actions rather than one, because they are different jobs: View opens
+   * the blob in a tab to look at, Download saves it under its own name. The
+   * bytes are in IndexedDB either way, so both are resolved on click - a blob
+   * URL minted at render time for every attachment on the page would leak one
+   * per row per render.
+   *
+   * Links attached under the old "Attach a link" field are still shown. That
+   * field is gone, but records that carry one are not, and a saved link that
+   * stopped rendering would read as lost data.
+   */
   function attachmentChip(a) {
-    return a.kind === "link"
-      ? `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">link</a>`
-      : `<button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">${esc(a.name)}</button>`;
+    if (a.kind === "link") {
+      return `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name || "link")} ↗</a>`;
+    }
+    const img = /^image\//.test(a.type || "");
+    return `<span class="attitem">
+        <button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">
+          ${img ? "🖼 " : ""}${esc(a.name)}</button>
+        <button class="tag attdl" data-attdl="${esc(a.id)}" title="Download ${esc(a.name)}">Download</button>
+      </span>`;
   }
 
-  /** The expanded detail shown when a row is clicked. */
   /**
-   * The clicked task opens its OWN table of that task's details, one labelled
-   * row per field, rather than a loose block. Every field is listed even when
-   * empty, so what is missing is as visible as what is filled in.
+   * The clicked task fills the pane beside the table: its own table of that
+   * task's details, one labelled row per field, rather than a loose block.
+   * Every field is listed even when empty, so what is missing is as visible as
+   * what is filled in - and since the table itself now shows three columns,
+   * this is the only place the rest of them exist.
    */
-  function detailRow(t) {
+  function detailPane(t) {
+    if (!t) {
+      return `<aside class="taskpane empty-pane">
+          <div class="empty">Click a task to see everything on it.</div>
+        </aside>`;
+    }
+    return `<aside class="taskpane">${detailBody(t)}</aside>`;
+  }
+
+  function detailBody(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
+    const shots = (t.attachments || []).filter((a) => /^image\//.test(a.type || ""));
     const dash = `<span class="tag dead">—</span>`;
     const val = (v) => (v ? esc(v) : dash);
     const rows = [
@@ -245,20 +303,31 @@
       ["Assignee", val(t.assignee)],
       ["Attachments", atts || dash],
     ];
-    return `<tr class="detail"><td colspan="${COLUMNS.length}">
-        <div class="taskdetail">
+    // Images get a strip of their own above the list. A thumbnail you can
+    // click is how you tell one screenshot from four, which a row of filenames
+    // never does. The src is filled in after render, since the bytes live in
+    // IndexedDB and reading them is asynchronous.
+    if (shots.length) {
+      rows.splice(rows.length - 1, 0, ["Images", shots.map((a) =>
+        `<button class="shot" data-att="${esc(a.id)}" title="${esc(a.name)}">
+           <img data-shot="${esc(a.id)}" alt="${esc(a.name)}">
+         </button>`).join("")]);
+    }
+    return `<div class="taskdetail">
+          <div class="panehead">
+            <h3>${t.name ? esc(t.name) : "Task " + esc(t.no || "")}</h3>
+            <div class="row">
+              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
+              ${t.status === "Done" ? "" :
+                `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
+            </div>
+          </div>
           <div class="tablewrap"><table class="detailtable">
             <tbody>${rows.map(([k, v]) =>
               `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
           </table></div>
-          <div class="row">
-            ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
-            ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
-            ${t.status === "Done" ? "" :
-              `${window.TrackerUI.iconButton("done", "Mark done", `data-done="${esc(t.id)}"`)}`}
-          </div>
-        </div>
-      </td></tr>`;
+        </div>`;
   }
 
   function taskRow(t) {
@@ -269,41 +338,86 @@
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>
         <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>
-        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}</td>
-        <td>${t.given ? esc(t.given) : dash}</td>
-        <td>${t.due ? esc(t.due) : dash}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
-        <td>${refCell(t)}</td>
-      </tr>${openRow === t.id ? detailRow(t) : ""}`;
+        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
+          overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
+      </tr>`;
+  }
+
+  /**
+   * The number in the Task No. column.
+   *
+   * It is the task's position in creation order, worked out here and attached
+   * to this render's own copies - never stored. It used to be an editable
+   * field pre-filled with max+1, which is how a list came to read 1, 2, 3, 4,
+   * 1: nothing checked what you typed. Derived, it cannot collide, cannot be
+   * edited into a duplicate, and closes its own gaps when a task is deleted.
+   *
+   * Attaching it as `no` rather than keeping a separate map is deliberate:
+   * sorting, searching and the detail table all read fields off the task, so
+   * they keep working untouched. load() parses fresh objects on every call, so
+   * this cannot leak back into storage.
+   */
+  function numbered(list) {
+    list.forEach((t, i) => { t.no = String(i + 1); });
+    return list;
   }
 
   function view(q) {
-    const all = load();
+    const all = numbered(load());
     const rows = window.TrackerUI.sortRows("tasks",
       all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q)));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
+    // The pane's thumbnails need the DOM this string becomes, so they are
+    // filled on the next tick rather than here.
+    setTimeout(paintShots, 0);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Click a row to see its description. Tasks are stored in this browser only.</p>
+        Click a task to see everything on it, beside the list.
+        Tasks are stored in this browser only.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
-        ? `<div class="tablewrap"><table class="tasktable">
-             <thead><tr>
-               ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
-               ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-               ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
-               ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[3])}
-               ${window.TrackerUI.sortHeader("tasks", "due", COLUMNS[4])}
-               <th>${COLUMNS[5]}</th>
-             </tr></thead>
-             <tbody>${slice.map(taskRow).join("")}</tbody>
-           </table></div>${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}`
+        ? `<div class="tasksplit">
+             <div class="tasklist">
+               <div class="tablewrap"><table class="tasktable">
+                 <thead><tr>
+                   ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
+                   ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
+                   ${window.TrackerUI.sortHeader("tasks", "project", COLUMNS[2])}
+                 </tr></thead>
+                 <tbody>${slice.map(taskRow).join("")}</tbody>
+               </table></div>
+               ${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}
+             </div>
+             ${detailPane(all.find((t) => t.id === openRow) || null)}
+           </div>`
         : `<div class="empty">No tasks yet.</div>`}`;
+  }
+
+  /**
+   * Fill in the thumbnails once the pane is on screen.
+   *
+   * The bytes are in IndexedDB, so a src cannot be written during render. Each
+   * blob URL is revoked when the pane is replaced, which is every render - a
+   * task list left open would otherwise hold one URL per image per click.
+   */
+  let shotUrls = [];
+  function paintShots() {
+    for (const u of shotUrls) URL.revokeObjectURL(u);
+    shotUrls = [];
+    for (const img of document.querySelectorAll("img[data-shot]")) {
+      getBlob(img.dataset.shot).then((blob) => {
+        if (!blob || !img.isConnected) return;
+        const u = URL.createObjectURL(blob);
+        shotUrls.push(u);
+        img.src = u;
+      }).catch(() => { /* a missing blob simply shows no thumbnail */ });
+    }
   }
 
   /* ---------- wiring ---------- */
@@ -322,6 +436,8 @@
     }
     const rm = e.target.closest('[data-remove^="task:"]');
     if (rm) return removeTask(window.TrackerUI.actionId(rm, "remove"));
+    const dl = e.target.closest("[data-attdl]");
+    if (dl) return downloadAttachment(dl.dataset.attdl);
     const att = e.target.closest("[data-att]");
     if (att) return openAttachment(att.dataset.att);
   });
