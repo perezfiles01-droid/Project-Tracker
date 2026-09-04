@@ -254,9 +254,10 @@ ok("Daily activity starts empty — the 34 workbook rows are gone",
 await page.click('button[data-route="todo"]');
 await page.waitForSelector("table.tasktable");
 await page.click("tr.taskrow td:nth-child(2)");
-await page.waitForSelector("[data-done]");
-await page.click("[data-done]");
-await page.waitForTimeout(150);
+// A task is finished from the Status dropdown in the pane now, not a tick.
+await page.waitForSelector("[data-status]");
+await page.selectOption("[data-status]", "Done");
+await page.waitForTimeout(250);
 await page.click('button[data-route="daily"]');
 await page.waitForTimeout(150);
 ok("finishing a task logs exactly one activity",

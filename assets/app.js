@@ -19,9 +19,13 @@
   function statusTag(s) {
     if (!s) return "";
     const v = s.toLowerCase();
-    const cls = v.includes("complete") ? "ok"
+    // "done" is here because the task statuses and the activity statuses are
+    // one list now. Without it every completed activity rendered as a
+    // colourless tag - the list would have unified and the colour would have
+    // quietly stopped meaning anything.
+    const cls = v.includes("complete") || v.includes("done") ? "ok"
       : v.includes("progress") ? "info"
-      : v.includes("pending") || v.includes("block") ? "warn" : "";
+      : v.includes("pending") || v.includes("block") || v.includes("to do") ? "warn" : "";
     return `<span class="tag ${cls}">${esc(s)}</span>`;
   }
 
@@ -392,6 +396,11 @@
   });
   applyTheme(themeMode());
   window.TrackerTheme = { applyTheme, themeMode };
+  /* statusTag colours by substring, so it is the piece most likely to fall out
+     of step with the status list without anything looking wrong. Exported so a
+     check can put every status through it rather than inferring the colour
+     from whatever happens to be on screen. */
+  window.TrackerApp = { statusTag };
 
   window.addEventListener("hashchange", () => {
     const r = location.hash.slice(1) || "overview";
