@@ -25,11 +25,8 @@ the machine. Actively maintained by a real company rather than a single
 volunteer, which matters for something you intend to still be working in a
 year.
 
-The package manifest exposes several entry points, including `./slimBinary`,
-which is the smaller WebAssembly build intended for shipping to a browser. The
-npm tarball unpacks to about 74 MB, but that includes every build variant and
-type definitions. **The size a browser actually downloads was never measured**
-and must be checked before committing to this.
+The npm tarball unpacks to about 74 MB, but that includes every build variant
+and its type definitions, so it is not what a browser would fetch.
 
 **Confirmed against the package itself, September 2026.** The published
 `harper.js` 2.7.0 was downloaded and its type definitions read. The complete
