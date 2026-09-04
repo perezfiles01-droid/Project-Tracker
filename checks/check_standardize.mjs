@@ -71,6 +71,26 @@ for (const p of providers) {
   ok(`${p.id}: its key is declared as a setting`, settingsBlock.includes(p.keySetting), p.keySetting);
 }
 
+/* --- the Settings dialog reads in the order it was asked for ---
+   Engine, then which models to show, then Model, then the key at the bottom.
+   Every handler is delegated from document or bound by id, so nothing breaks
+   when these move - which is exactly why a shuffle would go unnoticed. */
+const fieldOrder = await page.evaluate(() => {
+  const want = ["aiEngine", "aiTier", "aiModel", "aiKey"];
+  const rows = [...document.querySelectorAll("#settingsModal .field")];
+  return want
+    .map((id) => {
+      const el = document.getElementById(id);
+      const row = el && el.closest(".field");
+      return [id, row ? rows.indexOf(row) : -1];
+    })
+    .filter(([, i]) => i >= 0)
+    .sort((a, b) => a[1] - b[1])
+    .map(([id]) => id);
+});
+ok("Settings reads Engine, tier, Model, then the key last",
+   fieldOrder.join(" > ") === "aiEngine > aiTier > aiModel > aiKey", fieldOrder.join(" > "));
+
 /** Start clean, with the given engine and key in place. */
 async function openTask({ engine = null, key = "test-key" } = {}) {
   await page.goto(url, { waitUntil: "load" });

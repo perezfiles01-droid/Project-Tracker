@@ -490,11 +490,6 @@ th.emailhead .accountpick{
       <small id="aiEngineHelp"></small>
     </div>
     <div class="field">
-      <label for="aiKey">API key</label>
-      <input id="aiKey" type="password" placeholder="Paste your key" spellcheck="false" autocomplete="off">
-      <small id="aiKeyHelp"></small>
-    </div>
-    <div class="field">
       <label>Which models to show</label>
       <div id="aiTier" class="radios">
         <label><input type="radio" name="aiTier" value="free" checked> Free tier</label>
@@ -511,6 +506,11 @@ th.emailhead .accountpick{
       <select id="aiModel"></select>
       <small id="aiModelHelp">Saved per engine, and grouped by what each model
         is for. The list is read from your own account once a key is in place.</small>
+    </div>
+    <div class="field">
+      <label for="aiKey">API key</label>
+      <input id="aiKey" type="password" placeholder="Paste your key" spellcheck="false" autocomplete="off">
+      <small id="aiKeyHelp"></small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
