@@ -53,3 +53,5 @@ jobs:
         run: node checks/check_projects.mjs
       - name: Every delete asks the same question
         run: node checks/check_delete_uniform.mjs
+      - name: The Projects page controls hold
+        run: node checks/check_project_actions.mjs

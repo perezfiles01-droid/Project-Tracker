@@ -347,19 +347,31 @@ table.detailtable .detaildesc{white-space:pre-wrap}
 
 /* ---------- project tiles ---------- */
 .ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:stretch}
+/* The list footer: pager left, create button right. The button is outside
+   the pager on purpose - a pager renders nothing for a single page, and a
+   button parked inside it would vanish with it. */
+.listfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  flex-wrap:wrap;margin-top:14px}
+.listfoot-pager{flex:1 1 auto;min-width:0}
+.listfoot-pager .pager{margin-top:0}
+.listfoot-act{flex:0 0 auto;margin-left:auto}
+
+/* The whole tile is the button that opens the project. It used to be a div
+   wrapping a small open-target and two icon actions; with those actions
+   moved above the list there is nothing else in it to aim at. */
 .ptile{
-  display:flex;align-items:center;gap:8px;background:var(--panel);
-  border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;text-align:left;cursor:pointer;font:inherit;color:inherit;
   transition:border-color .15s,transform .15s;
 }
 .ptile:hover{border-color:var(--accent);transform:translateY(-2px)}
 .ptile.picked{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
-.ptileopen{
-  flex:1;min-width:0;text-align:left;background:none;border:0;cursor:pointer;
-  color:inherit;font:inherit;padding:0;
-}
-.ptileopen .t{font-weight:600;font-size:16px;word-break:break-word}
-.ptileacts{display:flex;gap:6px;flex:0 0 auto}
+.ptile .t{font-weight:600;font-size:16px;word-break:break-word;color:var(--text)}
+/* The description under a project's name: present when there is one, and
+   never taking the name's place when there is not. */
+.ptile .psub{font-size:12.5px;line-height:1.45;color:var(--dim);word-break:break-word}
+
 @media (max-width:900px){ .ptiles{grid-template-columns:1fr} }
 
 /* ---------- email access filter, in its own column header ---------- */
@@ -1867,26 +1879,37 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const list = groups().filter((g) => !q || g.name.toLowerCase().includes(q));
     const cur = window.TrackerUI.pageIndex("projects", list.length, PROJ_PER_PAGE);
     const slice = list.slice(cur * PROJ_PER_PAGE, (cur + 1) * PROJ_PER_PAGE);
-    const ib = window.TrackerUI.iconButton;
 
-    // Independent tiles rather than cells of one table: each project is its
-    // own thing, so it gets its own card and its own controls. Three across
-    // and six to a page, with the seventh paging - unchanged.
+    // The whole tile opens the project. It used to carry a pencil and a bin
+    // of its own, which meant seven projects put fourteen controls on the
+    // page for two actions; those are one pair of buttons above the list now,
+    // and the tile is a single large target with nothing to miss.
     const tiles = slice.map((g) => `
-      <div class="ptile${selected === g.key ? " picked" : ""}">
-        <button class="ptileopen" data-pick="${esc(g.key)}">
-          <span class="t">${esc(g.name)}</span>
-        </button>
-        <div class="ptileacts">
-          ${ib("rename", "Rename project", `data-edit="project:${esc(g.key)}"`)}
-          ${ib("remove", "Delete project", `data-remove="project:${esc(g.key)}"`)}
-        </div>
-      </div>`).join("");
+      <button class="ptile${selected === g.key ? " picked" : ""}" data-pick="${esc(g.key)}">
+        <span class="t">${esc(g.name)}</span>
+        ${g.description ? `<span class="psub">${esc(g.description)}</span>` : ""}
+      </button>`).join("");
 
     return `<div class="ptiles">${tiles ||
         `<div class="empty">No project matches that search.</div>`}</div>
-      ${window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE)}`;
+      ${listFoot(window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE),
+                 `<button class="btn primary" data-newproject="1">Create Project</button>`)}`;
   }
+
+  /**
+   * The row under a list: its pager on the left, its create button on the
+   * right.
+   *
+   * The button cannot live beside the pager's own controls, because a pager
+   * renders nothing at all for a single page — park a button there and it
+   * disappears the moment a list gets short enough to fit. This row always
+   * renders; only the pager inside it comes and goes.
+   */
+  const listFoot = (pagerHtml, button) =>
+    `<div class="listfoot">
+       <div class="listfoot-pager">${pagerHtml || ""}</div>
+       <div class="listfoot-act">${button}</div>
+     </div>`;
 
   /** One named table inside a project. */
   function linkTable(projectName, tableName) {
@@ -1963,7 +1986,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       <div class="sectionhead">
         <div class="sectionleft">${searchBox("projects", "Search projects…")}</div>
         <div class="sectiontools">
-          ${window.TrackerUI.iconButton("add", "Add project", `data-newproject="1"`)}
+          <button class="btn" data-projectaction="rename">Rename project</button>
+          <button class="btn" data-projectaction="delete">Delete project</button>
         </div>
       </div>
       ${projectsTable()}
@@ -1971,9 +1995,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <div class="opened">
           <div class="sectionhead">
             <h2 class="page sub">Table of Artifacts</h2>
-            ${window.TrackerUI.iconButton("add", "New table", `data-newtable="${esc(g.name)}"`)}
           </div>
           ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
+          ${listFoot("", `<button class="btn primary"
+             data-newtable="${esc(g.name)}">Create Table</button>`)}
         </div>` : ""}`;
   }
 
@@ -2047,6 +2072,38 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     window.TrackerRender();
   }
 
+  /**
+   * Rename and delete used to be a pencil and a bin on every tile. They are
+   * one pair of buttons above the list now, so the project is chosen inside
+   * the dialog instead of by which tile you clicked. Whatever is on screen -
+   * the current page of tiles, a search - does not limit the choice: the
+   * picker offers every project there is.
+   */
+  async function pickProject(action) {
+    const list = groups();
+    if (!list.length) {
+      await window.TrackerUI.confirmDialog({
+        title: action === "rename" ? "Rename project" : "Delete project",
+        intro: "There are no projects yet.", confirmLabel: "OK",
+      });
+      return;
+    }
+    const names = list.map((g) => g.name);
+    const v = await window.TrackerUI.formDialog({
+      title: action === "rename" ? "Rename project" : "Delete project",
+      intro: action === "rename"
+        ? "Choose the project to rename."
+        : "Choose the project to delete. You will be asked to confirm.",
+      submitLabel: action === "rename" ? "Continue" : "Continue",
+      fields: [{ name: "project", label: "Project", type: "select",
+                 options: names, value: names[0] }],
+    });
+    if (!v || !v.project) return;
+    const g = list.find((x) => x.name === v.project);
+    if (!g) return;
+    return action === "rename" ? renameProject(g.key) : deleteProject(g.key);
+  }
+
   async function renameProject(key) {
     const g = groupByKey(key);
     if (!g) return;
@@ -2078,6 +2135,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!yes) return;
     const ps = projectStore();
     ps.added = ps.added.filter((a) => slug(a.name) !== key && a.key !== key);
+    // The tombstone has to name the slug groups() FILTERS on, which is the
+    // name the row was filed under - not the display name. Keyed on the
+    // display name alone, deleting a renamed workbook project wrote a
+    // tombstone nothing matched and the project stayed on the page.
+    for (const n of [g.name, ...originalNames(g.name)]) {
+      if (!ps.hidden.includes(slug(n))) ps.hidden.push(slug(n));
+    }
     if (!ps.hidden.includes(key)) ps.hidden.push(key);
     writeProjects(ps);
     if (selected === key) selected = null;
@@ -2086,6 +2150,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   document.addEventListener("click", (e) => {
     if (e.target.closest("[data-newproject]")) return newProject();
+    const pa = e.target.closest("[data-projectaction]");
+    if (pa) return pickProject(pa.dataset.projectaction);
     const pe = e.target.closest('[data-edit^="project:"]');
     if (pe) return renameProject(window.TrackerUI.actionId(pe, "edit"));
     const pd = e.target.closest('[data-remove^="project:"]');
