@@ -81,8 +81,7 @@ ok("a renamed project keeps its new name",
 const renamed = page.locator(".ptile").filter({ hasText: "Renamed project" }).first();
 await renamed.locator('[data-remove^="project:"]').click();
 await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_confirm", "Renamed project");
-await page.click('[data-fd="save"]');
+await page.click('#formDialog [data-fd="choice"]');
 await page.waitForTimeout(300);
 ok("a deleted project goes",
    !(await page.locator(".ptiles").textContent()).includes("Renamed project"));

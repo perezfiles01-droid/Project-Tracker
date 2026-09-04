@@ -711,7 +711,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * that offers two equal actions rather than one commit. It resolves with
    * the chosen button's value instead of the field values.
    */
-  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null }) {
+  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null,
+                       cancelLabel = null }) {
     const box = ensureHost();
     box.innerHTML = `<div class="box">
         <h3>${esc(title)}</h3>
@@ -722,8 +723,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
             ? choices.map((c) =>
                 `<button class="btn${c.primary ? " primary" : ""}" data-fd="choice"
                          data-value="${esc(c.value)}">${esc(c.label)}</button>`).join("") +
-              `<button class="btn" data-fd="cancel">Close</button>`
-            : `<button class="btn" data-fd="cancel">Cancel</button>
+              `<button class="btn" data-fd="cancel">${esc(cancelLabel || "Close")}</button>`
+            : `<button class="btn" data-fd="cancel">${esc(cancelLabel || "Cancel")}</button>
                <button class="btn primary" data-fd="save">${esc(submitLabel)}</button>`}
         </div>
       </div>`;
@@ -780,6 +781,27 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       box.addEventListener("click", onClick);
     });
   }
+
+  /**
+   * One confirmation for every destructive action in the app.
+   *
+   * Deleting used to mean two different things depending on where you stood:
+   * a project or a table made you retype its name, while a link, an artifact,
+   * a milestone, a task, a log entry and a pinned Drive file went instantly
+   * with nothing asked at all. Six of the eight could be lost to a misplaced
+   * click, and the two that were guarded were guarded so heavily that the
+   * heading being uppercased by CSS needed a note explaining what to type.
+   *
+   * Every one of them comes through here now: say what goes, offer Confirm
+   * and Cancel, resolve true only for Confirm. A delete added later inherits
+   * it by calling this instead of inventing a ninth pattern.
+   */
+  const confirmDialog = ({ title, intro, confirmLabel = "Delete" }) =>
+    formDialog({
+      title, intro, fields: [],
+      choices: [{ value: "confirm", label: confirmLabel, primary: true }],
+      cancelLabel: "Cancel",
+    }).then((r) => !!(r && r.choice === "confirm"));
 
   /* ---------- shared pager ----------
      Lifted out of drive.js, where it was private to that closure while two
@@ -890,7 +912,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
-  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, sortHeader, sortRows, actionId,
                        iconButton, ICONS };
 })();
 
@@ -1053,6 +1075,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const list = load();
     const t = list.find((x) => x.id === id);
     if (!t) return;
+    const n = (t.attachments || []).length;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove task",
+      intro: `Remove "${t.name || "this task"}"?` +
+             (n ? ` Its ${n} attachment${n === 1 ? "" : "s"} go with it.` : ""),
+      confirmLabel: "Remove task",
+    });
+    if (!yes) return;
     for (const a of t.attachments || []) if (a.kind !== "link") await dropBlob(a.id);
     save(list.filter((x) => x.id !== id));
     window.TrackerRender();
@@ -1218,7 +1248,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   /* ---------- activity log, rendered by the Daily activity page ---------- */
   function logAll() { return logRead(); }
-  function logRemove(id) { logWrite(logRead().filter((e) => e.id !== id)); window.TrackerRender(); }
+  async function logRemove(id) {
+    const cur = logRead().find((e) => e.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove activity",
+      intro: `Remove the entry "${String(cur.task || "").slice(0, 60)}" from the log?`,
+      confirmLabel: "Remove entry",
+    });
+    if (!yes) return;
+    logWrite(logRead().filter((e) => e.id !== id));
+    window.TrackerRender();
+  }
   async function logEdit(id) {
     const log = logRead();
     const cur = id ? log.find((e) => e.id === id) : null;
@@ -1383,8 +1424,30 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     window.TrackerRender();
   }
 
-  const removeArtifact = (id) => { write(ART, read(ART).filter((a) => a.id !== id)); window.TrackerRender(); };
-  const removeMilestone = (id) => { write(TL, read(TL).filter((t) => t.id !== id)); window.TrackerRender(); };
+  /** Both removals ask first, through the app's one confirmation dialog. */
+  async function removeArtifact(id) {
+    const cur = read(ART).find((a) => a.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove artifact", intro: `Remove "${cur.name}" from this project?`,
+      confirmLabel: "Remove artifact",
+    });
+    if (!yes) return;
+    write(ART, read(ART).filter((a) => a.id !== id));
+    window.TrackerRender();
+  }
+
+  async function removeMilestone(id) {
+    const cur = read(TL).find((t) => t.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove milestone", intro: `Remove "${cur.name}" from the timeline?`,
+      confirmLabel: "Remove milestone",
+    });
+    if (!yes) return;
+    write(TL, read(TL).filter((t) => t.id !== id));
+    window.TrackerRender();
+  }
 
   /* ---------- render ---------- */
   const dash = `<span class="tag dead">—</span>`;
@@ -2005,16 +2068,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const g = groupByKey(key);
     if (!g) return;
     const n = rowsFor(key).length;
-    const v = await window.TrackerUI.formDialog({
+    const yes = await window.TrackerUI.confirmDialog({
       title: "Delete project",
       intro: `Remove "${g.name}" from the tracker?` +
              (n ? ` Its ${n} link${n === 1 ? "" : "s"} go with it.` : " It has no links.") +
              " Links from the workbook can be brought back by adding the project again.",
-      submitLabel: "Delete project",
-      fields: [{ name: "confirm", label: "Type the project name to confirm", value: "",
-                 placeholder: g.name }],
+      confirmLabel: "Delete project",
     });
-    if (!v || v.confirm.trim().toLowerCase() !== g.name.trim().toLowerCase()) return;
+    if (!yes) return;
     const ps = projectStore();
     ps.added = ps.added.filter((a) => slug(a.name) !== key && a.key !== key);
     if (!ps.hidden.includes(key)) ps.hidden.push(key);
@@ -2057,11 +2118,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const ed = e.target.closest('[data-edit^="link:"]');
     if (ed) return edit(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="link:"]');
-    if (rm) {
-      const row = resolved().find((r) => r.id === window.TrackerUI.actionId(rm, "remove"));
-      if (row) { removeRow(row); window.TrackerRender(); }
-    }
+    if (rm) return removeLink(window.TrackerUI.actionId(rm, "remove"));
   });
+
+  async function removeLink(id) {
+    const row = resolved().find((r) => r.id === id);
+    if (!row) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove link",
+      intro: `Remove "${row.name}" from ${row.table || "this table"}?`,
+      confirmLabel: "Remove link",
+    });
+    if (!yes) return;
+    removeRow(row);
+    window.TrackerRender();
+  }
 
   // Re-rendering replaces the inputs, so focus and caret are restored by hand;
   // without this a section search loses focus after every keystroke.
@@ -2079,20 +2150,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   async function deletePrompt(projectName, tableName) {
     const n = rowsIn(projectName, tableName).length;
-    const v = await window.TrackerUI.formDialog({
+    // Say the cost before it is paid: deleting a table takes its links too,
+    // and a workbook link removed here does not come back on reload.
+    const yes = await window.TrackerUI.confirmDialog({
       title: "Delete table",
-      // Say the cost before it is paid: deleting a table takes its links too,
-      // and a workbook link removed here does not come back on reload.
       intro: `Delete "${tableName}" from ${projectName}?` +
              (n ? ` Its ${n} link${n === 1 ? "" : "s"} will be removed with it.` : " It is empty."),
-      submitLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
-      fields: [{ name: "confirm", label: "Type the table name to confirm", value: "",
-                 placeholder: tableName,
-                 help: "Case does not matter — the heading is shown in capitals." }],
+      confirmLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
     });
-    // Compared case-insensitively on purpose: the heading is uppercased by CSS,
-    // so anyone typing what they see would otherwise be refused.
-    if (!v || v.confirm.trim().toLowerCase() !== tableName.trim().toLowerCase()) return;
+    if (!yes) return;
     deleteTable(projectName, tableName);
     window.TrackerRender();
   }
@@ -2620,7 +2686,17 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     window.TrackerRender();
   }
 
-  function unpin(id) { save(saved().filter((l) => l.id !== id)); window.TrackerRender(); }
+  async function unpin(id) {
+    const cur = saved().find((l) => l.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove link", intro: `Remove "${cur.name}" from Google Drive links?`,
+      confirmLabel: "Remove link",
+    });
+    if (!yes) return;
+    save(saved().filter((l) => l.id !== id));
+    window.TrackerRender();
+  }
 
   /**
    * Create or correct a saved link through the shared dialog.

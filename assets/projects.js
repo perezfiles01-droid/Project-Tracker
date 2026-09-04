@@ -125,8 +125,30 @@
     window.TrackerRender();
   }
 
-  const removeArtifact = (id) => { write(ART, read(ART).filter((a) => a.id !== id)); window.TrackerRender(); };
-  const removeMilestone = (id) => { write(TL, read(TL).filter((t) => t.id !== id)); window.TrackerRender(); };
+  /** Both removals ask first, through the app's one confirmation dialog. */
+  async function removeArtifact(id) {
+    const cur = read(ART).find((a) => a.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove artifact", intro: `Remove "${cur.name}" from this project?`,
+      confirmLabel: "Remove artifact",
+    });
+    if (!yes) return;
+    write(ART, read(ART).filter((a) => a.id !== id));
+    window.TrackerRender();
+  }
+
+  async function removeMilestone(id) {
+    const cur = read(TL).find((t) => t.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove milestone", intro: `Remove "${cur.name}" from the timeline?`,
+      confirmLabel: "Remove milestone",
+    });
+    if (!yes) return;
+    write(TL, read(TL).filter((t) => t.id !== id));
+    window.TrackerRender();
+  }
 
   /* ---------- render ---------- */
   const dash = `<span class="tag dead">—</span>`;

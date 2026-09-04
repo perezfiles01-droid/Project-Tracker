@@ -72,8 +72,10 @@ await page.waitForTimeout(400);
 ok("an artifact can be renamed",
    (await page.locator("text=Guard artifact renamed").count()) > 0);
 
-// delete it
+// delete it — every delete in the app now asks once and takes Confirm
 await page.locator('tr:has-text("Guard artifact renamed") [data-remove^="art:"]').first().click();
+await page.waitForSelector("#formDialog .box");
+await page.click('#formDialog [data-fd="choice"]');
 await page.waitForTimeout(400);
 ok("an artifact can be deleted",
    (await page.locator("text=Guard artifact renamed").count()) === 0);

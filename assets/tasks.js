@@ -155,6 +155,14 @@
     const list = load();
     const t = list.find((x) => x.id === id);
     if (!t) return;
+    const n = (t.attachments || []).length;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove task",
+      intro: `Remove "${t.name || "this task"}"?` +
+             (n ? ` Its ${n} attachment${n === 1 ? "" : "s"} go with it.` : ""),
+      confirmLabel: "Remove task",
+    });
+    if (!yes) return;
     for (const a of t.attachments || []) if (a.kind !== "link") await dropBlob(a.id);
     save(list.filter((x) => x.id !== id));
     window.TrackerRender();
@@ -320,7 +328,18 @@
 
   /* ---------- activity log, rendered by the Daily activity page ---------- */
   function logAll() { return logRead(); }
-  function logRemove(id) { logWrite(logRead().filter((e) => e.id !== id)); window.TrackerRender(); }
+  async function logRemove(id) {
+    const cur = logRead().find((e) => e.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove activity",
+      intro: `Remove the entry "${String(cur.task || "").slice(0, 60)}" from the log?`,
+      confirmLabel: "Remove entry",
+    });
+    if (!yes) return;
+    logWrite(logRead().filter((e) => e.id !== id));
+    window.TrackerRender();
+  }
   async function logEdit(id) {
     const log = logRead();
     const cur = id ? log.find((e) => e.id === id) : null;

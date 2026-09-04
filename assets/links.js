@@ -501,16 +501,14 @@
     const g = groupByKey(key);
     if (!g) return;
     const n = rowsFor(key).length;
-    const v = await window.TrackerUI.formDialog({
+    const yes = await window.TrackerUI.confirmDialog({
       title: "Delete project",
       intro: `Remove "${g.name}" from the tracker?` +
              (n ? ` Its ${n} link${n === 1 ? "" : "s"} go with it.` : " It has no links.") +
              " Links from the workbook can be brought back by adding the project again.",
-      submitLabel: "Delete project",
-      fields: [{ name: "confirm", label: "Type the project name to confirm", value: "",
-                 placeholder: g.name }],
+      confirmLabel: "Delete project",
     });
-    if (!v || v.confirm.trim().toLowerCase() !== g.name.trim().toLowerCase()) return;
+    if (!yes) return;
     const ps = projectStore();
     ps.added = ps.added.filter((a) => slug(a.name) !== key && a.key !== key);
     if (!ps.hidden.includes(key)) ps.hidden.push(key);
@@ -553,11 +551,21 @@
     const ed = e.target.closest('[data-edit^="link:"]');
     if (ed) return edit(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="link:"]');
-    if (rm) {
-      const row = resolved().find((r) => r.id === window.TrackerUI.actionId(rm, "remove"));
-      if (row) { removeRow(row); window.TrackerRender(); }
-    }
+    if (rm) return removeLink(window.TrackerUI.actionId(rm, "remove"));
   });
+
+  async function removeLink(id) {
+    const row = resolved().find((r) => r.id === id);
+    if (!row) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove link",
+      intro: `Remove "${row.name}" from ${row.table || "this table"}?`,
+      confirmLabel: "Remove link",
+    });
+    if (!yes) return;
+    removeRow(row);
+    window.TrackerRender();
+  }
 
   // Re-rendering replaces the inputs, so focus and caret are restored by hand;
   // without this a section search loses focus after every keystroke.
@@ -575,20 +583,15 @@
 
   async function deletePrompt(projectName, tableName) {
     const n = rowsIn(projectName, tableName).length;
-    const v = await window.TrackerUI.formDialog({
+    // Say the cost before it is paid: deleting a table takes its links too,
+    // and a workbook link removed here does not come back on reload.
+    const yes = await window.TrackerUI.confirmDialog({
       title: "Delete table",
-      // Say the cost before it is paid: deleting a table takes its links too,
-      // and a workbook link removed here does not come back on reload.
       intro: `Delete "${tableName}" from ${projectName}?` +
              (n ? ` Its ${n} link${n === 1 ? "" : "s"} will be removed with it.` : " It is empty."),
-      submitLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
-      fields: [{ name: "confirm", label: "Type the table name to confirm", value: "",
-                 placeholder: tableName,
-                 help: "Case does not matter — the heading is shown in capitals." }],
+      confirmLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
     });
-    // Compared case-insensitively on purpose: the heading is uppercased by CSS,
-    // so anyone typing what they see would otherwise be refused.
-    if (!v || v.confirm.trim().toLowerCase() !== tableName.trim().toLowerCase()) return;
+    if (!yes) return;
     deleteTable(projectName, tableName);
     window.TrackerRender();
   }

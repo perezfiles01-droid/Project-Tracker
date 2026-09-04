@@ -73,7 +73,8 @@
    * that offers two equal actions rather than one commit. It resolves with
    * the chosen button's value instead of the field values.
    */
-  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null }) {
+  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null,
+                       cancelLabel = null }) {
     const box = ensureHost();
     box.innerHTML = `<div class="box">
         <h3>${esc(title)}</h3>
@@ -84,8 +85,8 @@
             ? choices.map((c) =>
                 `<button class="btn${c.primary ? " primary" : ""}" data-fd="choice"
                          data-value="${esc(c.value)}">${esc(c.label)}</button>`).join("") +
-              `<button class="btn" data-fd="cancel">Close</button>`
-            : `<button class="btn" data-fd="cancel">Cancel</button>
+              `<button class="btn" data-fd="cancel">${esc(cancelLabel || "Close")}</button>`
+            : `<button class="btn" data-fd="cancel">${esc(cancelLabel || "Cancel")}</button>
                <button class="btn primary" data-fd="save">${esc(submitLabel)}</button>`}
         </div>
       </div>`;
@@ -142,6 +143,27 @@
       box.addEventListener("click", onClick);
     });
   }
+
+  /**
+   * One confirmation for every destructive action in the app.
+   *
+   * Deleting used to mean two different things depending on where you stood:
+   * a project or a table made you retype its name, while a link, an artifact,
+   * a milestone, a task, a log entry and a pinned Drive file went instantly
+   * with nothing asked at all. Six of the eight could be lost to a misplaced
+   * click, and the two that were guarded were guarded so heavily that the
+   * heading being uppercased by CSS needed a note explaining what to type.
+   *
+   * Every one of them comes through here now: say what goes, offer Confirm
+   * and Cancel, resolve true only for Confirm. A delete added later inherits
+   * it by calling this instead of inventing a ninth pattern.
+   */
+  const confirmDialog = ({ title, intro, confirmLabel = "Delete" }) =>
+    formDialog({
+      title, intro, fields: [],
+      choices: [{ value: "confirm", label: confirmLabel, primary: true }],
+      cancelLabel: "Cancel",
+    }).then((r) => !!(r && r.choice === "confirm"));
 
   /* ---------- shared pager ----------
      Lifted out of drive.js, where it was private to that closure while two
@@ -252,6 +274,6 @@
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
-  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, sortHeader, sortRows, actionId,
                        iconButton, ICONS };
 })();
