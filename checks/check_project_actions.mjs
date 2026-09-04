@@ -99,6 +99,40 @@ const below = await page.evaluate(() => {
 });
 ok("Create Table sits below the last table", below !== null && below >= 0, `${below}px`);
 
+/* --- a project's description sits under its name and is editable --- */
+await page.goto(url, { waitUntil: "load" });
+await page.waitForSelector(".ptile");
+const subs = await page.locator(".ptile .psub").allTextContents();
+ok("workbook projects show a description under the name", subs.length >= 2, String(subs.length));
+const under = await page.evaluate(() => {
+  const t = document.querySelector(".ptile .t"), s2 = document.querySelector(".ptile .psub");
+  if (!t || !s2) return null;
+  const a = t.getBoundingClientRect(), b = s2.getBoundingClientRect();
+  return { below: b.top >= a.bottom - 1, smaller: parseFloat(getComputedStyle(s2).fontSize)
+             < parseFloat(getComputedStyle(t).fontSize) };
+});
+ok("the description sits below the title", under && under.below, JSON.stringify(under));
+ok("the description reads as a subtitle, not a second title",
+   under && under.smaller);
+
+// It is edited where item 7 asks for it: inside the project's own edit form.
+const target = (await page.locator(".ptile .t").first().textContent()).trim();
+await page.click('[data-projectaction="rename"]');
+await page.waitForSelector("#fd_project");
+await page.selectOption("#fd_project", target);
+await page.click('#formDialog [data-fd="save"]');
+await page.waitForSelector("#fd_description");
+ok("the project form carries a description field", true);
+await page.fill("#fd_description", "A description I typed");
+await page.click('#formDialog [data-fd="save"]');
+await page.waitForTimeout(400);
+ok("an edited description shows under the tile",
+   (await page.locator(".ptiles").textContent()).includes("A description I typed"));
+await page.reload({ waitUntil: "load" });
+await page.waitForSelector(".ptile");
+ok("the description survives a reload",
+   (await page.locator(".ptiles").textContent()).includes("A description I typed"));
+
 /* --- rename through the picker --- */
 await page.goto(url, { waitUntil: "load" });
 await page.waitForSelector(".ptile");

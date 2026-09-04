@@ -15,7 +15,7 @@
   const ADDED = "tracker.userLinks";   // [ {id,project,name,description,account,url} ]
   const DRIVE = "tracker.driveLinks";  // owned by drive.js; shared shape
   const TABLES = "tracker.linkTables"; // [ {id,project,name} ] tables you name yourself
-  const PROJECTS = "tracker.projects"; // { added:[{key,name}], renamed:{key:name}, hidden:[key] }
+  const PROJECTS = "tracker.projects"; // { added, renamed, hidden, desc:{key:text} }
   const PINS = "tracker.linkPins";     // [ id ] links held at the top of their table
 
   const read = (key, fallback) => {
@@ -30,7 +30,8 @@
   const customTables = () => read(TABLES, "[]");
   const projectStore = () => {
     const v = read(PROJECTS, "{}");
-    return { added: v.added || [], renamed: v.renamed || {}, hidden: v.hidden || [] };
+    return { added: v.added || [], renamed: v.renamed || {}, hidden: v.hidden || [],
+             desc: v.desc || {} };
   };
   const writeProjects = (v) => window.TrackerStore.set(PROJECTS, v);
   const writeTables = (a) => window.TrackerStore.set(TABLES, a);
@@ -136,7 +137,8 @@
       .map((name) => ps.renamed[slug(name)] || name)
       .map((name) => {
       const items = rows.filter((r) => r.project === name);
-      return { key: slug(name), name, count: items.length,
+      return { key: slug(name), name, description: describe(name, slug(name)),
+               count: items.length,
                tables: tablesFor(name).length,
                undescribed: items.filter((r) => !r.description).length };
     });
@@ -158,6 +160,24 @@
     }
     if (!names.length) names.push("Links");
     return names;
+  }
+
+  /**
+   * A project's one-line description.
+   *
+   * Yours if you have written one; otherwise the workbook's own blurb, which
+   * GLASS and EDRMS ADB both arrive with and which was previously shown only
+   * once you had already opened the project. A project you added starts with
+   * none, and reads as a plain name until you give it one.
+   */
+  function describe(displayName, key) {
+    const ps = projectStore();
+    if (typeof ps.desc[key] === "string") return ps.desc[key];
+    for (const n of originalNames(displayName)) {
+      const p = window.TrackerState.data.projects.find((x) => x.name === n);
+      if (p && p.blurb) return p.blurb;
+    }
+    return "";
   }
 
   const groupByKey = (key) => groups().find((g) => g.key === key);
@@ -552,16 +572,29 @@
     const g = groupByKey(key);
     if (!g) return;
     const v = await window.TrackerUI.formDialog({
-      title: "Rename project", submitLabel: "Save name",
-      fields: [{ name: "name", label: "Project name", value: g.name }],
+      title: "Edit project", submitLabel: "Save changes",
+      fields: [
+        { name: "name", label: "Project name", value: g.name },
+        { name: "description", label: "Description", type: "textarea", rows: 2,
+          value: g.description || "",
+          placeholder: "One line about what this project is",
+          help: "Shown under the project's name in the list." },
+      ],
     });
-    if (!v || !v.name || v.name === g.name) return;
+    if (!v || !v.name) return;
     const ps = projectStore();
-    const own = ps.added.find((a) => slug(a.name) === key || a.key === key);
-    if (own) own.name = v.name;          // one you added: rename it in place
-    else ps.renamed[key] = v.name;       // a workbook one: overlay the name
+    const renamed = v.name !== g.name;
+    if (renamed) {
+      const own = ps.added.find((a) => slug(a.name) === key || a.key === key);
+      if (own) own.name = v.name;          // one you added: rename it in place
+      else ps.renamed[key] = v.name;       // a workbook one: overlay the name
+    }
+    // Filed under the name it will be READ back under, which is the slug of
+    // the new name: groups() derives every key from the display name.
+    ps.desc[slug(v.name)] = v.description || "";
+    if (renamed) delete ps.desc[key];
     writeProjects(ps);
-    if (selected === key) selected = slug(v.name);
+    if (renamed && selected === key) selected = slug(v.name);
     window.TrackerRender();
   }
 
