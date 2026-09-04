@@ -404,8 +404,7 @@
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks${late ? ` · ${late} overdue` : ""}.
-        Click a task to see everything on it, beside the list.
-        Tasks are stored in this browser only.</p>
+        Click a task to see everything on it, beside the list.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
         <button class="btn primary" data-edit="task:new">New task</button>

@@ -94,6 +94,13 @@ ok("clicking another task shows that one instead",
    second.includes("Second task") && !second.includes("Something to do"),
    second.replace(/\s+/g, " ").slice(0, 70));
 
+/* --- the page does not repeat where things are stored --------------------
+   It was true, and it is still recorded in docs/ and in the Settings copy;
+   what went is a caption on this page, not the knowledge. */
+ok("the lede no longer says tasks are stored in this browser only",
+   !(await page.locator("#view p.lede").first().innerText()).includes("stored in this browser"),
+   await page.locator("#view p.lede").first().innerText());
+
 /* --- the two halves are the same size, both ways round -------------------
    They each took their own height, so a short list sat beside a tall pane and
    a ten-row list sat beside a short one: 130px against 535px, measured. */
