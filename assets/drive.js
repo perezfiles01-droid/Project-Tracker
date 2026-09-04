@@ -303,26 +303,94 @@
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
       $("#clientId").value = window.TrackerStore.getText("tracker.clientId");
       $("#apiKey").value = window.TrackerStore.getText("tracker.apiKey");
-      // The Standardize button's settings live in the same dialog.
-      $("#aiKey").value = window.TrackerStore.getText("tracker.aiKey");
-      const models = (window.TrackerAI && window.TrackerAI.MODELS) || [];
-      const chosen = window.TrackerStore.getText("tracker.aiModel") ||
-                     (window.TrackerAI && window.TrackerAI.DEFAULT_MODEL) || "";
-      $("#aiModel").innerHTML = models.map((m) =>
-        `<option value="${m}"${m === chosen ? " selected" : ""}>${m}</option>`).join("");
+      renderAiSettings();
       $("#settingsModal").hidden = false;
     }
     if (e.target.id === "settingsCancel" || e.target.id === "settingsModal") $("#settingsModal").hidden = true;
     if (e.target.id === "settingsSave") {
       window.TrackerStore.setText("tracker.clientId", $("#clientId").value.trim());
       window.TrackerStore.setText("tracker.apiKey", $("#apiKey").value.trim());
-      window.TrackerStore.setText("tracker.aiKey", $("#aiKey").value.trim());
-      window.TrackerStore.setText("tracker.aiModel", $("#aiModel").value);
+      saveAiSettings();
       $("#settingsModal").hidden = true;
       notice = "Credentials saved in this browser.";
       window.TrackerRender();
     }
   });
+
+  /* ---------- the Standardize engine, in the same dialog ----------
+     Key and model are stored PER ENGINE, so switching engine to look at the
+     other one never wipes the setup you already had. The model list is read
+     from the account rather than baked in here: model names churn, and a
+     stale name is a 404 the reader cannot act on. */
+  const aiCurrentEngine = () => {
+    const chosen = $("#aiEngine") && $("#aiEngine").value;
+    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+    return list.find((p) => p.id === chosen) || list[0];
+  };
+
+  function renderAiSettings() {
+    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+    if (!list.length) return;
+    const chosen = window.TrackerStore.getText("tracker.aiEngine") ||
+                   window.TrackerAI.DEFAULT_ENGINE;
+    $("#aiEngine").innerHTML = list.map((p) =>
+      `<option value="${p.id}"${p.id === chosen ? " selected" : ""}>${p.label}</option>`).join("");
+    showEngine();
+  }
+
+  /** Fill the key, the help and the model list for whichever engine is picked. */
+  function showEngine() {
+    const p = aiCurrentEngine();
+    if (!p) return;
+    $("#aiKey").value = window.TrackerStore.getText(p.keySetting);
+    $("#aiKeyHelp").textContent = p.keyHelp;
+    $("#aiEngineHelp").textContent = p.free
+      ? "Free tier. No card needed."
+      : "Uses purchased credit on that account.";
+    const saved = window.TrackerStore.getText(p.modelSetting) || p.model();
+    $("#aiModel").innerHTML = `<option value="${saved}" selected>${saved}</option>`;
+    loadModels(p, saved);
+  }
+
+  /**
+   * Ask the account which models it can use. A failure here is not worth
+   * shouting about: the saved model stays selected and still works, so the
+   * note says what happened and the dialog carries on.
+   */
+  async function loadModels(p, saved) {
+    if (!p) return;
+    const key = $("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting);
+    if (!key) { $("#aiModelHelp").textContent = "Add a key to see the models it can use."; return; }
+    $("#aiModelHelp").textContent = "Reading the models on that account…";
+    try {
+      const models = await p.listModels(key);
+      if (!models.length) throw new Error("none listed");
+      $("#aiModel").innerHTML = models.map((m) =>
+        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("");
+      if (!models.includes(saved)) $("#aiModel").value = models[0];
+      $("#aiModelHelp").textContent =
+        `${models.length} models on this account. The cheapest and fastest are first.`;
+    } catch (err) {
+      $("#aiModelHelp").textContent = "Could not read the model list (" +
+        (err.message || "failed") + "). Keeping " + saved + ".";
+    }
+  }
+
+  function saveAiSettings() {
+    const p = aiCurrentEngine();
+    if (!p) return;
+    window.TrackerStore.setText("tracker.aiEngine", $("#aiEngine").value);
+    window.TrackerStore.setText(p.keySetting, $("#aiKey").value.trim());
+    window.TrackerStore.setText(p.modelSetting, $("#aiModel").value);
+  }
+
+  document.addEventListener("change", (e) => {
+    if (e.target.id === "aiEngine") showEngine();
+  });
+  // A pasted key should fill the model list without needing a save first.
+  document.addEventListener("blur", (e) => {
+    if (e.target.id === "aiKey") loadModels(aiCurrentEngine(), $("#aiModel").value);
+  }, true);
 
   window.TrackerDrive = {
     view, connect, saved, editLink,

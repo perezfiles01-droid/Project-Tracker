@@ -7,8 +7,10 @@ The question that prompted this: *"can we add a button that fixes the grammar
 in a task's Detailed description, simplifies the thought, and never uses an em
 dash?"*
 
-**Update, same day: it was built.** The Standardize button beside a task's
-name and description is live, using the Claude API. See
+**Update, same day: it was built, and then made free.** The Standardize
+button beside a task's name and description is live. It runs on Google
+Gemini's free tier by default, with Anthropic as a paid alternative, so it
+costs nothing. See [`free-engine.md`](free-engine.md) to set it up. See
 [`api-key-options.md`](api-key-options.md) for how it works and
 `assets/ai.js` for the code. The rest of this folder is kept because the
 reasoning still applies to the next AI request.
@@ -81,6 +83,7 @@ thoughts, and a rewriter argues with them.
 | File | What it holds |
 | --- | --- |
 | `README.md` | This page: the constraint, the split, the recommendation |
+| `free-engine.md` | **Start here to run it for nothing.** The Gemini free tier setup, and what was tested |
 | `no-key-options.md` | Open source projects that run in the browser with no key |
 | `api-key-options.md` | The hosted API route, its verified mechanics and its costs |
 | `evidence.md` | What was actually tested, what was not, and how to re-test |

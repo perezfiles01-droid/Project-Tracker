@@ -42,6 +42,11 @@
       // so it stays out of the backup file exactly like the two above.
       "tracker.aiKey",
       "tracker.aiModel",
+      // Same for the free engine: a key and a model, kept per engine so
+      // switching between them never destroys the other one's setup.
+      "tracker.geminiKey",
+      "tracker.geminiModel",
+      "tracker.aiEngine",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
