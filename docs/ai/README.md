@@ -9,8 +9,8 @@ dash?"*
 
 **Update, same day: it was built, and then made free.** The Standardize
 button beside a task's name and description is live. It runs on Google
-Gemini's free tier by default, with Anthropic as a paid alternative, so it
-costs nothing. See [`free-engine.md`](free-engine.md) to set it up. See
+Gemini's free tier, so it costs nothing. Anthropic was removed once the free
+path worked. See [`free-engine.md`](free-engine.md) to set it up. See
 [`api-key-options.md`](api-key-options.md) for how it works and
 `assets/ai.js` for the code. The rest of this folder is kept because the
 reasoning still applies to the next AI request.

@@ -335,6 +335,11 @@
                    window.TrackerAI.DEFAULT_ENGINE;
     $("#aiEngine").innerHTML = list.map((p) =>
       `<option value="${p.id}"${p.id === chosen ? " selected" : ""}>${p.label}</option>`).join("");
+    // A picker with one option is a control that cannot be used. The row is
+    // hidden rather than removed, so putting a second engine back is one entry
+    // in PROVIDERS and nothing here changes.
+    const row = $("#aiEngine").closest(".field");
+    if (row) row.hidden = list.length < 2;
     showEngine();
   }
 

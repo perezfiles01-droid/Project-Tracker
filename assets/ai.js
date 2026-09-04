@@ -4,11 +4,14 @@
  * same thing. Everything about talking to a model lives here, so ui.js owns
  * the button and knows nothing about who improves the text.
  *
- * Two engines, because the first question anyone asks is what it costs.
- * Gemini is the default: Google AI Studio issues a key with no card and a
- * free tier, so the button costs nothing to run. Anthropic writes better and
- * needs purchased credit. Both are reached the same way, and the button, the
- * Undo and the em dash rule never learn which one answered.
+ * One engine: Google Gemini. AI Studio issues a key with no card and a free
+ * tier, so the button costs nothing to run, which is the whole requirement.
+ * Anthropic was here and was removed once the free path worked; it needed
+ * purchased credit and credit expires a year after purchase.
+ *
+ * PROVIDERS is still a list rather than one hardcoded call. Adding a second
+ * engine back is a new entry with the same four members, and the Settings
+ * dialog shows the Engine picker only when there is more than one to pick.
  *
  * Why raw fetch and not an SDK: this repository has no bundler for its
  * JavaScript. Every file is a plain <script src>, and build_standalone inlines
@@ -145,62 +148,28 @@
     },
   };
 
-  /* ------------------------------------------------------------- Anthropic */
-  const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
-  const ANTHROPIC_MODELS = ["claude-haiku-4-5", "claude-opus-5"];
-
   /**
-   * Which models take output_config.effort.
+   * Move a Google key out of the slot the removed engine used.
    *
-   * Not cosmetic. Haiku 4.5 REJECTS effort with a 400, so sending it to every
-   * model turns a model switch into a broken button. Opus 5 accepts it, and
-   * "low" is right here: a one paragraph rewrite needs no deliberation.
+   * A build served from a stale cache saved keys under tracker.aiKey, because
+   * that was the only engine the code of the day knew about. Anyone who pasted
+   * an AI Studio key during that window has it filed where nothing reads it,
+   * and the button would say "add a key" while a perfectly good key sat in
+   * storage. Moved once, and only when it is unmistakably a Google key and the
+   * Gemini slot is empty, so nothing can be overwritten.
    */
-  const TAKES_EFFORT = (model) => /^claude-(opus|sonnet)-5/.test(model);
-
-  const anthropic = {
-    id: "anthropic",
-    label: "Anthropic Claude (paid credit)",
-    keySetting: "tracker.aiKey",
-    modelSetting: "tracker.aiModel",
-    keyHelp: "console.anthropic.com → API keys. Needs credit on the account.",
-    free: false,
-    key: () => get("tracker.aiKey"),
-    model: () => get("tracker.aiModel") || ANTHROPIC_MODELS[0],
-    listModels: async () => ANTHROPIC_MODELS.slice(),
-
-    async run(text, kind) {
-      const key = anthropic.key();
-      if (!key) throw new Error("Add an Anthropic API key in Settings to use this.");
-      const model = anthropic.model();
-      const res = await send(ANTHROPIC_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "anthropic-version": "2023-06-01",
-          // Without this the browser call is refused before it reaches the API.
-          "anthropic-dangerous-direct-browser-access": "true",
-          "x-api-key": key,
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 2000,
-          ...(TAKES_EFFORT(model) ? { output_config: { effort: "low" } } : {}),
-          system: prompt(kind),
-          messages: [{ role: "user", content: text }],
-        }),
-      }, "Anthropic");
-
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Anthropic"));
-      if (body && body.stop_reason === "refusal") throw new Error("The model declined to rewrite that.");
-      return (Array.isArray(body && body.content) ? body.content : [])
-        .filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-    },
-  };
+  function adopt() {
+    const stale = get("tracker.aiKey");
+    if (!stale || !/^AIza/.test(stale)) return false;
+    if (get("tracker.geminiKey")) return false;
+    window.TrackerStore.setText("tracker.geminiKey", stale);
+    window.TrackerStore.remove("tracker.aiKey");
+    return true;
+  }
+  adopt();
 
   /* -------------------------------------------------------------- dispatch */
-  const PROVIDERS = [gemini, anthropic];
+  const PROVIDERS = [gemini];
   const DEFAULT_ENGINE = gemini.id;
 
   const byId = (id) => PROVIDERS.find((p) => p.id === id);
@@ -225,9 +194,5 @@
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = {
-    standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, TAKES_EFFORT,
-    // Kept so anything asking what Anthropic would be sent still gets it.
-    MODELS: ANTHROPIC_MODELS, DEFAULT_MODEL: ANTHROPIC_MODELS[0],
-  };
+  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt };
 })();

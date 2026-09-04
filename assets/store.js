@@ -40,10 +40,10 @@
       "tracker.apiKey",
       // The Anthropic key for the Standardize button. A setting, not data,
       // so it stays out of the backup file exactly like the two above.
-      "tracker.aiKey",
-      "tracker.aiModel",
-      // Same for the free engine: a key and a model, kept per engine so
-      // switching between them never destroys the other one's setup.
+      // The Standardize engine: a key and a model, kept per engine so putting
+      // a second one back never destroys the first one's setup.
+      // tracker.aiKey and tracker.aiModel belonged to the Anthropic engine and
+      // went with it. TrackerAI.adopt moves a Google key left in that slot.
       "tracker.geminiKey",
       "tracker.geminiModel",
       "tracker.aiEngine",

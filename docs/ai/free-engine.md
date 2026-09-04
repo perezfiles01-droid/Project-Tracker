@@ -1,10 +1,22 @@
 # Running the Standardize button for nothing
 
-The button ships with two engines. Google Gemini is the default because a
-Google AI Studio key is issued with no card and has a free tier, so the
-feature costs nothing to run. Anthropic writes better and spends purchased
-credit. Both are reached the same way, and the button, the Undo and the em
-dash rule never learn which one answered.
+One engine: Google Gemini. An AI Studio key is issued with no card and has a
+free tier, so the feature costs nothing to run.
+
+Anthropic was here first and was removed once the free path worked. It needed
+purchased credit, and credit expires one year after purchase. `PROVIDERS` in
+`assets/ai.js` is still a list rather than one hardcoded call, so putting a
+second engine back is one entry with the same four members; the Settings
+dialog shows the Engine picker only when there is more than one to pick.
+
+## If you used the button before this change
+
+Keys pasted under the old build were saved in the Anthropic slot, because
+that was the only engine the code of the day knew about. `TrackerAI.adopt`
+moves a key that unmistakably belongs to Google (`AIza…`) into the Gemini
+slot on load, once, and only when the Gemini slot is empty. Nothing else is
+touched: a key that is not Google's stays where it is, and one already saved
+is never overwritten.
 
 ## Setting it up, free
 
@@ -81,3 +93,21 @@ one-time credit of about $5, which at Haiku prices is several thousand clicks.
 Reported by search results quoting Anthropic; `anthropic.com` and
 `support.claude.com` were both unreachable from the research environment, so
 check Console → Usage rather than trusting this line.
+
+## The deploy used to be able to serve a stale mix
+
+Worth knowing, because the symptom looked like a code bug and was not.
+
+GitHub Pages revalidates HTML sooner than it revalidates `assets/*.js`. For a
+window after each deploy a returning visitor could get the new `index.html`
+wired to the previous deploy's scripts. It failed silently: no console error,
+no missing file, just controls rendering empty because the code behind them
+was a version older than the markup. It was reproduced exactly by pairing a
+new `index.html` with the previous `drive.js` and `ai.js`.
+
+`scripts/stamp_assets.py` now rewrites every local `.js` and `.css` reference
+to carry the commit, run by the Pages workflow before the artifact is
+uploaded, so a fresh page names URLs the cache has never seen.
+`checks/check_cachebust.mjs` asserts every reference is stamped, that the
+workflow calls the stamper **before** the upload, and that running it twice
+does not double stamp.
