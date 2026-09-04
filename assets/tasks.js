@@ -85,7 +85,12 @@
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
           placeholder: "What needs doing", standardize: true, capitalize: true },
-        { name: "given", label: "Task Given Date", type: "date", value: cur ? cur.given : "" },
+        // Filled in with today for a new task, and only as a default: editing
+        // shows the task's own date, including one deliberately cleared. The
+        // stored key stays `given` - renaming it would blank this column for
+        // every task already saved, which is data loss dressed as a rename.
+        { name: "given", label: "Task Create Date", type: "date",
+          value: cur ? (cur.given || "") : today() },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
         { name: "status", label: "Status", type: "select", options: STATUSES,
@@ -294,7 +299,7 @@
       ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
       ["Description", t.description
         ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
-      ["Task Given Date", val(t.given)],
+      ["Task Create Date", val(t.given)],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
       ["Reference link", t.ref

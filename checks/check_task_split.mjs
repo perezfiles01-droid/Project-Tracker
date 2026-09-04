@@ -76,7 +76,7 @@ ok("the pane sits beside the list, not under it",
 
 /* --- every field the table dropped is still reachable --------------------- */
 const paneText = await page.locator(".taskpane").innerText();
-for (const label of ["Task Given Date", "Due Date", "Reference link", "Status",
+for (const label of ["Task Create Date", "Due Date", "Reference link", "Status",
                      "Assignee", "Description", "Attachments"]) {
   ok(`the pane still carries ${label}`, paneText.includes(label),
      paneText.replace(/\s+/g, " ").slice(0, 70));

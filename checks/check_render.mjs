@@ -474,7 +474,7 @@ ok("clicking the task opens a detail TABLE",
    String(await page.locator("table.detailtable").count()));
 const labels = await page.$$eval("table.detailtable th", (ts) => ts.map((t) => t.textContent.trim()));
 for (const want of ["Task No.", "Name of task", "Project", "Description",
-                    "Task Given Date", "Due Date", "Reference link", "Status"]) {
+                    "Task Create Date", "Due Date", "Reference link", "Status"]) {
   ok(`the detail table lists "${want}"`, labels.includes(want), labels.join(" · "));
 }
 ok("the detail table shows the description",

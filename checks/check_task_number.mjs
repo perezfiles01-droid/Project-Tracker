@@ -133,6 +133,45 @@ ok("editing a task keeps the assignee it has",
 await page.click('#formDialog [data-fd="cancel"]');
 await page.waitForTimeout(200);
 
+/* --- Task Create Date: today by default, never overwriting a saved one ---- */
+const todayIs = new Date().toISOString().slice(0, 10);
+await page.click('[data-edit="task:new"]');
+await page.waitForSelector("#fd_given");
+ok("a new task's create date is today", (await page.inputValue("#fd_given")) === todayIs,
+   `${await page.inputValue("#fd_given")} vs ${todayIs}`);
+const dateLabels = await page.$$eval("#formDialog label", (l) => l.map((x) => x.innerText.trim()));
+ok("the field is called Task Create Date",
+   dateLabels.some((l) => /task create date/i.test(l)) &&
+   !dateLabels.some((l) => /task given date/i.test(l)), dateLabels.join(" | "));
+await page.click('#formDialog [data-fd="cancel"]');
+await page.waitForTimeout(200);
+
+await seed([
+  { id: "t-d", name: "Dated", given: "2020-01-01", attachments: [], status: "To do" },
+  { id: "t-n", name: "Undated", given: "", attachments: [], status: "To do" },
+]);
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await openTodo();
+await page.locator("tr.taskrow").first().click();
+await page.waitForTimeout(250);
+ok("the pane names it Task Create Date",
+   (await page.locator(".taskpane").innerText()).includes("Task Create Date"));
+await page.click('[data-edit="task:t-d"]');
+await page.waitForSelector("#fd_given");
+ok("editing keeps the date the task already has",
+   (await page.inputValue("#fd_given")) === "2020-01-01", await page.inputValue("#fd_given"));
+await page.click('#formDialog [data-fd="cancel"]');
+await page.waitForTimeout(200);
+await page.locator("tr.taskrow").nth(1).click();
+await page.waitForTimeout(250);
+await page.click('[data-edit="task:t-n"]');
+await page.waitForSelector("#fd_given");
+ok("editing a task with no date does not invent one",
+   (await page.inputValue("#fd_given")) === "", JSON.stringify(await page.inputValue("#fd_given")));
+await page.click('#formDialog [data-fd="cancel"]');
+await page.waitForTimeout(200);
+
 ok("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 await browser.close();
 console.log(failed ? `\n${failed} numbering check(s) failed`
