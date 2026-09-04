@@ -38,9 +38,12 @@
   function fieldHtml(f) {
     const id = "fd_" + f.name;
     const v = f.value ?? "";
+    // Opt-in, never blanket: fieldHtml renders every field in the app, and a
+    // capitalised URL is a broken URL. Marked fields are wired in formDialog.
+    const cap = f.capitalize ? ' data-capitalize="1"' : "";
     let control;
     if (f.type === "textarea") {
-      control = `<textarea id="${id}" rows="${f.rows || 4}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
+      control = `<textarea id="${id}"${cap} rows="${f.rows || 4}" placeholder="${esc(f.placeholder || "")}">${esc(v)}</textarea>`;
     } else if (f.type === "select") {
       control = `<select id="${id}">${(f.options || []).map((o) =>
         `<option value="${esc(o)}"${String(o) === String(v) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
@@ -51,7 +54,7 @@
           <input id="${id}" type="file" multiple>
         </div>`;
     } else {
-      control = `<input id="${id}" type="${f.type || "text"}" value="${esc(v)}"
+      control = `<input id="${id}"${cap} type="${f.type || "text"}" value="${esc(v)}"
         placeholder="${esc(f.placeholder || "")}" spellcheck="false">`;
     }
     // The label row carries the field's own tools on the right. Today that
@@ -68,6 +71,32 @@
         <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
+  }
+
+  /**
+   * Upper-case the first letter of a marked field, as it is typed or pasted.
+   *
+   * Only the first character, and only when it is a lower-case letter: a name
+   * starting with a digit, a bracket or an already-capital initial is left
+   * exactly as it is. Everything after it is untouched, so "check the iOS
+   * build" keeps its iOS.
+   *
+   * The caret is not moved, because only index 0 changes and the value stays
+   * the same length. Setting .value would otherwise send the caret to the end
+   * and make typing impossible.
+   */
+  function wireCapitals(box) {
+    for (const el of box.querySelectorAll("[data-capitalize]")) {
+      el.addEventListener("input", () => {
+        const v = el.value;
+        if (!v) return;
+        const up = v[0].toUpperCase();
+        if (up === v[0]) return;
+        const at = el.selectionStart, to = el.selectionEnd;
+        el.value = up + v.slice(1);
+        try { el.setSelectionRange(at, to); } catch { /* a date input has no range */ }
+      });
+    }
   }
 
   /**
@@ -100,6 +129,7 @@
         </div>
       </div>`;
     box.hidden = false;
+    wireCapitals(box);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
 
