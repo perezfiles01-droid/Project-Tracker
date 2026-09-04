@@ -49,6 +49,9 @@
       "tracker.openrouterKey",
       "tracker.openrouterModel",
       "tracker.aiEngine",
+      // "all" when the picker is showing every engine at once. The engine that
+      // runs is always a real id in tracker.aiEngine; this is only the view.
+      "tracker.aiEngineMode",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];

@@ -167,6 +167,81 @@ const nowFree = await page.inputValue("#aiModel");
 ok("a tier that cannot show the chosen model falls to one it can",
    nowFree !== "gemini-3-pro-image" && by(nowFree) && by(nowFree).tier === "free", nowFree);
 
+/* ------------------------------------- 4. All engines, and the auto-fill
+   Every engine is stubbed from the app's own PROVIDERS list rather than named
+   here, so a third engine is driven by this without an edit. Each answers with
+   its own id as a prefix, which is what makes ownership checkable. */
+const engineIds = await page.evaluate(() => window.TrackerAI.PROVIDERS.map((p) => p.id));
+if (engineIds.length > 1) {
+  await page.click("#settingsCancel");
+  await page.evaluate((names) => {
+    localStorage.clear();
+    for (const p of window.TrackerAI.PROVIDERS) {
+      p.listModels = async () => names.map((n) => `${p.id}/${n}`);
+      p.classify = (m) => window.TrackerAI.classify(String(m).split("/").pop());
+      window.TrackerStore.setText(p.keySetting, "stub-" + p.id);
+    }
+    window.TrackerStore.setText("tracker.aiEngineMode", "all");
+  }, FIXTURE);
+  await page.click("#openSettings");
+  await page.waitForFunction(() => document.querySelectorAll("#aiModel option").length > 1);
+
+  const engineOpts = await page.$$eval("#aiEngine option", (o) => o.map((x) => x.value));
+  ok("the Engine picker offers All engines as well as each one",
+     engineOpts.includes("all") && engineIds.every((id) => engineOpts.includes(id)),
+     engineOpts.join(", "));
+
+  await page.check('#aiTier input[value="all"]');
+  const owners = await page.$$eval("#aiModel option",
+    (o) => [...new Set(o.map((x) => x.dataset.engine))]);
+  ok("All engines lists models from every engine that has a key",
+     engineIds.every((id) => owners.includes(id)), owners.join(", "));
+  const unionLabels = await page.$$eval("#aiModel optgroup", (g) => g.map((x) => x.label));
+  ok("each group names the engine it came from, since optgroups cannot nest",
+     unionLabels.length > 0 && unionLabels.every((l) => l.includes(" - ")),
+     unionLabels.slice(0, 3).join(" | "));
+
+  /* Picking a model fills the Engine box with that model's engine, and the
+     key box follows it - without the list it was picked from disappearing. */
+  const second = engineIds[1];
+  const target = await page.$$eval("#aiModel option",
+    (o, id) => (o.find((x) => x.dataset.engine === id) || {}).value, second);
+  const before = (await page.$$eval("#aiModel option", (o) => o.length));
+  await page.selectOption("#aiModel", target);
+  ok("picking a model fills the Engine box with the engine that owns it",
+     await page.inputValue("#aiEngine") === second,
+     `${await page.inputValue("#aiEngine")} for ${target}`);
+  ok("the key box follows the engine that will run",
+     await page.inputValue("#aiKey") === "stub-" + second, await page.inputValue("#aiKey"));
+  ok("the list it was picked from is still on screen",
+     (await page.$$eval("#aiModel option", (o) => o.length)) === before);
+
+  /* Saving from All engines must store a real engine, never the pseudo one:
+     standardize() dispatches on it. */
+  await page.click("#settingsSave");
+  const stored = await page.evaluate(() => ({
+    engine: localStorage.getItem("tracker.aiEngine"),
+    mode: localStorage.getItem("tracker.aiEngineMode"),
+    resolves: window.TrackerAI.engine().id,
+  }));
+  // setText stores the raw string, so these are read as written, not as JSON.
+  ok("saving from All engines stores a real engine, not the pseudo one",
+     engineIds.includes(stored.engine) && stored.resolves === second,
+     `${stored.engine} resolves to ${stored.resolves}`);
+  ok("the All engines view is remembered separately", stored.mode === "all", String(stored.mode));
+
+  // And it reopens as it was left, with the saved model still selected.
+  await page.click("#openSettings");
+  await page.waitForFunction(() => document.querySelectorAll("#aiModel option").length > 1);
+  ok("it reopens showing every engine again",
+     (await page.$$eval("#aiModel option", (o) => [...new Set(o.map((x) => x.dataset.engine))])).length > 1);
+  ok("the model saved from All engines is the one selected",
+     await page.inputValue("#aiModel") === target, await page.inputValue("#aiModel"));
+} else {
+  ok("All engines is only offered when there is more than one engine",
+     !(await page.$$eval("#aiEngine option", (o) => o.some((x) => x.value === "all"))));
+}
+
 ok("nothing threw while doing all that", errors.length === 0, errors.slice(0, 3).join(" | "));
 
 await browser.close();

@@ -583,6 +583,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       "tracker.openrouterKey",
       "tracker.openrouterModel",
       "tracker.aiEngine",
+      // "all" when the picker is showing every engine at once. The engine that
+      // runs is always a real id in tracker.aiEngine; this is only the view.
+      "tracker.aiEngineMode",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
@@ -3595,64 +3598,98 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
      other one never wipes the setup you already had. The model list is read
      from the account rather than baked in here: model names churn, and a
      stale name is a 404 the reader cannot act on. */
+  /* ---------- which engine is on screen, and which one will run ----------
+     The Engine picker offers every provider plus "All engines", so the model
+     list can span them. Only ever a real provider id is saved as the engine:
+     standardize() dispatches on it, and handing it a pseudo-engine would be a
+     bug that only shows up when the wand is clicked. The pseudo choice is kept
+     apart, in tracker.aiEngineMode, purely so the dialog reopens as you left
+     it. */
+  const ALL = "all";
+  /* Whether the list on screen spans every engine. Held apart from the Engine
+     box's value on purpose: picking a model moves that box to the engine that
+     owns the model, and the list it was picked from must survive being
+     picked from. Only the user choosing an engine leaves union mode. */
+  let unionMode = false;
+  const providers = () => (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+  const byId = (id) => providers().find((p) => p.id === id);
+  /** What the Engine box says right now, which may be the pseudo choice. */
+  const enginePicked = () => ($("#aiEngine") && $("#aiEngine").value) || "";
+  /** Which engines' lists are on screen: all of them, or just the one. */
+  const enginesShown = () =>
+    unionMode ? providers().filter((p) => p.key())
+              : [byId(enginePicked()) || providers()[0]].filter(Boolean);
+  /** The engine that would actually run: the model's owner, under All. */
   const aiCurrentEngine = () => {
-    const chosen = $("#aiEngine") && $("#aiEngine").value;
-    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
-    return list.find((p) => p.id === chosen) || list[0];
+    if (enginePicked() !== ALL) return byId(enginePicked()) || providers()[0];
+    // Still on the pseudo choice: the model's owner decides.
+    const sel = $("#aiModel") && $("#aiModel").value;
+    return modelEngine.get(sel) || providers().find((p) => p.key()) || providers()[0];
   };
 
   function renderAiSettings() {
-    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+    const list = providers();
     if (!list.length) return;
-    const chosen = window.TrackerStore.getText("tracker.aiEngine") ||
-                   window.TrackerAI.DEFAULT_ENGINE;
-    $("#aiEngine").innerHTML = list.map((p) =>
-      `<option value="${p.id}"${p.id === chosen ? " selected" : ""}>${p.label}</option>`).join("");
-    // A picker with one option is a control that cannot be used. The row is
-    // hidden rather than removed, so putting a second engine back is one entry
-    // in PROVIDERS and nothing here changes.
+    const saved = window.TrackerStore.getText("tracker.aiEngine") ||
+                  window.TrackerAI.DEFAULT_ENGINE;
+    const mode = window.TrackerStore.getText("tracker.aiEngineMode") === ALL && list.length > 1
+      ? ALL : saved;
+    // "All engines" is only worth offering when there is more than one, and the
+    // row itself still hides at one, so a single-engine build is unchanged.
+    const opts = list.map((p) => [p.id, p.label])
+      .concat(list.length > 1 ? [[ALL, "All engines"]] : []);
+    $("#aiEngine").innerHTML = opts.map(([v, label]) =>
+      `<option value="${v}"${v === mode ? " selected" : ""}>${label}</option>`).join("");
     const row = $("#aiEngine").closest(".field");
     if (row) row.hidden = list.length < 2;
+    unionMode = mode === ALL;
     showEngine();
   }
 
-  /** Fill the key, the help and the model list for whichever engine is picked. */
+  /** Fill the key, the help and the model list for whatever is picked. */
   function showEngine() {
     const p = aiCurrentEngine();
     if (!p) return;
-    $("#aiKey").value = window.TrackerStore.getText(p.keySetting);
-    $("#aiKeyHelp").textContent = p.keyHelp;
-    $("#aiEngineHelp").textContent = p.free
-      ? "Free tier. No card needed."
-      : "Uses purchased credit on that account.";
+    paintKey(p);
     const saved = window.TrackerStore.getText(p.modelSetting) || p.model();
-    // Until the account answers, the saved model is the whole list: it is the
+    // Until the accounts answer, the saved model is the whole list: it is the
     // one name known to work, and it must stay selected through the wait.
     modelsHeld = [saved];
+    modelEngine.clear();
+    modelEngine.set(saved, p);
     setTier(tierOf(saved));
     paintModels(saved);
-    loadModels(p, saved);
+    loadModels(saved);
+  }
+
+  /** The key box always belongs to the engine that will run. */
+  function paintKey(p) {
+    if (!p) return;
+    $("#aiKey").value = window.TrackerStore.getText(p.keySetting);
+    $("#aiKeyHelp").textContent = p.keyHelp;
+    const cost = p.free ? "Free tier. No card needed."
+                        : "Uses purchased credit on that account.";
+    $("#aiEngineHelp").textContent = unionMode
+      ? `Every engine with a key, in one list. ${p.label} runs the model chosen. ${cost}`
+      : cost;
   }
 
   /* ---------- the model picker: tier radios, purpose groups ----------
-     The tier is this app's own labelling, not a fact read from the account:
-     Google's model list carries no billing information at all. So the filter
-     never removes a model outright - "Show everything" is always there, and a
-     model wrongly labelled stays reachable. */
+     The tier is this app's own labelling for Gemini, because Google's model
+     list carries no billing information at all; OpenRouter publishes its
+     prices, so its own classify reads them. Either way the filter never
+     removes a model outright - "Show everything" is always there. */
   let modelsHeld = [];
+  const modelEngine = new Map();
   const ai = () => window.TrackerAI || {};
-  /* Classification belongs to the engine, not to this dialog: Gemini labels by
-     name because Google publishes no prices, while OpenRouter reads its own.
-     The shared rules are the fallback for an engine that declares none. */
+  /* Classification belongs to the engine, not to this dialog. The shared rules
+     are the fallback for an engine that declares none. */
   const classifierFor = (p) => (p && p.classify) || ai().classify ||
                                (() => ({ tier: "free", purpose: "text" }));
+  const engineOwning = (m) => modelEngine.get(m) || aiCurrentEngine();
   const sortOf = (m) => classifierFor(engineOwning(m))(m);
   const tierOf = (m) => sortOf(m).tier;
   const purposeOf = (m) => sortOf(m).purpose;
-  /* Which engine a model came from. Until Phase 4 fills this it is simply the
-     engine on screen, which is the only one whose list has been read. */
-  const engineOwning = (m) => modelEngine.get(m) || aiCurrentEngine();
-  const modelEngine = new Map();
   const tierPicked = () => {
     const on = $("#aiTier") && $("#aiTier").querySelector("input:checked");
     return on ? on.value : "free";
@@ -3669,20 +3706,31 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * Render the held list under the chosen tier, grouped by what each model is
    * for. Text first, because the Standardize button is a text job. Empty
    * groups are dropped rather than shown blank.
+   *
+   * Optgroups cannot nest, so under All engines the engine's name joins the
+   * group label rather than wrapping it: "Text generation - OpenRouter". Every
+   * option carries its engine, which is what lets picking one fill the Engine
+   * box.
    */
   function paintModels(saved) {
     const sel = $("#aiModel");
-    if (!sel) return;
+    if (!sel) return 0;
     const tier = tierPicked();
     const shown = modelsHeld.filter((m) => tier === "all" || tierOf(m) === tier);
     const order = ai().PURPOSE_ORDER || ["text"];
     const label = ai().PURPOSE_LABEL || {};
-    const groups = order
-      .map((k) => [k, shown.filter((m) => purposeOf(m) === k)])
-      .filter(([, list]) => list.length);
-    sel.innerHTML = groups.map(([k, list]) =>
-      `<optgroup label="${label[k] || k}">` + list.map((m) =>
-        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("") +
+    const many = unionMode;
+    const engines = many ? enginesShown() : [aiCurrentEngine()].filter(Boolean);
+    const groups = [];
+    for (const k of order) {
+      for (const p of engines) {
+        const list = shown.filter((m) => purposeOf(m) === k && engineOwning(m) === p);
+        if (list.length) groups.push([many ? `${label[k] || k} - ${p.label}` : (label[k] || k), p, list]);
+      }
+    }
+    sel.innerHTML = groups.map(([text, p, list]) =>
+      `<optgroup label="${text}">` + list.map((m) =>
+        `<option value="${m}" data-engine="${p.id}"${m === saved ? " selected" : ""}>${m}</option>`).join("") +
       "</optgroup>").join("");
     if (shown.includes(saved)) sel.value = saved;
     else if (shown.length) sel.value = shown[0];
@@ -3690,53 +3738,104 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
 
   /**
-   * Ask the account which models it can use. A failure here is not worth
-   * shouting about: the saved model stays selected and still works, so the
-   * note says what happened and the dialog carries on.
+   * Ask each engine on screen which models it can use. A failure is not worth
+   * shouting about: the saved model stays selected and still works, so the note
+   * says what happened and the dialog carries on. Under All engines one engine
+   * failing must not empty the list, so each is asked separately and the ones
+   * that answered are still shown.
    */
-  async function loadModels(p, saved) {
-    if (!p) return;
-    const key = $("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting);
-    if (!key) { $("#aiModelHelp").textContent = "Add a key to see the models it can use."; return; }
-    $("#aiModelHelp").textContent = "Reading the models on that account…";
-    try {
-      const models = await p.listModels(key);
-      if (!models.length) throw new Error("none listed");
-      modelsHeld = models;
-      // Follow the saved model to its own side rather than quietly selecting a
-      // different one: the choice already made is never changed behind a back.
-      if (models.includes(saved)) setTier(tierOf(saved));
-      const shown = paintModels(saved);
-      $("#aiModelHelp").textContent =
-        `Showing ${shown} of ${models.length} models on this account, ` +
-        "grouped by what each is for. The cheapest and fastest are first.";
-    } catch (err) {
-      $("#aiModelHelp").textContent = "Could not read the model list (" +
-        (err.message || "failed") + "). Keeping " + saved + ".";
+  async function loadModels(saved) {
+    const engines = enginesShown();
+    const keyed = engines.filter((p) => (p === aiCurrentEngine()
+      ? ($("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting))
+      : window.TrackerStore.getText(p.keySetting)));
+    if (!keyed.length) {
+      $("#aiModelHelp").textContent = unionMode
+        ? "No engine has a key yet. Add one below to see the models it can use."
+        : "Add a key to see the models it can use.";
+      return;
     }
+    $("#aiModelHelp").textContent = "Reading the models on that account…";
+    const held = [];
+    const owner = new Map();
+    const broke = [];
+    for (const p of keyed) {
+      const key = p === aiCurrentEngine()
+        ? ($("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting))
+        : window.TrackerStore.getText(p.keySetting);
+      try {
+        const models = await p.listModels(key);
+        for (const m of models) if (!owner.has(m)) { owner.set(m, p); held.push(m); }
+      } catch (err) {
+        broke.push(`${p.label} (${err.message || "failed"})`);
+      }
+    }
+    if (!held.length) {
+      $("#aiModelHelp").textContent = "Could not read the model list (" +
+        (broke.join("; ") || "none listed") + "). Keeping " + saved + ".";
+      return;
+    }
+    modelsHeld = held;
+    modelEngine.clear();
+    for (const [m, p] of owner) modelEngine.set(m, p);
+    // Follow the saved model to its own side rather than quietly selecting a
+    // different one: the choice already made is never changed behind a back.
+    if (held.includes(saved)) setTier(tierOf(saved));
+    const shown = paintModels(saved);
+    const missing = enginesShown().length - keyed.length;
+    $("#aiModelHelp").textContent =
+      `Showing ${shown} of ${held.length} models, grouped by what each is for. ` +
+      "The cheapest and fastest are first." +
+      (broke.length ? ` Could not read ${broke.join("; ")}.` : "") +
+      (missing > 0 ? ` ${missing} engine(s) skipped for want of a key.` : "");
+    syncEngineToModel();
+  }
+
+  /**
+   * Picking a model fills the Engine box with the engine that owns it.
+   *
+   * The list on screen is deliberately left alone: it was asked for as one
+   * list across engines, and rebuilding it per pick would take the other
+   * engines' models away the moment you touched one of them.
+   */
+  function syncEngineToModel() {
+    const sel = $("#aiModel");
+    if (!sel || !sel.selectedOptions || !sel.selectedOptions.length) return;
+    const id = sel.selectedOptions[0].dataset.engine;
+    const p = byId(id);
+    if (!p) return;
+    const box = $("#aiEngine");
+    // Setting .value fires no change event, so union mode is not disturbed:
+    // the box names the engine that will run while the list stays as it was.
+    if (box && box.value !== p.id) box.value = p.id;
+    paintKey(p);
   }
 
   function saveAiSettings() {
     const p = aiCurrentEngine();
     if (!p) return;
-    window.TrackerStore.setText("tracker.aiEngine", $("#aiEngine").value);
+    // Never a pseudo-engine: standardize() dispatches on this value.
+    window.TrackerStore.setText("tracker.aiEngine", p.id);
+    window.TrackerStore.setText("tracker.aiEngineMode", unionMode ? ALL : "");
     window.TrackerStore.setText(p.keySetting, $("#aiKey").value.trim());
     window.TrackerStore.setText(p.modelSetting, $("#aiModel").value);
   }
 
   document.addEventListener("change", (e) => {
-    if (e.target.id === "aiEngine") showEngine();
+    if (e.target.id === "aiEngine") { unionMode = e.target.value === ALL; showEngine(); }
+    if (e.target.id === "aiModel") syncEngineToModel();
     if (e.target.name === "aiTier") {
       const shown = paintModels($("#aiModel").value);
+      syncEngineToModel();
       $("#aiModelHelp").textContent = modelsHeld.length > 1
-        ? `Showing ${shown} of ${modelsHeld.length} models on this account, ` +
-          "grouped by what each is for. The cheapest and fastest are first."
+        ? `Showing ${shown} of ${modelsHeld.length} models, grouped by what each is for. ` +
+          "The cheapest and fastest are first."
         : $("#aiModelHelp").textContent;
     }
   });
   // A pasted key should fill the model list without needing a save first.
   document.addEventListener("blur", (e) => {
-    if (e.target.id === "aiKey") loadModels(aiCurrentEngine(), $("#aiModel").value);
+    if (e.target.id === "aiKey") loadModels($("#aiModel").value);
   }, true);
 
   window.TrackerDrive = {
