@@ -147,15 +147,24 @@ ok("every removable item also has an Edit control", orphans.length === 0, orphan
 --------------------------------------------------------------------------- */
 const nav = await page.evaluate(() => {
   const out = [];
-  let cur = null;
-  for (const el of document.querySelector("#nav").children) {
-    if (el.classList.contains("nav-title")) { cur = { title: el.textContent.trim(), items: [] }; out.push(cur); }
-    else if (el.tagName === "BUTTON") {
-      if (!cur) return { orphan: true };
-      cur.items.push(el.querySelector("span").textContent.trim());
+  let cur = null, orphan = false;
+  // A group may wrap its buttons in a box of its own - the Projects group
+  // scrolls - so this descends rather than reading only direct children.
+  const walk = (parent) => {
+    for (const el of parent.children) {
+      if (el.classList.contains("nav-title")) {
+        cur = { title: el.textContent.trim(), items: [] };
+        out.push(cur);
+      } else if (el.tagName === "BUTTON") {
+        if (!cur) { orphan = true; return; }
+        cur.items.push(el.querySelector("span").textContent.trim());
+      } else {
+        walk(el);
+      }
     }
-  }
-  return { groups: out };
+  };
+  walk(document.querySelector("#nav"));
+  return orphan ? { orphan: true } : { groups: out };
 });
 ok("no nav button appears before the first heading", !nav.orphan);
 const titles = (nav.groups || []).map((g) => g.title);

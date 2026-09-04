@@ -28,6 +28,7 @@
       "tracker.userLinks",   // links you added
       "tracker.driveLinks",  // pinned Drive files and manual links
       "tracker.projects",    // projects you added, renamed or hid
+      "tracker.linkPins",    // links pinned to the top of their own table
       // Data, not a preference: it records which projects have already had
       // their artifacts seeded from the workbook. Restoring artifacts without
       // it lets the seed run a second time and duplicate every one of them.

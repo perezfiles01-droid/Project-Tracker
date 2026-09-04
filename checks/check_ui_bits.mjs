@@ -33,66 +33,42 @@ ok("Backup sits between Google Drive and Settings",
 ok("the title subtext is untouched",
    (await page.locator("#brandSub").textContent()).trim() === "BA master index");
 
-/* --- Actions are icons, and still have names --- */
-const textActions = await page.evaluate(() => [...document.querySelectorAll("button")]
+/* --- Row actions are icons, and still have names --- */
+// Page-level controls are deliberately text now ("Create Project",
+// "Create Table", "Rename project", "Delete project"): they are the page's
+// main actions and an icon made them guessable. The per-row actions inside a
+// table stay icons, and every icon still has to carry a name.
+await page.click('#nav button[data-route="overview"]');
+await page.waitForSelector(".ptile");
+await page.locator(".ptile").first().click();
+await page.waitForSelector("section.linksection");
+const textActions = await page.evaluate(() => [...document.querySelectorAll("tbody button")]
   .map((b) => b.textContent.trim())
-  .filter((t) => ["Edit", "Remove", "Delete", "Rename", "Add link", "Add project",
-                  "Add artifact", "Add milestone", "New table", "Mark done"].includes(t)));
-ok("no action button spells out its label", textActions.length === 0, textActions.join(", "));
+  .filter((t) => ["Edit", "Remove", "Delete", "Rename", "Pin"].includes(t)));
+ok("no row action spells out its label", textActions.length === 0, textActions.join(", "));
 const unnamed = await page.evaluate(() => [...document.querySelectorAll("button.icon")]
   .filter((b) => !(b.getAttribute("aria-label") || "").trim()).length);
 const icons = await page.locator("button.icon").count();
 ok("icon buttons exist", icons > 0, String(icons));
 ok("every icon button has an accessible name", unnamed === 0, `${unnamed} without one`);
 
-/* --- Project tiles: independent, no subtext, add / rename / delete --- */
+/* --- Project tiles: independent, three across --- */
+// Rename, delete and create are driven end to end by
+// check_project_actions.mjs, which owns the picker flow.
 await page.click('#nav button[data-route="overview"]');
 await page.waitForSelector(".ptile");
 const before = await page.locator(".ptile").count();
 ok("projects render as independent tiles", before >= 2, String(before));
-ok("the tile subtext is gone",
-   !(await page.locator(".ptiles").textContent()).includes("without a description"));
 const cols = await page.evaluate(() =>
   getComputedStyle(document.querySelector(".ptiles")).gridTemplateColumns.split(" ").length);
 ok("tiles are three across", cols === 3, String(cols));
-
-await page.click("[data-newproject]");
-await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_name", "A project I added");
-await page.click('[data-fd="save"]');
-await page.waitForTimeout(300);
-ok("a new project appears", (await page.locator(".ptile").count()) === before + 1);
-await page.reload({ waitUntil: "load" });
-await page.waitForSelector(".ptile");
-ok("the new project survives a reload",
-   (await page.locator(".ptiles").textContent()).includes("A project I added"));
-
-const tile = page.locator(".ptile").filter({ hasText: "A project I added" }).first();
-await tile.locator('[data-edit^="project:"]').click();
-await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_name", "Renamed project");
-await page.click('[data-fd="save"]');
-await page.waitForTimeout(300);
-await page.reload({ waitUntil: "load" });
-await page.waitForSelector(".ptile");
-ok("a renamed project keeps its new name",
-   (await page.locator(".ptiles").textContent()).includes("Renamed project"));
-
-const renamed = page.locator(".ptile").filter({ hasText: "Renamed project" }).first();
-await renamed.locator('[data-remove^="project:"]').click();
-await page.waitForSelector("#formDialog .box");
-await page.fill("#fd_confirm", "Renamed project");
-await page.click('[data-fd="save"]');
-await page.waitForTimeout(300);
-ok("a deleted project goes",
-   !(await page.locator(".ptiles").textContent()).includes("Renamed project"));
 
 /* --- Email Access filter lives in its column; heading renamed; spacing --- */
 // EDRMS ADB on purpose: GLASS's links carry no email addresses at all, so a
 // filter correctly does not render there and testing it would fail on
 // behaviour that is right.
-await page.locator(".ptile").filter({ hasText: "EDRMS ADB" }).first()
-  .locator("[data-pick]").click();
+// The tile IS the open target now, so it is clicked directly.
+await page.locator(".ptile").filter({ hasText: "EDRMS ADB" }).first().click();
 await page.waitForSelector("table.linktable");
 ok("the opened heading reads Table of Artifacts",
    (await page.locator("h2.page.sub").textContent()).trim() === "Table of Artifacts");

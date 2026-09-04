@@ -64,7 +64,9 @@ button,input,select{font:inherit;color:inherit}
 .side-foot button:hover{color:var(--accent)}
 
 .main{padding:26px 30px 70px;max-width:1180px;width:100%}
-.topbar{display:flex;gap:12px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
+/* Theme switch sits at the far right: it is a setting, not a page control,
+   and the left edge belongs to the page heading below it. */
+.topbar{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-bottom:22px;flex-wrap:wrap}
 .search{flex:1;min-width:220px;position:relative}
 .search input{
   width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;
@@ -335,19 +337,31 @@ table.detailtable .detaildesc{white-space:pre-wrap}
 
 /* ---------- project tiles ---------- */
 .ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:stretch}
+/* The list footer: pager left, create button right. The button is outside
+   the pager on purpose - a pager renders nothing for a single page, and a
+   button parked inside it would vanish with it. */
+.listfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  flex-wrap:wrap;margin-top:14px}
+.listfoot-pager{flex:1 1 auto;min-width:0}
+.listfoot-pager .pager{margin-top:0}
+.listfoot-act{flex:0 0 auto;margin-left:auto}
+
+/* The whole tile is the button that opens the project. It used to be a div
+   wrapping a small open-target and two icon actions; with those actions
+   moved above the list there is nothing else in it to aim at. */
 .ptile{
-  display:flex;align-items:center;gap:8px;background:var(--panel);
-  border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;text-align:left;cursor:pointer;font:inherit;color:inherit;
   transition:border-color .15s,transform .15s;
 }
 .ptile:hover{border-color:var(--accent);transform:translateY(-2px)}
 .ptile.picked{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
-.ptileopen{
-  flex:1;min-width:0;text-align:left;background:none;border:0;cursor:pointer;
-  color:inherit;font:inherit;padding:0;
-}
-.ptileopen .t{font-weight:600;font-size:16px;word-break:break-word}
-.ptileacts{display:flex;gap:6px;flex:0 0 auto}
+.ptile .t{font-weight:600;font-size:16px;word-break:break-word;color:var(--text)}
+/* The description under a project's name: present when there is one, and
+   never taking the name's place when there is not. */
+.ptile .psub{font-size:12.5px;line-height:1.45;color:var(--dim);word-break:break-word}
+
 @media (max-width:900px){ .ptiles{grid-template-columns:1fr} }
 
 /* ---------- email access filter, in its own column header ---------- */
@@ -357,3 +371,27 @@ th.emailhead .accountpick{
   background:var(--panel);border:1px solid var(--line);border-radius:7px;
   padding:2px 4px;font-size:11px;max-width:130px;text-transform:none;letter-spacing:0;
 }
+
+/* A pinned row's button says so at a glance: the icon fills and takes the
+   accent, so "pinned" is visible without hovering for a tooltip. */
+.btn.icon.pinned{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
+.btn.icon.pinned svg{fill:currentColor}
+
+/* The project list in the sidebar shows three at a time and scrolls for the
+   rest. --nav-rows is the count, so the height follows the button metrics
+   rather than a number typed twice. The scrollbar is deliberately faint: it
+   is a hint that there is more, not a control anyone aims at. */
+.navscroll{
+  --nav-rows:3;
+  /* One row is the button's own box plus the flex gap above it. Measured
+     from .nav button in the browser: 41px, plus the nav's 2px gap. */
+  --nav-row:41px;
+  max-height:calc(var(--nav-rows) * (var(--nav-row) + 2px));
+  display:flex;flex-direction:column;gap:2px;
+  overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+}
+.navscroll::-webkit-scrollbar{width:6px}
+.navscroll::-webkit-scrollbar-track{background:transparent}
+.navscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.navscroll:hover::-webkit-scrollbar-thumb{background:var(--dim)}

@@ -73,7 +73,8 @@
    * that offers two equal actions rather than one commit. It resolves with
    * the chosen button's value instead of the field values.
    */
-  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null }) {
+  function formDialog({ title, intro, fields, submitLabel = "Save", choices = null,
+                       cancelLabel = null }) {
     const box = ensureHost();
     box.innerHTML = `<div class="box">
         <h3>${esc(title)}</h3>
@@ -84,8 +85,8 @@
             ? choices.map((c) =>
                 `<button class="btn${c.primary ? " primary" : ""}" data-fd="choice"
                          data-value="${esc(c.value)}">${esc(c.label)}</button>`).join("") +
-              `<button class="btn" data-fd="cancel">Close</button>`
-            : `<button class="btn" data-fd="cancel">Cancel</button>
+              `<button class="btn" data-fd="cancel">${esc(cancelLabel || "Close")}</button>`
+            : `<button class="btn" data-fd="cancel">${esc(cancelLabel || "Cancel")}</button>
                <button class="btn primary" data-fd="save">${esc(submitLabel)}</button>`}
         </div>
       </div>`;
@@ -143,6 +144,27 @@
     });
   }
 
+  /**
+   * One confirmation for every destructive action in the app.
+   *
+   * Deleting used to mean two different things depending on where you stood:
+   * a project or a table made you retype its name, while a link, an artifact,
+   * a milestone, a task, a log entry and a pinned Drive file went instantly
+   * with nothing asked at all. Six of the eight could be lost to a misplaced
+   * click, and the two that were guarded were guarded so heavily that the
+   * heading being uppercased by CSS needed a note explaining what to type.
+   *
+   * Every one of them comes through here now: say what goes, offer Confirm
+   * and Cancel, resolve true only for Confirm. A delete added later inherits
+   * it by calling this instead of inventing a ninth pattern.
+   */
+  const confirmDialog = ({ title, intro, confirmLabel = "Delete" }) =>
+    formDialog({
+      title, intro, fields: [],
+      choices: [{ value: "confirm", label: confirmLabel, primary: true }],
+      cancelLabel: "Cancel",
+    }).then((r) => !!(r && r.choice === "confirm"));
+
   /* ---------- shared pager ----------
      Lifted out of drive.js, where it was private to that closure while two
      tables used it and a third needed it. One implementation, keyed per
@@ -159,6 +181,9 @@
     if ((page[key] || 0) > last) page[key] = last;
     return page[key] || 0;
   };
+
+  /** Move a table to a given page from outside its own pager buttons. */
+  const goToPage = (key, index) => { page[key] = Math.max(0, index); };
 
   /** Pager control. Renders nothing for a single page. */
   const pager = (key, total, perPage) => {
@@ -241,6 +266,9 @@
     add: '<path d="M12 5v14M5 12h14"/>',
     open: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     done: '<path d="M4 12.5l5 5L20 6.5"/>',
+    // A drawing pin seen side on: head, shaft, point. It reads as pinned
+    // when the button fills it, which is the whole point of the control.
+    pin: '<path d="M9 3h6l-1 5 3.5 3.5H6.5L10 8z"/><path d="M12 11.5V21"/>',
   };
 
   /**
@@ -252,6 +280,6 @@
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
-  window.TrackerUI = { formDialog, pager, pageIndex, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
                        iconButton, ICONS };
 })();

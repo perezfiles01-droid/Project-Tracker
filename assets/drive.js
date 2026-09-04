@@ -121,7 +121,17 @@
     window.TrackerRender();
   }
 
-  function unpin(id) { save(saved().filter((l) => l.id !== id)); window.TrackerRender(); }
+  async function unpin(id) {
+    const cur = saved().find((l) => l.id === id);
+    if (!cur) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove link", intro: `Remove "${cur.name}" from Google Drive links?`,
+      confirmLabel: "Remove link",
+    });
+    if (!yes) return;
+    save(saved().filter((l) => l.id !== id));
+    window.TrackerRender();
+  }
 
   /**
    * Create or correct a saved link through the shared dialog.

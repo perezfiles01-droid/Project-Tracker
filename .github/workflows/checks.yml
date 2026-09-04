@@ -51,3 +51,11 @@ jobs:
         run: node checks/check_tasks.mjs
       - name: Artifacts and timeline behave
         run: node checks/check_projects.mjs
+      - name: Every delete asks the same question
+        run: node checks/check_delete_uniform.mjs
+      - name: The Projects page controls hold
+        run: node checks/check_project_actions.mjs
+      - name: A pinned site holds the top of its table
+        run: node checks/check_pin.mjs
+      - name: The sidebar and the Projects page agree
+        run: node checks/check_nav_projects.mjs

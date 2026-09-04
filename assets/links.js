@@ -15,7 +15,8 @@
   const ADDED = "tracker.userLinks";   // [ {id,project,name,description,account,url} ]
   const DRIVE = "tracker.driveLinks";  // owned by drive.js; shared shape
   const TABLES = "tracker.linkTables"; // [ {id,project,name} ] tables you name yourself
-  const PROJECTS = "tracker.projects"; // { added:[{key,name}], renamed:{key:name}, hidden:[key] }
+  const PROJECTS = "tracker.projects"; // { added, renamed, hidden, desc:{key:text} }
+  const PINS = "tracker.linkPins";     // [ id ] links held at the top of their table
 
   const read = (key, fallback) => {
     return window.TrackerStore.get(key, JSON.parse(fallback));
@@ -29,10 +30,24 @@
   const customTables = () => read(TABLES, "[]");
   const projectStore = () => {
     const v = read(PROJECTS, "{}");
-    return { added: v.added || [], renamed: v.renamed || {}, hidden: v.hidden || [] };
+    return { added: v.added || [], renamed: v.renamed || {}, hidden: v.hidden || [],
+             desc: v.desc || {} };
   };
   const writeProjects = (v) => window.TrackerStore.set(PROJECTS, v);
   const writeTables = (a) => window.TrackerStore.set(TABLES, a);
+
+  /* ---------- pinned links ----------
+     A pin is per table, which is what "top of the list" means here: the same
+     link filed in two tables is two rows, and pinning one says nothing about
+     the other. Held as a plain list of row ids. */
+  const pins = () => read(PINS, "[]");
+  const isPinned = (id) => pins().includes(id);
+  function togglePin(id) {
+    const list = pins();
+    const i = list.indexOf(id);
+    if (i === -1) list.push(id); else list.splice(i, 1);
+    window.TrackerStore.set(PINS, list);
+  }
 
   const slug = (s) => String(s ?? "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "x";
@@ -122,7 +137,8 @@
       .map((name) => ps.renamed[slug(name)] || name)
       .map((name) => {
       const items = rows.filter((r) => r.project === name);
-      return { key: slug(name), name, count: items.length,
+      return { key: slug(name), name, description: describe(name, slug(name)),
+               count: items.length,
                tables: tablesFor(name).length,
                undescribed: items.filter((r) => !r.description).length };
     });
@@ -144,6 +160,24 @@
     }
     if (!names.length) names.push("Links");
     return names;
+  }
+
+  /**
+   * A project's one-line description.
+   *
+   * Yours if you have written one; otherwise the workbook's own blurb, which
+   * GLASS and EDRMS ADB both arrive with and which was previously shown only
+   * once you had already opened the project. A project you added starts with
+   * none, and reads as a plain name until you give it one.
+   */
+  function describe(displayName, key) {
+    const ps = projectStore();
+    if (typeof ps.desc[key] === "string") return ps.desc[key];
+    for (const n of originalNames(displayName)) {
+      const p = window.TrackerState.data.projects.find((x) => x.name === n);
+      if (p && p.blurb) return p.blurb;
+    }
+    return "";
   }
 
   const groupByKey = (key) => groups().find((g) => g.key === key);
@@ -298,26 +332,37 @@
     const list = groups().filter((g) => !q || g.name.toLowerCase().includes(q));
     const cur = window.TrackerUI.pageIndex("projects", list.length, PROJ_PER_PAGE);
     const slice = list.slice(cur * PROJ_PER_PAGE, (cur + 1) * PROJ_PER_PAGE);
-    const ib = window.TrackerUI.iconButton;
 
-    // Independent tiles rather than cells of one table: each project is its
-    // own thing, so it gets its own card and its own controls. Three across
-    // and six to a page, with the seventh paging - unchanged.
+    // The whole tile opens the project. It used to carry a pencil and a bin
+    // of its own, which meant seven projects put fourteen controls on the
+    // page for two actions; those are one pair of buttons above the list now,
+    // and the tile is a single large target with nothing to miss.
     const tiles = slice.map((g) => `
-      <div class="ptile${selected === g.key ? " picked" : ""}">
-        <button class="ptileopen" data-pick="${esc(g.key)}">
-          <span class="t">${esc(g.name)}</span>
-        </button>
-        <div class="ptileacts">
-          ${ib("rename", "Rename project", `data-edit="project:${esc(g.key)}"`)}
-          ${ib("remove", "Delete project", `data-remove="project:${esc(g.key)}"`)}
-        </div>
-      </div>`).join("");
+      <button class="ptile${selected === g.key ? " picked" : ""}" data-pick="${esc(g.key)}">
+        <span class="t">${esc(g.name)}</span>
+        ${g.description ? `<span class="psub">${esc(g.description)}</span>` : ""}
+      </button>`).join("");
 
     return `<div class="ptiles">${tiles ||
         `<div class="empty">No project matches that search.</div>`}</div>
-      ${window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE)}`;
+      ${listFoot(window.TrackerUI.pager("projects", list.length, PROJ_PER_PAGE),
+                 `<button class="btn primary" data-newproject="1">Create Project</button>`)}`;
   }
+
+  /**
+   * The row under a list: its pager on the left, its create button on the
+   * right.
+   *
+   * The button cannot live beside the pager's own controls, because a pager
+   * renders nothing at all for a single page — park a button there and it
+   * disappears the moment a list gets short enough to fit. This row always
+   * renders; only the pager inside it comes and goes.
+   */
+  const listFoot = (pagerHtml, button) =>
+    `<div class="listfoot">
+       <div class="listfoot-pager">${pagerHtml || ""}</div>
+       <div class="listfoot-act">${button}</div>
+     </div>`;
 
   /** One named table inside a project. */
   function linkTable(projectName, tableName) {
@@ -328,6 +373,13 @@
     let rows = all.filter((r) => has(r, (find[key] || "").toLowerCase()));
     if (chosen) rows = rows.filter((r) => r.account === chosen);
     rows = window.TrackerUI.sortRows(key, rows);
+    // Pinned rows are lifted BEFORE paging, so a pinned link is on page one
+    // however long the table is - a pin that only reordered the page you were
+    // already looking at would be no use at all. Order within each half is
+    // left alone, so the column sort still holds.
+    const pinned = pins();
+    rows = [...rows.filter((r) => pinned.includes(r.id)),
+            ...rows.filter((r) => !pinned.includes(r.id))];
 
     const cur = window.TrackerUI.pageIndex(key, rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -344,6 +396,10 @@
           ? `<a class="btn sm" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>`
           : dash}</td>
         <td class="actions">
+          ${window.TrackerUI.iconButton("pin",
+            isPinned(r.id) ? "Unpin from the top" : "Pin to the top",
+            `data-pin="${esc(r.id)}" data-pinkey="${esc(key)}" aria-pressed="${isPinned(r.id)}"`,
+            isPinned(r.id) ? "pinned" : "")}
           ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="link:${esc(r.id)}"`)}
           ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="link:${esc(r.id)}"`)}
         </td>
@@ -391,12 +447,11 @@
     const g = selected ? groupByKey(selected) : null;
     return `
       <h2 class="page">Projects</h2>
-      <p class="lede">Open a project to see its tables. Add your own tables to
-        group links however you need.</p>
       <div class="sectionhead">
         <div class="sectionleft">${searchBox("projects", "Search projects…")}</div>
         <div class="sectiontools">
-          ${window.TrackerUI.iconButton("add", "Add project", `data-newproject="1"`)}
+          <button class="btn" data-projectaction="rename">Rename project</button>
+          <button class="btn" data-projectaction="delete">Delete project</button>
         </div>
       </div>
       ${projectsTable()}
@@ -404,15 +459,23 @@
         <div class="opened">
           <div class="sectionhead">
             <h2 class="page sub">Table of Artifacts</h2>
-            ${window.TrackerUI.iconButton("add", "New table", `data-newtable="${esc(g.name)}"`)}
           </div>
           ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
+          ${listFoot("", `<button class="btn primary"
+             data-newtable="${esc(g.name)}">Create Table</button>`)}
         </div>` : ""}`;
   }
 
   /** Kept so an existing #g:<project> bookmark still opens that project. */
   function tableView(key) {
-    if (groupByKey(key)) selected = key;
+    if (groupByKey(key)) {
+      selected = key;
+      // Opening a project from the sidebar has to leave its tile on screen.
+      // The tiles page six at a time, so the seventh project opened its
+      // tables under a page of tiles that did not include it.
+      const i = groups().findIndex((g) => g.key === key);
+      if (i > -1) window.TrackerUI.goToPage("projects", Math.floor(i / PROJ_PER_PAGE));
+    }
     return overview();
   }
 
@@ -480,20 +543,65 @@
     window.TrackerRender();
   }
 
+  /**
+   * Rename and delete used to be a pencil and a bin on every tile. They are
+   * one pair of buttons above the list now, so the project is chosen inside
+   * the dialog instead of by which tile you clicked. Whatever is on screen -
+   * the current page of tiles, a search - does not limit the choice: the
+   * picker offers every project there is.
+   */
+  async function pickProject(action) {
+    const list = groups();
+    if (!list.length) {
+      await window.TrackerUI.confirmDialog({
+        title: action === "rename" ? "Rename project" : "Delete project",
+        intro: "There are no projects yet.", confirmLabel: "OK",
+      });
+      return;
+    }
+    const names = list.map((g) => g.name);
+    const v = await window.TrackerUI.formDialog({
+      title: action === "rename" ? "Rename project" : "Delete project",
+      intro: action === "rename"
+        ? "Choose the project to rename."
+        : "Choose the project to delete. You will be asked to confirm.",
+      submitLabel: action === "rename" ? "Continue" : "Continue",
+      fields: [{ name: "project", label: "Project", type: "select",
+                 options: names, value: names[0] }],
+    });
+    if (!v || !v.project) return;
+    const g = list.find((x) => x.name === v.project);
+    if (!g) return;
+    return action === "rename" ? renameProject(g.key) : deleteProject(g.key);
+  }
+
   async function renameProject(key) {
     const g = groupByKey(key);
     if (!g) return;
     const v = await window.TrackerUI.formDialog({
-      title: "Rename project", submitLabel: "Save name",
-      fields: [{ name: "name", label: "Project name", value: g.name }],
+      title: "Edit project", submitLabel: "Save changes",
+      fields: [
+        { name: "name", label: "Project name", value: g.name },
+        { name: "description", label: "Description", type: "textarea", rows: 2,
+          value: g.description || "",
+          placeholder: "One line about what this project is",
+          help: "Shown under the project's name in the list." },
+      ],
     });
-    if (!v || !v.name || v.name === g.name) return;
+    if (!v || !v.name) return;
     const ps = projectStore();
-    const own = ps.added.find((a) => slug(a.name) === key || a.key === key);
-    if (own) own.name = v.name;          // one you added: rename it in place
-    else ps.renamed[key] = v.name;       // a workbook one: overlay the name
+    const renamed = v.name !== g.name;
+    if (renamed) {
+      const own = ps.added.find((a) => slug(a.name) === key || a.key === key);
+      if (own) own.name = v.name;          // one you added: rename it in place
+      else ps.renamed[key] = v.name;       // a workbook one: overlay the name
+    }
+    // Filed under the name it will be READ back under, which is the slug of
+    // the new name: groups() derives every key from the display name.
+    ps.desc[slug(v.name)] = v.description || "";
+    if (renamed) delete ps.desc[key];
     writeProjects(ps);
-    if (selected === key) selected = slug(v.name);
+    if (renamed && selected === key) selected = slug(v.name);
     window.TrackerRender();
   }
 
@@ -501,18 +609,23 @@
     const g = groupByKey(key);
     if (!g) return;
     const n = rowsFor(key).length;
-    const v = await window.TrackerUI.formDialog({
+    const yes = await window.TrackerUI.confirmDialog({
       title: "Delete project",
       intro: `Remove "${g.name}" from the tracker?` +
              (n ? ` Its ${n} link${n === 1 ? "" : "s"} go with it.` : " It has no links.") +
              " Links from the workbook can be brought back by adding the project again.",
-      submitLabel: "Delete project",
-      fields: [{ name: "confirm", label: "Type the project name to confirm", value: "",
-                 placeholder: g.name }],
+      confirmLabel: "Delete project",
     });
-    if (!v || v.confirm.trim().toLowerCase() !== g.name.trim().toLowerCase()) return;
+    if (!yes) return;
     const ps = projectStore();
     ps.added = ps.added.filter((a) => slug(a.name) !== key && a.key !== key);
+    // The tombstone has to name the slug groups() FILTERS on, which is the
+    // name the row was filed under - not the display name. Keyed on the
+    // display name alone, deleting a renamed workbook project wrote a
+    // tombstone nothing matched and the project stayed on the page.
+    for (const n of [g.name, ...originalNames(g.name)]) {
+      if (!ps.hidden.includes(slug(n))) ps.hidden.push(slug(n));
+    }
     if (!ps.hidden.includes(key)) ps.hidden.push(key);
     writeProjects(ps);
     if (selected === key) selected = null;
@@ -521,6 +634,8 @@
 
   document.addEventListener("click", (e) => {
     if (e.target.closest("[data-newproject]")) return newProject();
+    const pa = e.target.closest("[data-projectaction]");
+    if (pa) return pickProject(pa.dataset.projectaction);
     const pe = e.target.closest('[data-edit^="project:"]');
     if (pe) return renameProject(window.TrackerUI.actionId(pe, "edit"));
     const pd = e.target.closest('[data-remove^="project:"]');
@@ -550,14 +665,33 @@
       const i = spec.lastIndexOf("|");
       return deletePrompt(spec.slice(0, i), spec.slice(i + 1));
     }
+    const pin = e.target.closest("[data-pin]");
+    if (pin) {
+      togglePin(pin.dataset.pin);
+      // A row pinned from page three lands on page one. Leaving the reader on
+      // page three would show them a table their link had just disappeared
+      // from, so the table follows it.
+      if (isPinned(pin.dataset.pin)) window.TrackerUI.goToPage(pin.dataset.pinkey, 0);
+      return window.TrackerRender();
+    }
     const ed = e.target.closest('[data-edit^="link:"]');
     if (ed) return edit(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="link:"]');
-    if (rm) {
-      const row = resolved().find((r) => r.id === window.TrackerUI.actionId(rm, "remove"));
-      if (row) { removeRow(row); window.TrackerRender(); }
-    }
+    if (rm) return removeLink(window.TrackerUI.actionId(rm, "remove"));
   });
+
+  async function removeLink(id) {
+    const row = resolved().find((r) => r.id === id);
+    if (!row) return;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove link",
+      intro: `Remove "${row.name}" from ${row.table || "this table"}?`,
+      confirmLabel: "Remove link",
+    });
+    if (!yes) return;
+    removeRow(row);
+    window.TrackerRender();
+  }
 
   // Re-rendering replaces the inputs, so focus and caret are restored by hand;
   // without this a section search loses focus after every keystroke.
@@ -575,20 +709,15 @@
 
   async function deletePrompt(projectName, tableName) {
     const n = rowsIn(projectName, tableName).length;
-    const v = await window.TrackerUI.formDialog({
+    // Say the cost before it is paid: deleting a table takes its links too,
+    // and a workbook link removed here does not come back on reload.
+    const yes = await window.TrackerUI.confirmDialog({
       title: "Delete table",
-      // Say the cost before it is paid: deleting a table takes its links too,
-      // and a workbook link removed here does not come back on reload.
       intro: `Delete "${tableName}" from ${projectName}?` +
              (n ? ` Its ${n} link${n === 1 ? "" : "s"} will be removed with it.` : " It is empty."),
-      submitLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
-      fields: [{ name: "confirm", label: "Type the table name to confirm", value: "",
-                 placeholder: tableName,
-                 help: "Case does not matter — the heading is shown in capitals." }],
+      confirmLabel: n ? `Delete table and ${n} link${n === 1 ? "" : "s"}` : "Delete table",
     });
-    // Compared case-insensitively on purpose: the heading is uppercased by CSS,
-    // so anyone typing what they see would otherwise be refused.
-    if (!v || v.confirm.trim().toLowerCase() !== tableName.trim().toLowerCase()) return;
+    if (!yes) return;
     deleteTable(projectName, tableName);
     window.TrackerRender();
   }
@@ -608,7 +737,7 @@
   });
 
   window.TrackerLinks = {
-    searchBox, findValue: (key) => (find[key] || "").toLowerCase(),
+    searchBox, isPinned, togglePin, findValue: (key) => (find[key] || "").toLowerCase(),
     resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, newProject, saveRow, addRow, addTable,
     renameTable, deleteTable,
     removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,

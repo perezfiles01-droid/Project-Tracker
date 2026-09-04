@@ -116,16 +116,15 @@ async function removalWorks(kind) {
     await page.locator(sel).first().click();
     await page.waitForTimeout(300);
 
-    // Deleting a table asks through the app's own dialog and requires the
-    // table name typed back; it then covers the page until it is answered.
+    // Every delete asks through the app's own dialog, which covers the page
+    // until it is answered. Confirm is a named choice button, not a Save:
+    // nothing has to be typed back. check_delete_uniform.mjs owns that rule;
+    // here it is only how a delete gets carried out.
     const box = page.locator("#formDialog .box");
     if (await box.count() && await box.isVisible()) {
-      const confirm = page.locator("#fd_confirm");
-      if (await confirm.count()) {
-        const name = spec.slice(spec.indexOf(":") + 1);
-        await confirm.fill(name.slice(name.lastIndexOf("|") + 1));
-      }
-      await page.locator('#formDialog [data-fd="save"]').click();
+      const confirm = page.locator('#formDialog [data-fd="choice"]').first();
+      if (await confirm.count()) await confirm.click();
+      else await page.locator('#formDialog [data-fd="save"]').click();
       await page.waitForTimeout(350);
     }
     // Counted by the EXACT item, not by how many controls of this kind are
