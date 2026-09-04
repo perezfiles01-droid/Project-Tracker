@@ -134,6 +134,10 @@
     modelSetting: "tracker.geminiModel",
     keyHelp: "aistudio.google.com → Get API key. No card needed.",
     free: true,
+    // The shape its replies come back in. The guard reads this rather than
+    // matching on the id, so a third engine cannot be tested by accident
+    // against another engine's response body.
+    wire: "gemini",
     classify,
     key: () => get("tracker.geminiKey"),
     model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
@@ -183,6 +187,113 @@
     },
   };
 
+  /* ------------------------------------------------------------ OpenRouter */
+  /*
+   * The second engine, and the reason the Engine picker is a picker again.
+   *
+   * OpenRouter issues a key with no card, and the models whose id ends ":free"
+   * cost nothing per token. Unlike Google it publishes its prices in the same
+   * listing as the models, so its free-and-paid split is read from the account
+   * rather than guessed from the name - which is why it carries its own
+   * classify rather than borrowing Gemini's.
+   *
+   * Not verified: no call has been made to this host from the build
+   * environment, which cannot reach it (the proxy answers 403 to CONNECT). Its
+   * documented support for browser calls is the basis for it being here. The
+   * first real proof is a key pasted into Settings.
+   */
+  const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+  const OPENROUTER_FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+  /* What the last listing said about each model, so classify can answer from
+   * the account's own prices instead of the name. Empty until a list is read;
+   * an id that is not in it is treated as paid, because guessing "free" about
+   * something unknown is the guess that costs money. */
+  const orMeta = new Map();
+
+  function orClassify(name) {
+    const id = String(name || "");
+    const m = id.toLowerCase();
+    const meta = orMeta.get(id);
+    const purpose =
+      /(^|[-\/])tts|whisper|audio|speech/.test(m) ? "speech" :
+      /(^|[-\/])(sd|flux|dall-e|imagen|stable-diffusion)|image/.test(m) ? "image" :
+      /deep-research|(^|[-\/])research/.test(m) ? "research" :
+      /embed|rerank|moderation|guard/.test(m) ? "special" :
+      "text";
+    const free = meta ? meta.free : /:free$/.test(m);
+    return { tier: free ? "free" : "paid", purpose };
+  }
+
+  const openrouter = {
+    id: "openrouter",
+    label: "OpenRouter (free models)",
+    keySetting: "tracker.openrouterKey",
+    modelSetting: "tracker.openrouterModel",
+    keyHelp: "openrouter.ai/keys → Create key. No card needed.",
+    free: true,
+    wire: "openai",
+    classify: orClassify,
+    key: () => get("tracker.openrouterKey"),
+    model: () => get("tracker.openrouterModel") || OPENROUTER_FALLBACK_MODEL,
+
+    /** Every model the catalogue offers, with its price remembered. */
+    async listModels(key) {
+      if (!key) return [];
+      const res = await send(`${OPENROUTER_BASE}/models`, {
+        method: "GET",
+        headers: { authorization: "Bearer " + key },
+      }, "OpenRouter");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      const rows = (body && body.data) || [];
+      orMeta.clear();
+      const zero = (v) => v === 0 || v === "0" || Number(v) === 0;
+      for (const r of rows) {
+        const id = String(r && r.id || "");
+        if (!id) continue;
+        const pr = (r && r.pricing) || {};
+        orMeta.set(id, { free: zero(pr.prompt) && zero(pr.completion) });
+      }
+      // Free first, then by name: the same intent as Gemini's rank, expressed
+      // with the fact rather than with a guess about it.
+      return [...orMeta.keys()].sort((a, b) =>
+        (orMeta.get(a).free === orMeta.get(b).free ? 0 : orMeta.get(a).free ? -1 : 1) ||
+        a.localeCompare(b));
+    },
+
+    async run(text, kind) {
+      const key = openrouter.key();
+      if (!key) throw new Error("Add an OpenRouter key in Settings to use this.");
+      const res = await send(`${OPENROUTER_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + key,
+          // The browser sets Referer itself and will not let a page forge it,
+          // so only the title is sent by hand.
+          "x-title": "Project Tracker",
+        },
+        body: JSON.stringify({
+          model: openrouter.model(),
+          messages: [
+            { role: "system", content: prompt(kind) },
+            { role: "user", content: text },
+          ],
+          temperature: 0.3,
+          max_tokens: 2000,
+        }),
+      }, "OpenRouter");
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      const choice = body && body.choices && body.choices[0];
+      const out = choice && choice.message && choice.message.content;
+      if (!out) throw new Error("Nothing came back. Your text is unchanged.");
+      return String(out).trim();
+    },
+  };
+
   /**
    * Move a Google key out of the slot the removed engine used.
    *
@@ -204,7 +315,7 @@
   adopt();
 
   /* -------------------------------------------------------------- dispatch */
-  const PROVIDERS = [gemini];
+  const PROVIDERS = [gemini, openrouter];
   const DEFAULT_ENGINE = gemini.id;
 
   const byId = (id) => PROVIDERS.find((p) => p.id === id);

@@ -46,6 +46,8 @@
       // went with it. TrackerAI.adopt moves a Google key left in that slot.
       "tracker.geminiKey",
       "tracker.geminiModel",
+      "tracker.openrouterKey",
+      "tracker.openrouterModel",
       "tracker.aiEngine",
     ],
   };
