@@ -19,6 +19,8 @@ site.
 | `scripts/build_data.py` | Converts the workbook into `data/tracker.json` |
 | `BA_Master_Tracker.xlsx` | The source workbook — **upload this yourself** (see below) |
 | `config.js` | Optional Google client ID / API key defaults (leave blank) |
+| `checks/` | The guards CI runs on every push |
+| `docs/ai/` | Research notes on adding AI to the tracker — read before starting any AI request |
 | `.github/workflows/` | Pages deployment + data rebuild |
 
 ## Pages in the site
