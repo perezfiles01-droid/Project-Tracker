@@ -425,6 +425,15 @@ th.emailhead .accountpick{
 .linkish{background:none;border:0;padding:0;font:inherit;color:var(--accent);
   text-decoration:underline;cursor:pointer}
 
+/* Attachments in the dialog: staged files with a thumbnail, and the count. */
+.attstaged{display:flex;flex-direction:column;gap:6px}
+.attrow.staged{display:flex;align-items:center;gap:8px;font-size:13px}
+.attthumb{width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.attrow.staged .attdrop{background:none;border:0;cursor:pointer;color:var(--dim);font-size:11px}
+.attcount{color:var(--dim);font-size:12px}
+.attitem{display:inline-flex;align-items:center;gap:4px;margin:0 6px 6px 0}
+.attitem .attdl{cursor:pointer}
+
 </style>
 </head>
 <body>
@@ -1172,6 +1181,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       </label>`;
   }
 
+  const ATT_MAX = 5;
+  const isImage = (t) => /^image\//.test(String(t || ""));
+
   function fieldHtml(f) {
     const id = "fd_" + f.name;
     const v = f.value ?? "";
@@ -1186,9 +1198,16 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         `<option value="${esc(o)}"${String(o) === String(v) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
     } else if (f.type === "attachments") {
       const list = (f.value || []).map(attachmentRow).join("");
-      control = `<div class="attachments">
-          ${list || `<div class="m">Nothing attached yet.</div>`}
-          <input id="${id}" type="file" multiple>
+      // Three parts: what is already attached, what you have just added in this
+      // dialog, and the picker. The staged list is filled by wireAttachments,
+      // because a file input's FileList cannot be appended to - picking twice
+      // would otherwise replace the first pick rather than add to it, which is
+      // exactly what "select up to 5" needs.
+      control = `<div class="attachments" data-attfield="${esc(f.name)}">
+          ${list || `<div class="m nothingyet">Nothing attached yet.</div>`}
+          <div class="attstaged" data-staged="${esc(f.name)}"></div>
+          <input id="${id}" type="file" multiple accept="image/*,*/*">
+          <div class="attcount" data-attcount="${esc(f.name)}"></div>
         </div>`;
     } else {
       control = `<input id="${id}"${cap} type="${f.type || "text"}" value="${esc(v)}"
@@ -1209,6 +1228,121 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
   }
+
+  /**
+   * The attachment picker: paste, choose, count, and a hard ceiling.
+   *
+   * Files added in this dialog are held here rather than in the file input,
+   * because a FileList is read-only: choosing a second time replaces the first
+   * choice instead of adding to it. Staging them makes "up to five" mean five
+   * across every way of adding one.
+   *
+   * Pasting is the point of the change - a screenshot on the clipboard is a
+   * file in clipboardData.files, and it arrives with a useless name, so it is
+   * renamed to something a download can be saved as. A tool that pastes a path
+   * or HTML instead of a file cannot be caught here; Choose Files still works.
+   */
+  function wireAttachments(box, fields) {
+    const staged = new Map();
+    const urls = [];
+    const specs = fields.filter((f) => f.type === "attachments");
+    if (!specs.length) return { staged, revoke: () => {} };
+
+    const kept = (f) => (f.value || [])
+      .filter((a) => !box.querySelector(`[data-drop="${cssEsc(a.id)}"]`)?.checked).length;
+
+    function paint(f) {
+      const list = staged.get(f.name) || [];
+      const host = box.querySelector(`[data-staged="${cssEsc(f.name)}"]`);
+      if (host) {
+        host.innerHTML = list.map((file, i) => {
+          let thumb = "";
+          if (isImage(file.type)) {
+            const u = URL.createObjectURL(file);
+            urls.push(u);
+            thumb = `<img class="attthumb" src="${u}" alt="">`;
+          }
+          return `<div class="attrow staged">
+              ${thumb}
+              <span class="attname">${esc(file.name)}</span>
+              <span class="tag dead">${Math.ceil(file.size / 1024)} KB</span>
+              <button type="button" class="attdrop" data-unstage="${esc(f.name)}:${i}">remove</button>
+            </div>`;
+        }).join("");
+      }
+      const total = kept(f) + list.length;
+      const max = f.max || ATT_MAX;
+      const note = box.querySelector(`[data-attcount="${cssEsc(f.name)}"]`);
+      if (note) note.textContent = `${total} of ${max} attached.` +
+        (total >= max ? " Remove one to add another." : " Paste a screenshot, or choose files.");
+      const picker = box.querySelector("#fd_" + f.name);
+      if (picker) picker.disabled = total >= max;
+      const empty = box.querySelector(".nothingyet");
+      if (empty) empty.hidden = list.length > 0;
+    }
+
+    /** Add what we can, and say plainly what would not fit. */
+    function add(f, files) {
+      const max = f.max || ATT_MAX;
+      const list = staged.get(f.name) || [];
+      const room = Math.max(0, max - kept(f) - list.length);
+      const taking = [...files].slice(0, room);
+      const refused = [...files].length - taking.length;
+      let n = list.length;
+      for (const file of taking) {
+        // A pasted screenshot arrives as "image.png" or with no name at all.
+        const named = (!file.name || /^image\.[a-z]+$/i.test(file.name)) && isImage(file.type)
+          ? new File([file], `Pasted image ${++n}.${(file.type.split("/")[1] || "png")}`,
+                     { type: file.type })
+          : file;
+        list.push(named);
+      }
+      staged.set(f.name, list);
+      paint(f);
+      const note = box.querySelector(`[data-note="fd_${cssEsc(f.name)}"]`);
+      if (note) {
+        note.hidden = !refused;
+        note.textContent = refused
+          ? `${refused} file${refused === 1 ? "" : "s"} not attached: the limit is ${max}.`
+          : "";
+      }
+    }
+
+    for (const f of specs) {
+      staged.set(f.name, []);
+      const picker = box.querySelector("#fd_" + f.name);
+      if (picker) picker.addEventListener("change", () => {
+        add(f, picker.files || []);
+        picker.value = "";   // so choosing the same file twice still registers
+      });
+      paint(f);
+    }
+
+    box.addEventListener("paste", (e) => {
+      const files = (e.clipboardData && e.clipboardData.files) || [];
+      if (!files.length) return;
+      e.preventDefault();
+      add(specs[0], files);
+    });
+
+    box.addEventListener("click", (e) => {
+      const un = e.target.closest("[data-unstage]");
+      if (un) {
+        const [name, i] = un.dataset.unstage.split(":");
+        const list = staged.get(name) || [];
+        list.splice(Number(i), 1);
+        staged.set(name, list);
+        paint(specs.find((f) => f.name === name));
+      }
+      // Ticking an existing attachment to remove it frees a slot immediately.
+      if (e.target.matches("[data-drop]")) specs.forEach(paint);
+    });
+
+    return { staged, revoke: () => urls.forEach((u) => URL.revokeObjectURL(u)) };
+  }
+
+  /** Escape a value for use inside a CSS attribute selector. */
+  const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
 
   /**
    * Upper-case the first letter of a marked field, as it is typed or pasted.
@@ -1267,11 +1401,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       </div>`;
     box.hidden = false;
     wireCapitals(box);
+    const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
 
     return new Promise((resolve) => {
       const close = (value) => {
+        atts.revoke();
         box.hidden = true;
         box.innerHTML = "";
         document.removeEventListener("keydown", onKey);
@@ -1286,7 +1422,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
             const dropped = [...box.querySelectorAll("[data-drop]:checked")].map((c) => c.dataset.drop);
             out[f.name] = {
               keep: (f.value || []).map((a) => a.id).filter((id) => !dropped.includes(id)),
-              added: el && el.files ? [...el.files] : [],
+              // Staged, not el.files: a file input only remembers the last pick.
+              added: [...(atts.staged.get(f.name) || [])],
             };
           } else {
             out[f.name] = el ? el.value.trim() : "";
@@ -1654,10 +1791,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         // default that overwrites what you already saved is a different
         // feature, and a worse one.
         { name: "assignee", label: "Assignee", value: cur ? (cur.assignee || "") : DEFAULT_ASSIGNEE },
-        { name: "linkUrl", label: "Attach a link", value: "", placeholder: "https://…" },
-        { name: "files", label: "Attachments", type: "attachments",
+        { name: "files", label: "Attach an image/file", type: "attachments",
           value: cur ? cur.attachments || [] : [],
-          help: "Files are stored in this browser only." },
+          help: "Paste a screenshot with Ctrl+V, or choose files. Up to five. " +
+                "Stored in this browser only, and never in the backup file." },
       ],
     });
     if (!values) return;
@@ -1679,9 +1816,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       const aid = "a-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
       kept.push({ id: aid, name: file.name, size: file.size, type: file.type, kind: "file" });
-    }
-    if (values.linkUrl) {
-      kept.push({ id: "l-" + Date.now(), name: values.linkUrl, url: values.linkUrl, kind: "link" });
     }
     target.attachments = kept;
 
@@ -1756,6 +1890,28 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
+  /**
+   * Save an attachment to disk, under the name it was attached with.
+   *
+   * An anchor carrying `download` on a blob URL saves immediately rather than
+   * navigating, which is what makes an attachment behave like a file again
+   * once it is inside IndexedDB.
+   */
+  async function downloadAttachment(id) {
+    const list = load();
+    const meta = list.flatMap((t) => t.attachments || []).find((a) => a.id === id);
+    const blob = await getBlob(id);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (meta && meta.name) || "attachment";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   /* ---------- render ---------- */
   const ROWS_PER_PAGE = 10;
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
@@ -1779,10 +1935,29 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     ).join(" ");
   }
 
+  /**
+   * One attachment, as View and Download.
+   *
+   * Two actions rather than one, because they are different jobs: View opens
+   * the blob in a tab to look at, Download saves it under its own name. The
+   * bytes are in IndexedDB either way, so both are resolved on click - a blob
+   * URL minted at render time for every attachment on the page would leak one
+   * per row per render.
+   *
+   * Links attached under the old "Attach a link" field are still shown. That
+   * field is gone, but records that carry one are not, and a saved link that
+   * stopped rendering would read as lost data.
+   */
   function attachmentChip(a) {
-    return a.kind === "link"
-      ? `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">link</a>`
-      : `<button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">${esc(a.name)}</button>`;
+    if (a.kind === "link") {
+      return `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name || "link")} ↗</a>`;
+    }
+    const img = /^image\//.test(a.type || "");
+    return `<span class="attitem">
+        <button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">
+          ${img ? "🖼 " : ""}${esc(a.name)}</button>
+        <button class="tag attdl" data-attdl="${esc(a.id)}" title="Download ${esc(a.name)}">Download</button>
+      </span>`;
   }
 
   /** The expanded detail shown when a row is clicked. */
@@ -1906,6 +2081,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
     const rm = e.target.closest('[data-remove^="task:"]');
     if (rm) return removeTask(window.TrackerUI.actionId(rm, "remove"));
+    const dl = e.target.closest("[data-attdl]");
+    if (dl) return downloadAttachment(dl.dataset.attdl);
     const att = e.target.closest("[data-att]");
     if (att) return openAttachment(att.dataset.att);
   });

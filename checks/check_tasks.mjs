@@ -4,9 +4,12 @@
  *
  * Two faults this covers, both of which produced "I added a link but it
  * shows no link":
- *   1. A link entered through "Attach a link" rendered only inside the
- *      expanded detail row. The Reference link column showed a dash, so a
- *      link that had been saved correctly read as missing.
+ *   1. A link that had been saved rendered only inside the expanded detail
+ *      row. The Reference link column showed a dash, so a link saved
+ *      correctly read as missing. The "Attach a link" field this was first
+ *      reported through is gone - it is an image/file picker now - so the
+ *      assertion is driven through the Reference link field instead, and the
+ *      old field's saved records are covered by check_attachments.
  *   2. Enter submitted the whole dialog from any input. On a ten-field form
  *      that saves every field below the caret as blank.
  */
@@ -58,14 +61,14 @@ await page.waitForTimeout(200);
 ok("Enter in a field does not submit the dialog",
    await page.locator("#formDialog").isVisible());
 
-// --- fault 1: a link entered ONLY as an attachment must show in the column ---
-await page.fill("#fd_linkUrl", "https://example.test/attached-only");
+// --- fault 1: a saved link must show in the Reference link column -----------
+await page.fill("#fd_ref", "https://example.test/attached-only");
 await page.click("#formDialog .actions button.primary");
 await page.waitForTimeout(400);
 
 ok("the task was created", (await page.locator("tr.taskrow").count()) === 1);
 const refCell = (await page.locator("tr.taskrow td").last().innerText()).trim();
-ok("an attached link shows in the Reference link column", /↗/.test(refCell),
+ok("a saved link shows in the Reference link column", /↗/.test(refCell),
    `column reads ${JSON.stringify(refCell)}`);
 const nameCell = (await page.locator("tr.taskrow td").nth(1).innerText()).trim();
 ok("the name column shows the task name", nameCell === "Guarded task", nameCell);

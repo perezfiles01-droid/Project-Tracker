@@ -95,10 +95,10 @@
         // default that overwrites what you already saved is a different
         // feature, and a worse one.
         { name: "assignee", label: "Assignee", value: cur ? (cur.assignee || "") : DEFAULT_ASSIGNEE },
-        { name: "linkUrl", label: "Attach a link", value: "", placeholder: "https://…" },
-        { name: "files", label: "Attachments", type: "attachments",
+        { name: "files", label: "Attach an image/file", type: "attachments",
           value: cur ? cur.attachments || [] : [],
-          help: "Files are stored in this browser only." },
+          help: "Paste a screenshot with Ctrl+V, or choose files. Up to five. " +
+                "Stored in this browser only, and never in the backup file." },
       ],
     });
     if (!values) return;
@@ -120,9 +120,6 @@
       const aid = "a-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
       kept.push({ id: aid, name: file.name, size: file.size, type: file.type, kind: "file" });
-    }
-    if (values.linkUrl) {
-      kept.push({ id: "l-" + Date.now(), name: values.linkUrl, url: values.linkUrl, kind: "link" });
     }
     target.attachments = kept;
 
@@ -197,6 +194,28 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
+  /**
+   * Save an attachment to disk, under the name it was attached with.
+   *
+   * An anchor carrying `download` on a blob URL saves immediately rather than
+   * navigating, which is what makes an attachment behave like a file again
+   * once it is inside IndexedDB.
+   */
+  async function downloadAttachment(id) {
+    const list = load();
+    const meta = list.flatMap((t) => t.attachments || []).find((a) => a.id === id);
+    const blob = await getBlob(id);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (meta && meta.name) || "attachment";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   /* ---------- render ---------- */
   const ROWS_PER_PAGE = 10;
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Given Date", "Due Date", "Reference link"];
@@ -220,10 +239,29 @@
     ).join(" ");
   }
 
+  /**
+   * One attachment, as View and Download.
+   *
+   * Two actions rather than one, because they are different jobs: View opens
+   * the blob in a tab to look at, Download saves it under its own name. The
+   * bytes are in IndexedDB either way, so both are resolved on click - a blob
+   * URL minted at render time for every attachment on the page would leak one
+   * per row per render.
+   *
+   * Links attached under the old "Attach a link" field are still shown. That
+   * field is gone, but records that carry one are not, and a saved link that
+   * stopped rendering would read as lost data.
+   */
   function attachmentChip(a) {
-    return a.kind === "link"
-      ? `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">link</a>`
-      : `<button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">${esc(a.name)}</button>`;
+    if (a.kind === "link") {
+      return `<a class="tag" href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name || "link")} ↗</a>`;
+    }
+    const img = /^image\//.test(a.type || "");
+    return `<span class="attitem">
+        <button class="tag attchip" data-att="${esc(a.id)}" title="${esc(a.name)}">
+          ${img ? "🖼 " : ""}${esc(a.name)}</button>
+        <button class="tag attdl" data-attdl="${esc(a.id)}" title="Download ${esc(a.name)}">Download</button>
+      </span>`;
   }
 
   /** The expanded detail shown when a row is clicked. */
@@ -347,6 +385,8 @@
     }
     const rm = e.target.closest('[data-remove^="task:"]');
     if (rm) return removeTask(window.TrackerUI.actionId(rm, "remove"));
+    const dl = e.target.closest("[data-attdl]");
+    if (dl) return downloadAttachment(dl.dataset.attdl);
     const att = e.target.closest("[data-att]");
     if (att) return openAttachment(att.dataset.att);
   });

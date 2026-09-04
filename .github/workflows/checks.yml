@@ -55,6 +55,8 @@ jobs:
         run: node checks/check_task_number.mjs
       - name: The first letter capitalises where it was asked for
         run: node checks/check_capitalize.mjs
+      - name: Images and files attach, cap at five, and download
+        run: node checks/check_attachments.mjs
       - name: Artifacts and timeline behave
         run: node checks/check_projects.mjs
       - name: Every delete asks the same question
