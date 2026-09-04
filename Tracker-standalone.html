@@ -437,10 +437,18 @@ th.emailhead .accountpick{
 /* The To Do List is a list beside a pane: the table carries what you scan by,
    the pane carries everything else about the task you clicked. Below 900px
    they stack, because a split pane on a phone is two unusable columns. */
-.tasksplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
-.tasklist{min-width:0}
+/* Both halves share the row's height rather than each taking its own, which is
+   what left a 130px list beside a 535px pane. The pane cannot be sticky and
+   stretch at the same time - sticky is what made it size itself independently -
+   so it scrolls inside its own box instead. */
+.tasksplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;
+           align-items:stretch}
+.tasklist{min-width:0;display:flex;flex-direction:column;
+          background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+          padding:14px}
+.tasklist .tablewrap{flex:1;border:0;background:none;border-radius:0}
 .taskpane{min-width:0;background:var(--panel-2);border:1px solid var(--line);
-          border-radius:10px;padding:14px;position:sticky;top:12px;max-height:calc(100vh - 90px);
+          border-radius:10px;padding:14px;max-height:calc(100vh - 90px);
           overflow:auto}
 .taskpane .panehead{display:flex;align-items:center;justify-content:space-between;gap:10px;
                     margin-bottom:10px}
@@ -453,7 +461,7 @@ table.tasktable{min-width:0}
 .shot img{width:84px;height:84px;object-fit:cover;border-radius:7px;display:block}
 @media (max-width:900px){
   .tasksplit{grid-template-columns:minmax(0,1fr)}
-  .taskpane{position:static;max-height:none}
+  .taskpane{max-height:none}
 }
 
 /* A column header that filters its own column, the shape Email Access uses. */

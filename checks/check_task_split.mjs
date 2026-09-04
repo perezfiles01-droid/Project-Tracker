@@ -94,6 +94,45 @@ ok("clicking another task shows that one instead",
    second.includes("Second task") && !second.includes("Something to do"),
    second.replace(/\s+/g, " ").slice(0, 70));
 
+/* --- the two halves are the same size, both ways round -------------------
+   They each took their own height, so a short list sat beside a tall pane and
+   a ten-row list sat beside a short one: 130px against 535px, measured. */
+const boxes = () => page.evaluate(() => {
+  const l = document.querySelector(".tasklist").getBoundingClientRect();
+  const p = document.querySelector(".taskpane").getBoundingClientRect();
+  return { lt: Math.round(l.top), lh: Math.round(l.height), lw: Math.round(l.width),
+           pt: Math.round(p.top), ph: Math.round(p.height), pw: Math.round(p.width) };
+});
+
+// Case one: a short list, a long task.
+const short = await boxes();
+ok("with a short list the two halves start level", Math.abs(short.lt - short.pt) <= 2,
+   JSON.stringify(short));
+ok("with a short list the two halves are the same height",
+   Math.abs(short.lh - short.ph) <= 2, JSON.stringify(short));
+ok("and the same width", Math.abs(short.lw - short.pw) <= 2, JSON.stringify(short));
+
+// Case two: a long list, a short task.
+await page.evaluate(() => {
+  const many = [];
+  for (let i = 1; i <= 12; i++) {
+    many.push({ id: "t-m" + i, name: "Task " + i, project: "GLASS",
+                attachments: [], status: "To do" });
+  }
+  localStorage.setItem("tracker.tasks", JSON.stringify(many));
+});
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.click('#nav button[data-route="todo"]');
+await page.waitForTimeout(300);
+await page.locator("tr.taskrow").first().click();
+await page.waitForTimeout(300);
+const long = await boxes();
+ok("with a long list they still start level", Math.abs(long.lt - long.pt) <= 2,
+   JSON.stringify(long));
+ok("with a long list they are still the same height",
+   Math.abs(long.lh - long.ph) <= 2, JSON.stringify(long));
+
 /* --- narrow screens stack rather than splitting --------------------------- */
 await page.setViewportSize({ width: 700, height: 1000 });
 await page.waitForTimeout(300);
