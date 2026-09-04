@@ -49,6 +49,8 @@ jobs:
         run: node checks/check_ui_bits.mjs
       - name: Task table and dialog behave
         run: node checks/check_tasks.mjs
+      - name: The task dialog offers the projects the page lists
+        run: node checks/check_task_project.mjs
       - name: Artifacts and timeline behave
         run: node checks/check_projects.mjs
       - name: Every delete asks the same question

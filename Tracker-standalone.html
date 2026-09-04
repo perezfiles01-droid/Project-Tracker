@@ -3009,7 +3009,26 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * a finished engagement comes back by flipping one flag.
    */
   const activeProjects = () => state.data.projects.filter((p) => p.active !== false);
-  window.TrackerProjectNames = () => activeProjects().map((p) => p.name);
+
+  /**
+   * The projects, as the page itself lists them.
+   *
+   * This used to return the seeded JSON alone, which is not what anybody sees:
+   * TrackerLinks.groups() is what renders the sidebar and the tiles, and it
+   * also honours the projects you create, the ones you delete and the ones you
+   * rename. Reading a different list here produced three faults from one line -
+   * a created project missing from the task dialog, a deleted one still
+   * offered, and a renamed one offered under its old name - and only the first
+   * was ever noticed.
+   *
+   * The JSON list stays as the fallback for the moment before links.js has
+   * defined itself, rather than returning nothing and rendering an empty
+   * dropdown that looks like "you have no projects".
+   */
+  window.TrackerProjectNames = () =>
+    (window.TrackerLinks && window.TrackerLinks.groups)
+      ? window.TrackerLinks.groups().map((g) => g.name)
+      : activeProjects().map((p) => p.name);
 
   function allLinks() {
     const out = [];
