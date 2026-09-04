@@ -391,8 +391,6 @@
     const g = selected ? groupByKey(selected) : null;
     return `
       <h2 class="page">Projects</h2>
-      <p class="lede">Open a project to see its tables. Add your own tables to
-        group links however you need.</p>
       <div class="sectionhead">
         <div class="sectionleft">${searchBox("projects", "Search projects…")}</div>
         <div class="sectiontools">

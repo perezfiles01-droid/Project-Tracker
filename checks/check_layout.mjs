@@ -59,6 +59,30 @@ for (const m of measured) {
      `input at ${m.inputLeft} of ${m.headLeft}..${m.headRight}`);
 }
 
+/* --- the theme switch belongs at the right edge of the topbar --- */
+// Measured, not asserted by class: a restyle that pushes it back to the left
+// keeps every class name intact.
+const theme = await page.evaluate(() => {
+  const bar = document.querySelector(".topbar");
+  const seg = bar && bar.querySelector(".seg");
+  if (!bar || !seg) return null;
+  const b = bar.getBoundingClientRect(), s = seg.getBoundingClientRect();
+  return { gapRight: Math.round(b.right - s.right), gapLeft: Math.round(s.left - b.left) };
+});
+ok("the topbar carries the theme switch", theme !== null);
+if (theme) {
+  ok("the theme switch sits at the right of the topbar, not the left",
+     theme.gapRight < theme.gapLeft, `${theme.gapRight}px from the right, ${theme.gapLeft}px from the left`);
+  ok("the theme switch is flush to the right edge", theme.gapRight <= 40, `${theme.gapRight}px`);
+}
+
+/* --- the Projects page carries no explanatory lede --- */
+await page.click('#nav button[data-route="overview"]');
+await page.waitForTimeout(300);
+const projectsText = await page.locator("#view").textContent();
+ok("the Projects page no longer explains itself",
+   !projectsText.includes("Open a project to see its tables"));
+
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();
 console.log(failed ? `\n${failed} layout check(s) failed` : "\nPASS: table searches sit on the left");

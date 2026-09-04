@@ -64,7 +64,9 @@ button,input,select{font:inherit;color:inherit}
 .side-foot button:hover{color:var(--accent)}
 
 .main{padding:26px 30px 70px;max-width:1180px;width:100%}
-.topbar{display:flex;gap:12px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
+/* Theme switch sits at the far right: it is a setting, not a page control,
+   and the left edge belongs to the page heading below it. */
+.topbar{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-bottom:22px;flex-wrap:wrap}
 .search{flex:1;min-width:220px;position:relative}
 .search input{
   width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;
