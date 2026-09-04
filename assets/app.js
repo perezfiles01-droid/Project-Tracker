@@ -16,6 +16,24 @@
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
   const matches = (obj, q) => !q || JSON.stringify(obj).toLowerCase().includes(q);
 
+  /**
+   * The same dropdown the task pane uses, for a log entry that came from a
+   * task. It carries data-status, so the change handler in tasks.js picks it
+   * up: one code path for a status change, one confirmation, wherever it is
+   * made from. Returns "" when there is no live task behind the entry.
+   */
+  function taskStatusPicker(r) {
+    if (r.origin !== "task" || !r.taskId) return "";
+    const t = window.TrackerTasks.load().find((x) => x.id === r.taskId);
+    if (!t) return "";
+    const options = [...new Set([...window.TrackerTasks.STATUSES, t.status].filter(Boolean))];
+    return `<select class="statuspick" data-status="${esc(t.id)}"
+              aria-label="Status of ${esc(t.name || t.description || "task")}">
+        ${options.map((s) =>
+          `<option value="${esc(s)}"${s === t.status ? " selected" : ""}>${esc(s)}</option>`).join("")}
+      </select>`;
+  }
+
   function statusTag(s) {
     if (!s) return "";
     const v = s.toLowerCase();
@@ -25,7 +43,10 @@
     // quietly stopped meaning anything.
     const cls = v.includes("complete") || v.includes("done") ? "ok"
       : v.includes("progress") ? "info"
-      : v.includes("pending") || v.includes("block") || v.includes("to do") ? "warn" : "";
+      // "to do" was here for a task status that no longer exists: a task is In
+      // progress, Blocked or Done. Milestone data out of tracker.json still
+      // uses "pending", so that stays.
+      : v.includes("pending") || v.includes("block") ? "warn" : "";
     return `<span class="tag ${cls}">${esc(s)}</span>`;
   }
 
@@ -212,7 +233,12 @@
         ${table("daily", [
           { key: "date", label: "Date", render: (r) => esc(r.date) },
           { key: "task", label: "Activity", wrap: true, render: (r) => esc(r.task) },
-          { key: "status", label: "Status", render: (r) => statusTag(r.status) },
+          // A logged task keeps its status control here, because here is where
+          // the task now lives: it is off the To Do List, and without this the
+          // only way back to In progress would be a page that no longer lists
+          // it. Hand-typed entries have no task behind them, so they show the
+          // tag they always did.
+          { key: "status", label: "Status", render: (r) => taskStatusPicker(r) || statusTag(r.status) },
           { key: "origin", label: "Source", render: (r) =>
               `<span class="tag">${r.origin === "task" ? "task completed" : "manual"}</span>` },
           { key: "url", label: "Link", render: linkCell },
@@ -281,7 +307,9 @@
     { title: "Index", items: [["overview", "Overview", window.TrackerLinks.resolved().length]] },
     { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
-      ["todo", "To Do List", window.TrackerTasks.load().length],
+      // The count is what the page lists, not every task ever saved: blocked
+      // and completed ones are counted beside Daily activity instead.
+      ["todo", "To Do List", window.TrackerTasks.active().length],
       ["daily", "Daily activity", window.TrackerTasks.logAll().length],
     ] },
     { title: "Drive", items: [["drive", "Google Drive", driveLinks().length]] },
