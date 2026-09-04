@@ -371,3 +371,8 @@ th.emailhead .accountpick{
   background:var(--panel);border:1px solid var(--line);border-radius:7px;
   padding:2px 4px;font-size:11px;max-width:130px;text-transform:none;letter-spacing:0;
 }
+
+/* A pinned row's button says so at a glance: the icon fills and takes the
+   accent, so "pinned" is visible without hovering for a tooltip. */
+.btn.icon.pinned{border-color:var(--accent);color:var(--accent);background:var(--panel-2)}
+.btn.icon.pinned svg{fill:currentColor}

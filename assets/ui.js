@@ -182,6 +182,9 @@
     return page[key] || 0;
   };
 
+  /** Move a table to a given page from outside its own pager buttons. */
+  const goToPage = (key, index) => { page[key] = Math.max(0, index); };
+
   /** Pager control. Renders nothing for a single page. */
   const pager = (key, total, perPage) => {
     const pages = Math.ceil(total / perPage) || 1;
@@ -263,6 +266,9 @@
     add: '<path d="M12 5v14M5 12h14"/>',
     open: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     done: '<path d="M4 12.5l5 5L20 6.5"/>',
+    // A drawing pin seen side on: head, shaft, point. It reads as pinned
+    // when the button fills it, which is the whole point of the control.
+    pin: '<path d="M9 3h6l-1 5 3.5 3.5H6.5L10 8z"/><path d="M12 11.5V21"/>',
   };
 
   /**
@@ -274,6 +280,6 @@
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
-  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, sortHeader, sortRows, actionId,
+  window.TrackerUI = { formDialog, confirmDialog, pager, pageIndex, goToPage, sortHeader, sortRows, actionId,
                        iconButton, ICONS };
 })();

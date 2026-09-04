@@ -16,6 +16,7 @@
   const DRIVE = "tracker.driveLinks";  // owned by drive.js; shared shape
   const TABLES = "tracker.linkTables"; // [ {id,project,name} ] tables you name yourself
   const PROJECTS = "tracker.projects"; // { added:[{key,name}], renamed:{key:name}, hidden:[key] }
+  const PINS = "tracker.linkPins";     // [ id ] links held at the top of their table
 
   const read = (key, fallback) => {
     return window.TrackerStore.get(key, JSON.parse(fallback));
@@ -33,6 +34,19 @@
   };
   const writeProjects = (v) => window.TrackerStore.set(PROJECTS, v);
   const writeTables = (a) => window.TrackerStore.set(TABLES, a);
+
+  /* ---------- pinned links ----------
+     A pin is per table, which is what "top of the list" means here: the same
+     link filed in two tables is two rows, and pinning one says nothing about
+     the other. Held as a plain list of row ids. */
+  const pins = () => read(PINS, "[]");
+  const isPinned = (id) => pins().includes(id);
+  function togglePin(id) {
+    const list = pins();
+    const i = list.indexOf(id);
+    if (i === -1) list.push(id); else list.splice(i, 1);
+    window.TrackerStore.set(PINS, list);
+  }
 
   const slug = (s) => String(s ?? "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "x";
@@ -339,6 +353,13 @@
     let rows = all.filter((r) => has(r, (find[key] || "").toLowerCase()));
     if (chosen) rows = rows.filter((r) => r.account === chosen);
     rows = window.TrackerUI.sortRows(key, rows);
+    // Pinned rows are lifted BEFORE paging, so a pinned link is on page one
+    // however long the table is - a pin that only reordered the page you were
+    // already looking at would be no use at all. Order within each half is
+    // left alone, so the column sort still holds.
+    const pinned = pins();
+    rows = [...rows.filter((r) => pinned.includes(r.id)),
+            ...rows.filter((r) => !pinned.includes(r.id))];
 
     const cur = window.TrackerUI.pageIndex(key, rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -355,6 +376,10 @@
           ? `<a class="btn sm" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>`
           : dash}</td>
         <td class="actions">
+          ${window.TrackerUI.iconButton("pin",
+            isPinned(r.id) ? "Unpin from the top" : "Pin to the top",
+            `data-pin="${esc(r.id)}" data-pinkey="${esc(key)}" aria-pressed="${isPinned(r.id)}"`,
+            isPinned(r.id) ? "pinned" : "")}
           ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="link:${esc(r.id)}"`)}
           ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="link:${esc(r.id)}"`)}
         </td>
@@ -600,6 +625,15 @@
       const i = spec.lastIndexOf("|");
       return deletePrompt(spec.slice(0, i), spec.slice(i + 1));
     }
+    const pin = e.target.closest("[data-pin]");
+    if (pin) {
+      togglePin(pin.dataset.pin);
+      // A row pinned from page three lands on page one. Leaving the reader on
+      // page three would show them a table their link had just disappeared
+      // from, so the table follows it.
+      if (isPinned(pin.dataset.pin)) window.TrackerUI.goToPage(pin.dataset.pinkey, 0);
+      return window.TrackerRender();
+    }
     const ed = e.target.closest('[data-edit^="link:"]');
     if (ed) return edit(window.TrackerUI.actionId(ed, "edit"));
     const rm = e.target.closest('[data-remove^="link:"]');
@@ -663,7 +697,7 @@
   });
 
   window.TrackerLinks = {
-    searchBox, findValue: (key) => (find[key] || "").toLowerCase(),
+    searchBox, isPinned, togglePin, findValue: (key) => (find[key] || "").toLowerCase(),
     resolved, groups, groupByKey, rowsFor, rowsIn, tablesFor, newProject, saveRow, addRow, addTable,
     renameTable, deleteTable,
     removeRow, slug, DRIVE_GROUP, overview, tableView, ROWS_PER_PAGE, PROJ_COLS,
