@@ -95,6 +95,44 @@ const after = await numbers();
 ok("deleting a task leaves no gap in the numbering",
    after.join(",") === "1,2", after.join(","));
 
+/* --- a new task is assigned to Jim, an edited one keeps its own ----------- */
+await page.click('[data-edit="task:new"]');
+await page.waitForSelector("#fd_assignee");
+ok("a new task is assigned to Jim by default",
+   (await page.inputValue("#fd_assignee")) === "Jim",
+   await page.inputValue("#fd_assignee"));
+await page.click('#formDialog [data-fd="cancel"]');
+await page.waitForTimeout(200);
+
+// Editing must not overwrite what is already saved - including an assignee
+// deliberately left empty.
+await seed([
+  { id: "t-e", name: "Empty assignee", assignee: "", attachments: [], status: "To do" },
+  { id: "t-f", name: "Someone else", assignee: "Ana", attachments: [], status: "To do" },
+]);
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await openTodo();
+await page.locator("tr.taskrow").first().click();
+await page.waitForTimeout(250);
+await page.click('[data-edit="task:t-e"]');
+await page.waitForSelector("#fd_assignee");
+ok("editing a task saved with no assignee does not fill in Jim",
+   (await page.inputValue("#fd_assignee")) === "",
+   JSON.stringify(await page.inputValue("#fd_assignee")));
+await page.click('#formDialog [data-fd="cancel"]');
+await page.waitForTimeout(200);
+// Edit lives inside the opened task, so the second one is opened before it can
+// be edited.
+await page.locator("tr.taskrow").nth(1).click();
+await page.waitForTimeout(250);
+await page.click('[data-edit="task:t-f"]');
+await page.waitForSelector("#fd_assignee");
+ok("editing a task keeps the assignee it has",
+   (await page.inputValue("#fd_assignee")) === "Ana", await page.inputValue("#fd_assignee"));
+await page.click('#formDialog [data-fd="cancel"]');
+await page.waitForTimeout(200);
+
 ok("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 await browser.close();
 console.log(failed ? `\n${failed} numbering check(s) failed`

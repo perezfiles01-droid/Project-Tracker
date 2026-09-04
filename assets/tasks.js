@@ -10,6 +10,7 @@
   const KEY = "tracker.tasks";
   const DB = "tracker-files", STORE = "blobs";
   const STATUSES = ["To do", "In progress", "Blocked", "Done"];
+  const DEFAULT_ASSIGNEE = "Jim";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -89,7 +90,11 @@
         { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
         { name: "status", label: "Status", type: "select", options: STATUSES,
           value: cur ? cur.status : STATUSES[0] },
-        { name: "assignee", label: "Assignee", value: cur ? cur.assignee : "" },
+        // A new task is assigned to Jim unless you say otherwise. Editing shows
+        // the task's own assignee, including a deliberately empty one: a
+        // default that overwrites what you already saved is a different
+        // feature, and a worse one.
+        { name: "assignee", label: "Assignee", value: cur ? (cur.assignee || "") : DEFAULT_ASSIGNEE },
         { name: "linkUrl", label: "Attach a link", value: "", placeholder: "https://…" },
         { name: "files", label: "Attachments", type: "attachments",
           value: cur ? cur.attachments || [] : [],
