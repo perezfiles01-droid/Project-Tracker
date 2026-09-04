@@ -475,18 +475,24 @@ th.emailhead .accountpick{
     </div>
     <h3 style="margin-top:22px">Standardize text</h3>
     <p class="lede">Powers the wand button beside a task's name and description.
-      Stored in this browser only, and deliberately left out of the backup file.
-      Give the key a spend cap in the Anthropic console.</p>
+      Keys are stored in this browser only and are deliberately left out of the
+      backup file. Google AI Studio issues a key with no card and a free tier,
+      which is the default.</p>
     <div class="field">
-      <label for="aiKey">Anthropic API key</label>
-      <input id="aiKey" type="password" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
-      <small>console.anthropic.com &rarr; API keys. Leave blank to turn the button off.</small>
+      <label for="aiEngine">Engine</label>
+      <select id="aiEngine"></select>
+      <small id="aiEngineHelp"></small>
+    </div>
+    <div class="field">
+      <label for="aiKey">API key</label>
+      <input id="aiKey" type="password" placeholder="Paste your key" spellcheck="false" autocomplete="off">
+      <small id="aiKeyHelp"></small>
     </div>
     <div class="field">
       <label for="aiModel">Model</label>
       <select id="aiModel"></select>
-      <small>Opus 5 writes better; Haiku 4.5 is cheaper and faster. Both cost
-        well under a cent per click.</small>
+      <small id="aiModelHelp">Saved per engine. The list is read from your own
+        account once a key is in place.</small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>
@@ -552,6 +558,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       // so it stays out of the backup file exactly like the two above.
       "tracker.aiKey",
       "tracker.aiModel",
+      // Same for the free engine: a key and a model, kept per engine so
+      // switching between them never destroys the other one's setup.
+      "tracker.geminiKey",
+      "tracker.geminiModel",
+      "tracker.aiEngine",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
@@ -713,47 +724,22 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
  * same thing. Everything about talking to a model lives here, so ui.js owns
  * the button and knows nothing about who improves the text.
  *
- * Why a raw fetch and not the official SDK: this repository has no bundler
- * for its JavaScript. Every file is a plain <script src>, and build_standalone
- * inlines those same files into one HTML page. Adding a build step for a
- * single request would be a larger change than the feature.
+ * Two engines, because the first question anyone asks is what it costs.
+ * Gemini is the default: Google AI Studio issues a key with no card and a
+ * free tier, so the button costs nothing to run. Anthropic writes better and
+ * needs purchased credit. Both are reached the same way, and the button, the
+ * Undo and the em dash rule never learn which one answered.
  *
- * The key lives in localStorage, which is the honest position for a static
- * site: there is no server here to hold a secret. It is filed under
- * KEYS.settings rather than KEYS.data on purpose, so it never travels inside
- * a backup file you might email to yourself. Give it a spend cap in the
- * Anthropic console and the worst case stays bounded.
+ * Why raw fetch and not an SDK: this repository has no bundler for its
+ * JavaScript. Every file is a plain <script src>, and build_standalone inlines
+ * those same files into one HTML page. Adding a build step for two requests
+ * would be a larger change than the feature.
+ *
+ * Keys live in localStorage, which is the honest position for a static site:
+ * there is no server here to hold a secret. They are filed under KEYS.settings
+ * rather than KEYS.data on purpose, so they never travel inside a backup file.
  */
 (() => {
-  const ENDPOINT = "https://api.anthropic.com/v1/messages";
-  const VERSION = "2023-06-01";
-  // Haiku is the default because this is a rewrite, not a reasoning problem,
-   // and it runs roughly five times further on the same credit. Opus stays on
-   // the list for anyone who wants the better writer.
-  const DEFAULT_MODEL = "claude-haiku-4-5";
-
-  /** Models offered in Settings. First is the default. */
-  const MODELS = [
-    "claude-haiku-4-5",
-    "claude-opus-5",
-  ];
-
-  /**
-   * Which models take output_config.effort.
-   *
-   * Not cosmetic. Haiku 4.5 REJECTS effort with a 400, so sending it to every
-   * model turns a model switch into a broken button. Opus 5 accepts it, and
-   * "low" is right here: a one paragraph rewrite needs no deliberation and the
-   * button should feel immediate.
-   */
-  const TAKES_EFFORT = (model) => /^claude-(opus|sonnet)-5/.test(model);
-
-  const cfg = () => ({
-    key: window.TrackerStore.getText("tracker.aiKey") ||
-         (window.TRACKER_CONFIG?.anthropicApiKey || ""),
-    model: window.TrackerStore.getText("tracker.aiModel") || DEFAULT_MODEL,
-  });
-
   /**
    * The instruction, written as asked for.
    *
@@ -783,40 +769,135 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     description: "This is a task description. A short paragraph is right.",
   };
 
+  const prompt = (kind) => SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description);
+  const get = (k) => window.TrackerStore.getText(k);
+
   /**
-   * Turn a failed response into something worth reading.
+   * Turn an HTTP status into something worth reading.
    *
    * "Request failed" tells you nothing about which of these it was, and each
-   * one has a different fix.
+   * one has a different fix. `detail` is the provider's own message, which is
+   * usually the most useful thing on a 400.
    */
-  function explain(status, body) {
-    if (status === 401) return "That API key was refused. Check it in Settings.";
-    if (status === 403) return "That key is not allowed to use this model.";
-    if (status === 400) {
-      const m = body && body.error && body.error.message;
-      return m ? "The request was rejected: " + m : "The request was rejected.";
-    }
-    if (status === 429) return "Rate limited, or the spend cap is reached. Try again shortly.";
+  function explain(status, detail, who) {
+    if (status === 401 || status === 403) return `That ${who} key was refused. Check it in Settings.`;
+    if (status === 400) return detail ? "The request was rejected: " + detail : "The request was rejected.";
+    if (status === 404) return detail ? "Not found: " + detail : "That model was not found. Pick another in Settings.";
+    if (status === 429) return "Rate limited, or the free quota is used up for now. Try again shortly.";
     if (status === 402) return "There is a billing problem on the account.";
-    if (status >= 500) return "Anthropic had a problem. Try again shortly.";
-    return "That did not work (HTTP " + status + ").";
+    if (status >= 500) return `${who} had a problem. Try again shortly.`;
+    return `That did not work (HTTP ${status}).`;
   }
 
-  /**
-   * Improve `text`. Resolves with the new text, or throws with a readable
-   * reason - ui.js shows the message and leaves what you typed alone.
-   */
-  async function standardize(text, { kind = "description" } = {}) {
-    const { key, model } = cfg();
-    if (!key) throw new Error("Add an Anthropic API key in Settings to use this.");
-
-    let res;
+  /** fetch that reports a dead network as a sentence rather than a TypeError. */
+  async function send(url, init, who) {
     try {
-      res = await fetch(ENDPOINT, {
+      return await fetch(url, init);
+    } catch {
+      // fetch only rejects on a network-level failure, never on a 4xx.
+      throw new Error(`Could not reach ${who}. Check your connection.`);
+    }
+  }
+
+  /** Rough cost and speed order, by name. Unknown names sort in the middle. */
+  const rank = (m) =>
+    /flash-lite/.test(m) ? 0 : /flash/.test(m) ? 1 : /pro/.test(m) ? 3 : 2;
+
+  /* ---------------------------------------------------------------- Gemini */
+  const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+  // Used only until the picker is filled from the account itself. Model names
+  // churn, so this file does not pretend to know the current best one:
+  // listModels asks, and a name baked in here would be wrong within months.
+  const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash";
+
+  const gemini = {
+    id: "gemini",
+    label: "Google Gemini (free tier)",
+    keySetting: "tracker.geminiKey",
+    modelSetting: "tracker.geminiModel",
+    keyHelp: "aistudio.google.com → Get API key. No card needed.",
+    free: true,
+    key: () => get("tracker.geminiKey"),
+    model: () => get("tracker.geminiModel") || GEMINI_FALLBACK_MODEL,
+
+    /** The models this key can actually use, asked of the account. */
+    async listModels(key) {
+      if (!key) return [];
+      const res = await send(`${GEMINI_BASE}/models?key=${encodeURIComponent(key)}`,
+                             { method: "GET" }, "Google");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Google"));
+      return ((body && body.models) || [])
+        .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+        .map((m) => String(m.name || "").replace(/^models\//, ""))
+        .filter(Boolean)
+        .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    },
+
+    async run(text, kind) {
+      const key = gemini.key();
+      if (!key) throw new Error("Add a Google AI Studio key in Settings to use this.");
+      const res = await send(
+        `${GEMINI_BASE}/models/${encodeURIComponent(gemini.model())}:generateContent`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: prompt(kind) }] },
+            contents: [{ role: "user", parts: [{ text }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
+          }),
+        }, "Google");
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Google"));
+
+      // A blocked prompt comes back as a 200 with no candidate, so the reply
+      // is read rather than assumed.
+      const cand = body && body.candidates && body.candidates[0];
+      if (!cand) {
+        const why = body && body.promptFeedback && body.promptFeedback.blockReason;
+        throw new Error(why ? `Gemini declined that (${why}).`
+                            : "Nothing came back. Your text is unchanged.");
+      }
+      return ((cand.content && cand.content.parts) || [])
+        .map((p) => p.text || "").join("").trim();
+    },
+  };
+
+  /* ------------------------------------------------------------- Anthropic */
+  const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
+  const ANTHROPIC_MODELS = ["claude-haiku-4-5", "claude-opus-5"];
+
+  /**
+   * Which models take output_config.effort.
+   *
+   * Not cosmetic. Haiku 4.5 REJECTS effort with a 400, so sending it to every
+   * model turns a model switch into a broken button. Opus 5 accepts it, and
+   * "low" is right here: a one paragraph rewrite needs no deliberation.
+   */
+  const TAKES_EFFORT = (model) => /^claude-(opus|sonnet)-5/.test(model);
+
+  const anthropic = {
+    id: "anthropic",
+    label: "Anthropic Claude (paid credit)",
+    keySetting: "tracker.aiKey",
+    modelSetting: "tracker.aiModel",
+    keyHelp: "console.anthropic.com → API keys. Needs credit on the account.",
+    free: false,
+    key: () => get("tracker.aiKey"),
+    model: () => get("tracker.aiModel") || ANTHROPIC_MODELS[0],
+    listModels: async () => ANTHROPIC_MODELS.slice(),
+
+    async run(text, kind) {
+      const key = anthropic.key();
+      if (!key) throw new Error("Add an Anthropic API key in Settings to use this.");
+      const model = anthropic.model();
+      const res = await send(ANTHROPIC_ENDPOINT, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "anthropic-version": VERSION,
+          "anthropic-version": "2023-06-01",
           // Without this the browser call is refused before it reaches the API.
           "anthropic-dangerous-direct-browser-access": "true",
           "x-api-key": key,
@@ -825,32 +906,50 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           model,
           max_tokens: 2000,
           ...(TAKES_EFFORT(model) ? { output_config: { effort: "low" } } : {}),
-          system: SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description),
+          system: prompt(kind),
           messages: [{ role: "user", content: text }],
         }),
-      });
-    } catch {
-      // Fetch only rejects on a network-level failure, never on a 4xx.
-      throw new Error("Could not reach Anthropic. Check your connection.");
-    }
+      }, "Anthropic");
 
-    const body = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(explain(res.status, body));
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Anthropic"));
+      if (body && body.stop_reason === "refusal") throw new Error("The model declined to rewrite that.");
+      return (Array.isArray(body && body.content) ? body.content : [])
+        .filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    },
+  };
 
-    // A refusal comes back as a 200 with nothing useful in it, so the reply is
-    // checked rather than assumed.
-    if (body && body.stop_reason === "refusal") {
-      throw new Error("The model declined to rewrite that.");
+  /* -------------------------------------------------------------- dispatch */
+  const PROVIDERS = [gemini, anthropic];
+  const DEFAULT_ENGINE = gemini.id;
+
+  const byId = (id) => PROVIDERS.find((p) => p.id === id);
+  /** The chosen engine, falling back to the default if the setting is stale. */
+  const engine = () => byId(get("tracker.aiEngine")) || byId(DEFAULT_ENGINE);
+  const hasKey = () => PROVIDERS.some((p) => p.key());
+
+  /**
+   * Improve `text`. Resolves with the new text, or throws with a readable
+   * reason - ui.js shows the message and leaves what you typed alone.
+   *
+   * If the chosen engine has no key but the other one does, the other one
+   * runs rather than refusing. Someone who set up one engine and then changed
+   * the default should get a working button, not a lecture.
+   */
+  async function standardize(text, { kind = "description" } = {}) {
+    const chosen = engine();
+    const provider = chosen.key() ? chosen : PROVIDERS.find((p) => p.key());
+    if (!provider) {
+      throw new Error("Add a key in Settings to use this. Google AI Studio is free.");
     }
-    const out = (body && Array.isArray(body.content) ? body.content : [])
-      .filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-    if (!out) throw new Error("Nothing came back. Your text is unchanged.");
-    return out;
+    return provider.run(text, kind);
   }
 
-  const hasKey = () => !!cfg().key;
-
-  window.TrackerAI = { standardize, hasKey, MODELS, DEFAULT_MODEL, TAKES_EFFORT };
+  window.TrackerAI = {
+    standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, TAKES_EFFORT,
+    // Kept so anything asking what Anthropic would be sent still gets it.
+    MODELS: ANTHROPIC_MODELS, DEFAULT_MODEL: ANTHROPIC_MODELS[0],
+  };
 })();
 
 </script>
@@ -3343,26 +3442,94 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (e.target.id === "openSettings" || e.target.closest("[data-open-settings]")) {
       $("#clientId").value = window.TrackerStore.getText("tracker.clientId");
       $("#apiKey").value = window.TrackerStore.getText("tracker.apiKey");
-      // The Standardize button's settings live in the same dialog.
-      $("#aiKey").value = window.TrackerStore.getText("tracker.aiKey");
-      const models = (window.TrackerAI && window.TrackerAI.MODELS) || [];
-      const chosen = window.TrackerStore.getText("tracker.aiModel") ||
-                     (window.TrackerAI && window.TrackerAI.DEFAULT_MODEL) || "";
-      $("#aiModel").innerHTML = models.map((m) =>
-        `<option value="${m}"${m === chosen ? " selected" : ""}>${m}</option>`).join("");
+      renderAiSettings();
       $("#settingsModal").hidden = false;
     }
     if (e.target.id === "settingsCancel" || e.target.id === "settingsModal") $("#settingsModal").hidden = true;
     if (e.target.id === "settingsSave") {
       window.TrackerStore.setText("tracker.clientId", $("#clientId").value.trim());
       window.TrackerStore.setText("tracker.apiKey", $("#apiKey").value.trim());
-      window.TrackerStore.setText("tracker.aiKey", $("#aiKey").value.trim());
-      window.TrackerStore.setText("tracker.aiModel", $("#aiModel").value);
+      saveAiSettings();
       $("#settingsModal").hidden = true;
       notice = "Credentials saved in this browser.";
       window.TrackerRender();
     }
   });
+
+  /* ---------- the Standardize engine, in the same dialog ----------
+     Key and model are stored PER ENGINE, so switching engine to look at the
+     other one never wipes the setup you already had. The model list is read
+     from the account rather than baked in here: model names churn, and a
+     stale name is a 404 the reader cannot act on. */
+  const aiCurrentEngine = () => {
+    const chosen = $("#aiEngine") && $("#aiEngine").value;
+    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+    return list.find((p) => p.id === chosen) || list[0];
+  };
+
+  function renderAiSettings() {
+    const list = (window.TrackerAI && window.TrackerAI.PROVIDERS) || [];
+    if (!list.length) return;
+    const chosen = window.TrackerStore.getText("tracker.aiEngine") ||
+                   window.TrackerAI.DEFAULT_ENGINE;
+    $("#aiEngine").innerHTML = list.map((p) =>
+      `<option value="${p.id}"${p.id === chosen ? " selected" : ""}>${p.label}</option>`).join("");
+    showEngine();
+  }
+
+  /** Fill the key, the help and the model list for whichever engine is picked. */
+  function showEngine() {
+    const p = aiCurrentEngine();
+    if (!p) return;
+    $("#aiKey").value = window.TrackerStore.getText(p.keySetting);
+    $("#aiKeyHelp").textContent = p.keyHelp;
+    $("#aiEngineHelp").textContent = p.free
+      ? "Free tier. No card needed."
+      : "Uses purchased credit on that account.";
+    const saved = window.TrackerStore.getText(p.modelSetting) || p.model();
+    $("#aiModel").innerHTML = `<option value="${saved}" selected>${saved}</option>`;
+    loadModels(p, saved);
+  }
+
+  /**
+   * Ask the account which models it can use. A failure here is not worth
+   * shouting about: the saved model stays selected and still works, so the
+   * note says what happened and the dialog carries on.
+   */
+  async function loadModels(p, saved) {
+    if (!p) return;
+    const key = $("#aiKey").value.trim() || window.TrackerStore.getText(p.keySetting);
+    if (!key) { $("#aiModelHelp").textContent = "Add a key to see the models it can use."; return; }
+    $("#aiModelHelp").textContent = "Reading the models on that account…";
+    try {
+      const models = await p.listModels(key);
+      if (!models.length) throw new Error("none listed");
+      $("#aiModel").innerHTML = models.map((m) =>
+        `<option value="${m}"${m === saved ? " selected" : ""}>${m}</option>`).join("");
+      if (!models.includes(saved)) $("#aiModel").value = models[0];
+      $("#aiModelHelp").textContent =
+        `${models.length} models on this account. The cheapest and fastest are first.`;
+    } catch (err) {
+      $("#aiModelHelp").textContent = "Could not read the model list (" +
+        (err.message || "failed") + "). Keeping " + saved + ".";
+    }
+  }
+
+  function saveAiSettings() {
+    const p = aiCurrentEngine();
+    if (!p) return;
+    window.TrackerStore.setText("tracker.aiEngine", $("#aiEngine").value);
+    window.TrackerStore.setText(p.keySetting, $("#aiKey").value.trim());
+    window.TrackerStore.setText(p.modelSetting, $("#aiModel").value);
+  }
+
+  document.addEventListener("change", (e) => {
+    if (e.target.id === "aiEngine") showEngine();
+  });
+  // A pasted key should fill the model list without needing a save first.
+  document.addEventListener("blur", (e) => {
+    if (e.target.id === "aiKey") loadModels(aiCurrentEngine(), $("#aiModel").value);
+  }, true);
 
   window.TrackerDrive = {
     view, connect, saved, editLink,

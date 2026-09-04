@@ -63,18 +63,24 @@
     </div>
     <h3 style="margin-top:22px">Standardize text</h3>
     <p class="lede">Powers the wand button beside a task's name and description.
-      Stored in this browser only, and deliberately left out of the backup file.
-      Give the key a spend cap in the Anthropic console.</p>
+      Keys are stored in this browser only and are deliberately left out of the
+      backup file. Google AI Studio issues a key with no card and a free tier,
+      which is the default.</p>
     <div class="field">
-      <label for="aiKey">Anthropic API key</label>
-      <input id="aiKey" type="password" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
-      <small>console.anthropic.com &rarr; API keys. Leave blank to turn the button off.</small>
+      <label for="aiEngine">Engine</label>
+      <select id="aiEngine"></select>
+      <small id="aiEngineHelp"></small>
+    </div>
+    <div class="field">
+      <label for="aiKey">API key</label>
+      <input id="aiKey" type="password" placeholder="Paste your key" spellcheck="false" autocomplete="off">
+      <small id="aiKeyHelp"></small>
     </div>
     <div class="field">
       <label for="aiModel">Model</label>
       <select id="aiModel"></select>
-      <small>Opus 5 writes better; Haiku 4.5 is cheaper and faster. Both cost
-        well under a cent per click.</small>
+      <small id="aiModelHelp">Saved per engine. The list is read from your own
+        account once a key is in place.</small>
     </div>
     <div class="actions">
       <button class="btn" id="settingsCancel">Cancel</button>

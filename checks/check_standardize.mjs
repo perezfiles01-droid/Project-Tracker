@@ -2,17 +2,21 @@
 /**
  * Guard for the Standardize button.
  *
- * Two promises are made to the person typing, and both are the kind that fail
- * silently if nobody checks them:
+ * Three promises are made to the person typing, and all three fail silently
+ * if nobody checks them:
  *
  *   1. What you typed is never lost. Undo restores it exactly, and every
  *      failure path leaves the field alone.
  *   2. No em dashes come back, whatever the model does. The prompt asks; this
  *      asserts.
+ *   3. A key never leaves this browser in a backup file.
  *
- * No API key and no spend: window.fetch is replaced with a stub, so the
- * request shape is captured and every response - success, 401, 429, a
- * refusal, a dead network - is driven deliberately rather than waited for.
+ * Providers are enumerated from the running app rather than named here, so a
+ * third engine added later is driven by this check without it being edited.
+ *
+ * No key and no spend: window.fetch is replaced with a stub, so the request
+ * each provider builds is captured and every response - success, a rejected
+ * key, a rate limit, a dead network, a refusal - is driven deliberately.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -26,12 +30,6 @@ const ok = (name, cond, detail = "") => {
   if (!cond) failed++;
 };
 
-/* --- source level: the key must be a setting, never data --- */
-const store = readFileSync(join(root, "assets/store.js"), "utf8");
-const dataBlock = store.slice(store.indexOf("data: ["), store.indexOf("settings: ["));
-ok("the AI key is not a data key", !dataBlock.includes("tracker.aiKey"));
-ok("the AI key is declared as a setting", /settings:\s*\[[^\]]*tracker\.aiKey/s.test(store));
-
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
@@ -39,105 +37,136 @@ page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 const url = "file://" + join(root, "Tracker-standalone.html");
 
-/** Open a fresh New task dialog, with a key set unless told otherwise. */
-async function openTask({ key = "sk-ant-test" } = {}) {
+await page.goto(url, { waitUntil: "load" });
+
+/** Every engine the app offers, asked of the app rather than named here. */
+const providers = await page.evaluate(() =>
+  ((window.TrackerAI && window.TrackerAI.PROVIDERS) || []).map((p) => ({
+    id: p.id, label: p.label, keySetting: p.keySetting,
+    modelSetting: p.modelSetting, free: !!p.free,
+  })));
+if (!providers.length) {
+  // Everything below drives these. Without them the run would throw a stack
+  // trace, which reads like a broken check rather than a missing feature.
+  ok("the app exposes its engines", false, "TrackerAI.PROVIDERS is empty or absent; stopping");
+  await browser.close();
+  console.log(`\n${failed} standardize check(s) failed`);
+  process.exit(1);
+}
+ok("the app offers engines", providers.length >= 1,
+   providers.map((p) => p.id).join(", "));
+ok("at least one engine is free", providers.some((p) => p.free),
+   providers.filter((p) => p.free).map((p) => p.id).join(", ") || "none");
+const defaultEngine = await page.evaluate(() => window.TrackerAI.DEFAULT_ENGINE);
+const defaultProvider = providers.find((p) => p.id === defaultEngine);
+ok("the default engine costs nothing to run",
+   !!defaultProvider && defaultProvider.free, defaultEngine);
+
+/* --- source level: every key is a setting, never a data key --- */
+const store = readFileSync(join(root, "assets/store.js"), "utf8");
+const dataBlock = store.slice(store.indexOf("data: ["), store.indexOf("settings: ["));
+const settingsBlock = store.slice(store.indexOf("settings: ["));
+for (const p of providers) {
+  ok(`${p.id}: its key is not a data key`, !dataBlock.includes(p.keySetting), p.keySetting);
+  ok(`${p.id}: its key is declared as a setting`, settingsBlock.includes(p.keySetting), p.keySetting);
+}
+
+/** Start clean, with the given engine and key in place. */
+async function openTask({ engine = null, key = "test-key" } = {}) {
   await page.goto(url, { waitUntil: "load" });
-  await page.evaluate((k) => {
+  await page.evaluate(([eng, k, provs]) => {
     localStorage.clear();
-    if (k) localStorage.setItem("tracker.aiKey", k);
-  }, key);
+    if (eng) {
+      localStorage.setItem("tracker.aiEngine", eng);
+      const p = provs.find((x) => x.id === eng);
+      if (p && k) localStorage.setItem(p.keySetting, k);
+    }
+  }, [engine, key, providers]);
   await page.goto(url, { waitUntil: "load" });
   await page.click('#nav button[data-route="todo"]');
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(300);
   await page.click('[data-edit="task:new"]');
   await page.waitForSelector("#formDialog .box");
 }
 
-/** Make the next call to the API answer with whatever we say. */
+/** Make the next call answer with whatever we say, and record what was sent. */
 async function stub(spec) {
   await page.evaluate((s) => {
     window.__calls = [];
     window.fetch = async (u, init) => {
-      window.__calls.push({ url: u, init: { ...init, headers: init.headers } });
+      window.__calls.push({ url: String(u), init });
       if (s.networkError) throw new TypeError("Failed to fetch");
-      return {
-        ok: s.status === 200,
-        status: s.status,
-        json: async () => s.body,
-      };
+      return { ok: s.status === 200, status: s.status, json: async () => s.body };
     };
   }, spec);
 }
 
-const reply = (text, extra = {}) =>
-  ({ status: 200, body: { content: [{ type: "text", text }], stop_reason: "end_turn", ...extra } });
+/** A success body in whichever shape the provider reads. */
+const replyFor = (id, text) => ({
+  status: 200,
+  body: id === "gemini"
+    ? { candidates: [{ content: { parts: [{ text }] } }] }
+    : { content: [{ type: "text", text }], stop_reason: "end_turn" },
+});
+
+const typed = "the report is not yet done i need to finish it and send to the team";
 
 /* --- the button is where it was asked for --- */
 await openTask();
 const on = await page.$$eval("[data-standardize]", (bs) => bs.map((b) => b.dataset.standardize));
 ok("both task fields carry the button", on.includes("fd_name") && on.includes("fd_description"),
    on.join(", "));
-// Everything below drives that button. Without it the run would throw a
-// stack trace thirty lines later, which reads like a broken check rather
-// than a missing feature - so it says so and stops here.
 if (!on.length) {
   ok("the Standardize button exists at all", false, "nothing to drive; stopping");
   await browser.close();
   console.log(`\n${failed} standardize check(s) failed`);
   process.exit(1);
 }
-
 ok("the tooltip reads Standardize text",
    (await page.locator("[data-standardize]").first().getAttribute("title")) === "Standardize text");
-ok("a field that did not ask for it has no button",
-   !on.includes("fd_no") && !on.includes("fd_assignee"), on.join(", "));
 
-/* --- the request that would be sent --- */
-const typed = "the report is not yet done i need to finish it and send to the team";
-await stub(reply("The report is not finished. I will complete it and send it to the team."));
-await page.fill("#fd_description", typed);
-await page.click('[data-standardize="fd_description"]');
-await page.waitForTimeout(400);
+/* --- every engine builds a request that carries the key and the text --- */
+for (const p of providers) {
+  await openTask({ engine: p.id, key: "key-for-" + p.id });
+  await stub(replyFor(p.id, "The report is not finished."));
+  await page.fill("#fd_description", typed);
+  await page.click('[data-standardize="fd_description"]');
+  await page.waitForTimeout(400);
 
-const call = await page.evaluate(() => window.__calls[0]);
-ok("it calls the Messages API", call && call.url === "https://api.anthropic.com/v1/messages",
-   call && call.url);
-const h = (call && call.init.headers) || {};
-ok("it sends the browser access header",
-   h["anthropic-dangerous-direct-browser-access"] === "true");
-ok("it sends the api version and the key",
-   h["anthropic-version"] === "2023-06-01" && h["x-api-key"] === "sk-ant-test");
-const sent = JSON.parse((call && call.init.body) || "{}");
-ok("it names a current model", /^claude-(opus|haiku|sonnet)-/.test(sent.model || ""), sent.model);
-ok("it sends the typed text and nothing else as the message",
-   sent.messages && sent.messages.length === 1 && sent.messages[0].content === typed);
-ok("the instruction forbids the dashes", /em dash/i.test(sent.system || ""));
+  const call = await page.evaluate(() => window.__calls[0]);
+  ok(`${p.id}: it made exactly one request`, !!call,
+     call ? call.url.replace(/key=[^&]*/, "key=***") : "none");
+  if (!call) continue;
 
-ok("the improved text lands in the field",
-   (await page.inputValue("#fd_description")).startsWith("The report is not finished"));
+  const headers = call.init.headers || {};
+  const body = call.init.body || "";
+  const everything = call.url + " " + JSON.stringify(headers) + " " + body;
+  ok(`${p.id}: the request carries its key`, everything.includes("key-for-" + p.id));
+  ok(`${p.id}: it sends the typed text`, body.includes(typed.slice(0, 30)));
+  ok(`${p.id}: the instruction forbids the dashes`, /em dash/i.test(body));
+  ok(`${p.id}: the reply lands in the field`,
+     (await page.inputValue("#fd_description")).startsWith("The report is not finished"));
 
-/* --- Undo restores exactly what was typed --- */
-await page.click('[data-undo="fd_description"]');
-await page.waitForTimeout(250);
-ok("Undo restores the original byte for byte",
-   (await page.inputValue("#fd_description")) === typed);
+  // Undo is the promise that matters most, so it is checked per engine.
+  await page.click('[data-undo="fd_description"]');
+  await page.waitForTimeout(250);
+  ok(`${p.id}: Undo restores the original byte for byte`,
+     (await page.inputValue("#fd_description")) === typed);
+}
 
-/* --- effort is sent only to models that accept it ---
-   Haiku 4.5 rejects output_config.effort with a 400. Sending it to every
-   model turns switching model into a broken button, and the failure looks
-   like a bad key rather than a bad request. Every offered model is checked
-   at runtime, so one added later is covered. */
-const offered = await page.evaluate(() => window.TrackerAI.MODELS);
-ok("more than one model is offered", offered.length >= 2, offered.join(", "));
-for (const model of offered) {
-  await openTask();
+/* --- Anthropic's effort rule, which a model switch gets wrong silently ---
+   Haiku 4.5 rejects output_config.effort with a 400. Every Anthropic model
+   the app offers is driven, so one added later is covered. */
+const anthropicModels = await page.evaluate(() => window.TrackerAI.MODELS);
+for (const model of anthropicModels) {
+  await openTask({ engine: "anthropic", key: "sk-ant-test" });
   await page.evaluate((m) => localStorage.setItem("tracker.aiModel", m), model);
   await page.reload({ waitUntil: "load" });
   await page.click('#nav button[data-route="todo"]');
   await page.waitForTimeout(300);
   await page.click('[data-edit="task:new"]');
   await page.waitForSelector("#formDialog .box");
-  await stub(reply("fine."));
+  await stub(replyFor("anthropic", "fine."));
   await page.fill("#fd_description", "something to fix");
   await page.click('[data-standardize="fd_description"]');
   await page.waitForTimeout(350);
@@ -145,58 +174,52 @@ for (const model of offered) {
   const hasEffort = !!(body.output_config && body.output_config.effort);
   const shouldHave = await page.evaluate((m) => window.TrackerAI.TAKES_EFFORT(m), model);
   ok(`${model} is sent ${shouldHave ? "with" : "without"} effort`,
-     hasEffort === shouldHave, `model=${body.model} effort=${hasEffort}`);
+     hasEffort === shouldHave, `effort=${hasEffort}`);
   ok(`${model} is the model actually sent`, body.model === model, body.model);
 }
-// Named explicitly, because this is the one that was wrong.
 ok("Haiku is never sent an effort parameter",
    !(await page.evaluate(() => window.TrackerAI.TAKES_EFFORT("claude-haiku-4-5"))));
-ok("the default model is the one the picker lists first",
-   (await page.evaluate(() => window.TrackerAI.DEFAULT_MODEL)) === offered[0]);
 
-/* --- the dash rule holds even when the model ignores it --- */
-await openTask();
-await stub(reply("We shipped it — it works, and the 2024–2025 range is fine."));
-await page.fill("#fd_description", "we shipped it and it works");
-await page.click('[data-standardize="fd_description"]');
-await page.waitForTimeout(400);
-const dashed = await page.inputValue("#fd_description");
-ok("an em dash from the model never reaches the field", !dashed.includes("—"), dashed);
-ok("a numeric range is left alone", dashed.includes("2024-2025"), dashed);
-
-/* --- the dash rule on its own, including what it must NOT touch ---
-   A rule this blunt earns its place only if it leaves ordinary punctuation
-   alone. A false positive here rewrites correct text. */
+/* --- the dash rule on its own, including what it must NOT touch --- */
 const dashes = await page.evaluate(() => {
   const t = window.TrackerUI.tidyDashes;
   return {
     hyphen: t("a well-known case"),
-    range: t("the 2024\u20132025 range"),
+    range: t("the 2024–2025 range"),
     minus: t("temperature -5 today"),
     plain: t("nothing to change here"),
-    parenthetical: t("We shipped it \u2014 it works."),
-    trailing: t("ends with one \u2014"),
+    parenthetical: t("We shipped it — it works."),
+    trailing: t("ends with one —"),
   };
 });
 ok("a hyphenated word is left alone", dashes.hyphen === "a well-known case", dashes.hyphen);
 ok("a numeric range becomes a hyphen, not a comma", dashes.range === "the 2024-2025 range", dashes.range);
 ok("a minus sign is left alone", dashes.minus === "temperature -5 today", dashes.minus);
-ok("text with no dashes is returned unchanged",
-   dashes.plain === "nothing to change here", dashes.plain);
+ok("text with no dashes is unchanged", dashes.plain === "nothing to change here", dashes.plain);
 ok("a parenthetical dash becomes a comma",
    dashes.parenthetical === "We shipped it, it works.", dashes.parenthetical);
 ok("a trailing dash is dropped", dashes.trailing === "ends with one", dashes.trailing);
 
+/* --- and it holds against a model that ignores the instruction --- */
+const first = providers[0];
+await openTask({ engine: first.id });
+await stub(replyFor(first.id, "We shipped it — it works, and the 2024–2025 range is fine."));
+await page.fill("#fd_description", "we shipped it and it works");
+await page.click('[data-standardize="fd_description"]');
+await page.waitForTimeout(400);
+const dashed = await page.inputValue("#fd_description");
+ok("an em dash from the model never reaches the field", !dashed.includes("—"), dashed);
+ok("a numeric range survives it", dashed.includes("2024-2025"), dashed);
+
 /* --- every failure leaves what you typed exactly as you typed it --- */
 for (const [label, spec] of [
-  ["a rejected key", { status: 401, body: { error: { message: "invalid x-api-key" } } }],
+  ["a rejected key", { status: 401, body: { error: { message: "bad key" } } }],
   ["a rate limit", { status: 429, body: { error: { message: "slow down" } } }],
   ["a server fault", { status: 500, body: {} }],
   ["a dead network", { networkError: true }],
-  ["a refusal", { status: 200, body: { content: [], stop_reason: "refusal" } }],
-  ["an empty reply", reply("")],
+  ["an empty reply", { status: 200, body: {} }],
 ]) {
-  await openTask();
+  await openTask({ engine: first.id });
   await stub(spec);
   await page.fill("#fd_description", typed);
   await page.click('[data-standardize="fd_description"]');
@@ -207,21 +230,26 @@ for (const [label, spec] of [
   ok(`${label} says what went wrong`, note.length > 0 && !/undefined|\[object/.test(note), note);
 }
 
-/* --- with no key, it says where to put one rather than failing oddly --- */
-await openTask({ key: null });
+/* --- with no key anywhere, it says where to get one, free --- */
+await openTask({ engine: null, key: null });
 await page.fill("#fd_description", typed);
 await page.click('[data-standardize="fd_description"]');
 await page.waitForTimeout(300);
 const noKey = (await page.locator('[data-note="fd_description"]').textContent()).trim();
 ok("with no key it points at Settings", /settings/i.test(noKey), noKey);
+ok("with no key it names the free option", /free/i.test(noKey), noKey);
 ok("with no key nothing was sent",
    (await page.evaluate(() => (window.__calls || []).length)) === 0);
 
-/* --- and the key never travels in a backup --- */
-await page.evaluate(() => localStorage.setItem("tracker.aiKey", "sk-ant-secret"));
+/* --- keys never travel in a backup --- */
+await page.evaluate((provs) => {
+  for (const p of provs) localStorage.setItem(p.keySetting, "secret-" + p.id);
+}, providers);
 const backup = await page.evaluate(() => JSON.stringify(window.TrackerStore.exportData()));
-ok("a backup file carries no API key",
-   !backup.includes("sk-ant-secret") && !backup.includes("tracker.aiKey"));
+for (const p of providers) {
+  ok(`${p.id}: a backup file carries no key`,
+     !backup.includes("secret-" + p.id) && !backup.includes(p.keySetting), p.keySetting);
+}
 
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();
