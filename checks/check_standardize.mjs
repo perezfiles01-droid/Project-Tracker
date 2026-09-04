@@ -55,8 +55,8 @@ if (!providers.length) {
 }
 ok("the app offers engines", providers.length >= 1,
    providers.map((p) => p.id).join(", "));
-ok("at least one engine is free", providers.some((p) => p.free),
-   providers.filter((p) => p.free).map((p) => p.id).join(", ") || "none");
+ok("every engine offered is free to run", providers.every((p) => p.free),
+   providers.filter((p) => !p.free).map((p) => p.id).join(", ") || "all free");
 const defaultEngine = await page.evaluate(() => window.TrackerAI.DEFAULT_ENGINE);
 const defaultProvider = providers.find((p) => p.id === defaultEngine);
 ok("the default engine costs nothing to run",
@@ -154,31 +154,37 @@ for (const p of providers) {
      (await page.inputValue("#fd_description")) === typed);
 }
 
-/* --- Anthropic's effort rule, which a model switch gets wrong silently ---
-   Haiku 4.5 rejects output_config.effort with a 400. Every Anthropic model
-   the app offers is driven, so one added later is covered. */
-const anthropicModels = await page.evaluate(() => window.TrackerAI.MODELS);
-for (const model of anthropicModels) {
-  await openTask({ engine: "anthropic", key: "sk-ant-test" });
-  await page.evaluate((m) => localStorage.setItem("tracker.aiModel", m), model);
-  await page.reload({ waitUntil: "load" });
-  await page.click('#nav button[data-route="todo"]');
-  await page.waitForTimeout(300);
-  await page.click('[data-edit="task:new"]');
-  await page.waitForSelector("#formDialog .box");
-  await stub(replyFor("anthropic", "fine."));
-  await page.fill("#fd_description", "something to fix");
-  await page.click('[data-standardize="fd_description"]');
-  await page.waitForTimeout(350);
-  const body = JSON.parse((await page.evaluate(() => window.__calls[0])).init.body);
-  const hasEffort = !!(body.output_config && body.output_config.effort);
-  const shouldHave = await page.evaluate((m) => window.TrackerAI.TAKES_EFFORT(m), model);
-  ok(`${model} is sent ${shouldHave ? "with" : "without"} effort`,
-     hasEffort === shouldHave, `effort=${hasEffort}`);
-  ok(`${model} is the model actually sent`, body.model === model, body.model);
-}
-ok("Haiku is never sent an effort parameter",
-   !(await page.evaluate(() => window.TrackerAI.TAKES_EFFORT("claude-haiku-4-5"))));
+/* --- a key stranded by the removed engine is adopted, once ---
+   A build served from a stale cache saved keys under the Anthropic slot,
+   because that was the only engine it knew. Anyone who pasted an AI Studio
+   key then has it filed where nothing reads it. */
+await page.goto(url, { waitUntil: "load" });
+await page.evaluate(() => {
+  localStorage.clear();
+  localStorage.setItem("tracker.aiKey", "AIzaSyStranded");
+});
+await page.goto(url, { waitUntil: "load" });
+const adopted = await page.evaluate(() => ({
+  gemini: localStorage.getItem("tracker.geminiKey"),
+  old: localStorage.getItem("tracker.aiKey"),
+}));
+ok("a Google key left in the old slot is adopted", adopted.gemini === "AIzaSyStranded", adopted.gemini);
+ok("the old slot is cleared once it has been moved", adopted.old === null, String(adopted.old));
+
+// It must not touch a key that is not Google's, nor overwrite one already set.
+await page.goto(url, { waitUntil: "load" });
+await page.evaluate(() => {
+  localStorage.clear();
+  localStorage.setItem("tracker.aiKey", "sk-ant-not-a-google-key");
+  localStorage.setItem("tracker.geminiKey", "AIzaSyMine");
+});
+await page.goto(url, { waitUntil: "load" });
+const untouched = await page.evaluate(() => ({
+  gemini: localStorage.getItem("tracker.geminiKey"),
+  old: localStorage.getItem("tracker.aiKey"),
+}));
+ok("a non-Google key is left where it is", untouched.old === "sk-ant-not-a-google-key", String(untouched.old));
+ok("an existing key is never overwritten", untouched.gemini === "AIzaSyMine", untouched.gemini);
 
 /* --- the dash rule on its own, including what it must NOT touch --- */
 const dashes = await page.evaluate(() => {

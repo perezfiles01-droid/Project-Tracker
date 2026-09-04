@@ -28,6 +28,12 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      # Pages revalidates HTML sooner than it revalidates assets/*.js, so a
+      # returning visitor can get the new index.html wired to the previous
+      # deploy's scripts. That mix is silent. Stamping the URLs with the
+      # commit makes it impossible.
+      - name: Stamp assets with the commit, so no cache can serve a stale mix
+        run: python3 scripts/stamp_assets.py "${{ github.sha }}"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
