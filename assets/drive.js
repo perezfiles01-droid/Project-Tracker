@@ -368,8 +368,18 @@
      model wrongly labelled stays reachable. */
   let modelsHeld = [];
   const ai = () => window.TrackerAI || {};
-  const tierOf = (m) => (ai().classify ? ai().classify(m).tier : "free");
-  const purposeOf = (m) => (ai().classify ? ai().classify(m).purpose : "text");
+  /* Classification belongs to the engine, not to this dialog: Gemini labels by
+     name because Google publishes no prices, while OpenRouter reads its own.
+     The shared rules are the fallback for an engine that declares none. */
+  const classifierFor = (p) => (p && p.classify) || ai().classify ||
+                               (() => ({ tier: "free", purpose: "text" }));
+  const sortOf = (m) => classifierFor(engineOwning(m))(m);
+  const tierOf = (m) => sortOf(m).tier;
+  const purposeOf = (m) => sortOf(m).purpose;
+  /* Which engine a model came from. Until Phase 4 fills this it is simply the
+     engine on screen, which is the only one whose list has been read. */
+  const engineOwning = (m) => modelEngine.get(m) || aiCurrentEngine();
+  const modelEngine = new Map();
   const tierPicked = () => {
     const on = $("#aiTier") && $("#aiTier").querySelector("input:checked");
     return on ? on.value : "free";

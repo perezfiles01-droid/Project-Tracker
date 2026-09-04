@@ -4,14 +4,16 @@
  * same thing. Everything about talking to a model lives here, so ui.js owns
  * the button and knows nothing about who improves the text.
  *
- * One engine: Google Gemini. AI Studio issues a key with no card and a free
- * tier, so the button costs nothing to run, which is the whole requirement.
- * Anthropic was here and was removed once the free path worked; it needed
- * purchased credit and credit expires a year after purchase.
+ * Two engines, both free to run: Google Gemini, whose AI Studio key needs no
+ * card, and OpenRouter, whose ":free" models cost nothing per token. Anthropic
+ * was here and was removed once a free path worked; it needed purchased credit
+ * and credit expires a year after purchase.
  *
- * PROVIDERS is still a list rather than one hardcoded call. Adding a second
- * engine back is a new entry with the same four members, and the Settings
- * dialog shows the Engine picker only when there is more than one to pick.
+ * PROVIDERS is a list, and nothing outside it counts the entries. An engine is
+ * a new entry declaring the same members - key, model, listModels, run, plus
+ * a wire naming its reply shape and optionally its own classify. The Settings
+ * dialog and the guard both enumerate this list at runtime, so a third engine
+ * is one entry here and no edit anywhere else.
  *
  * Why raw fetch and not an SDK: this repository has no bundler for its
  * JavaScript. Every file is a plain <script src>, and build_standalone inlines
@@ -327,9 +329,9 @@
    * Improve `text`. Resolves with the new text, or throws with a readable
    * reason - ui.js shows the message and leaves what you typed alone.
    *
-   * If the chosen engine has no key but the other one does, the other one
-   * runs rather than refusing. Someone who set up one engine and then changed
-   * the default should get a working button, not a lecture.
+   * If the chosen engine has no key, the first engine that does have one runs
+   * rather than refusing. Someone who set up one engine and then changed the
+   * default should get a working button, not a lecture.
    */
   async function standardize(text, { kind = "description" } = {}) {
     const chosen = engine();
