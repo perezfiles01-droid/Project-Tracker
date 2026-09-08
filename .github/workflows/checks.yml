@@ -69,13 +69,17 @@ jobs:
       # that is the failure that would take the task list down with it.
       - name: Images are stored by reference, land in the cell, and are released
         run: node checks/check_images.mjs
+      # One ceiling, read from the app: the number must not live in the field,
+      # the help text and the check as three copies that can disagree.
+      - name: Every attachments field enforces the same ceiling, and says so
+        run: node checks/check_limits.mjs
       - name: The task dialog offers the projects the page lists
         run: node checks/check_task_project.mjs
       - name: Task numbers count 1..n and cannot be typed
         run: node checks/check_task_number.mjs
       - name: The first letter capitalises where it was asked for
         run: node checks/check_capitalize.mjs
-      - name: Images and files attach, cap at five, and download
+      - name: Images and files attach, cap at the ceiling, and download
         run: node checks/check_attachments.mjs
       - name: Several reference links, each with a note and a wand
         run: node checks/check_ref_links.mjs
