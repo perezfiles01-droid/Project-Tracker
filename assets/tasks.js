@@ -83,7 +83,7 @@
       if (alive.some((e) => e.origin === "task" && e.taskId === t.id)) continue;
       alive.push({
         id: "a-" + t.id, taskId: t.id, date: t.given || t.created || today(),
-        task: t.description || t.name || "Task",
+        task: window.TrackerUI.htmlText(t.description) || t.name || "Task",
         status: t.status, url: t.ref || "", origin: "task",
       });
       added = true;
@@ -173,7 +173,7 @@
           help: "The projects listed on the Overview page." },
         { name: "name", label: "Name of task", value: cur ? (cur.name || "") : "",
           placeholder: "Short name shown in the table", standardize: true, capitalize: true },
-        { name: "description", label: "Detailed description", type: "textarea", rows: 4,
+        { name: "description", label: "Detailed description", type: "rich", rows: 4,
           value: cur ? cur.description : "",
           help: "Shown when you click the task, not in the table.",
           placeholder: "What needs doing", standardize: true, capitalize: true },
@@ -280,7 +280,7 @@
     }
     log.push({
       id: "a-" + Date.now(), taskId: t.id, date: today(),
-      task: t.description || t.name || "Task",
+      task: window.TrackerUI.htmlText(t.description) || t.name || "Task",
       status: t.status, url: t.ref || "", origin: "task",
     });
     logWrite(log);
@@ -296,7 +296,8 @@
    * every delete in the app already uses rather than a new pattern.
    */
   function confirmMove(t, status) {
-    const name = String(t.name || t.description || "This task").slice(0, 60);
+    const name = String(t.name || window.TrackerUI.htmlText(t.description) ||
+                        "This task").slice(0, 60);
     if (LOGGED(status)) {
       return window.TrackerUI.confirmDialog({
         title: status === DONE ? "Mark as done" : "Mark as blocked",
@@ -542,7 +543,7 @@
       // Same bound as an update, for the same reason: an unbounded description
       // pushes Status, Assignee and Images below the fold in this very pane.
       ["Description", t.description
-        ? window.TrackerUI.clampBlock({ key: "d:" + t.id, text: t.description })
+        ? window.TrackerUI.clampBlock({ key: "d:" + t.id, text: t.description, html: true })
         : dash],
       ["Task Create Date", t.given ? createStamp(t) : dash],
       ["Due Date", t.due
@@ -640,7 +641,7 @@
         <th scope="row" class="updatewhen">${updateStamp(u)}</th>
         <td class="updatecell">
           ${u.text
-            ? window.TrackerUI.clampBlock({ key: "u:" + u.id, text: u.text })
+            ? window.TrackerUI.clampBlock({ key: "u:" + u.id, text: u.text, html: true })
             : `<span class="tag dead">\u2014</span>`}
           ${(u.images || []).length
             ? `<div class="updateshots">${(u.images || []).map((a) =>
@@ -698,7 +699,7 @@
       fields: [
         { name: "date", label: "Date", type: "date", value: cur ? cur.date : today(),
           help: "The time is stamped automatically when you save." },
-        { name: "text", label: "Update", type: "textarea", rows: 5,
+        { name: "text", label: "Update", type: "rich", rows: 5,
           value: cur ? cur.text : "", standardize: true, capitalize: true,
           placeholder: "What happened, or where this now stands" },
         { name: "images", label: "Images", type: "attachments", max: UPDATE_IMAGES,
@@ -789,7 +790,7 @@
 
   function taskRow(t, openHere) {
     const dash = `<span class="tag dead">—</span>`;
-    const short = (t.description || "").split("\n")[0].slice(0, 90);
+    const short = window.TrackerUI.htmlText(t.description).slice(0, 90);
     // Tasks created before "Name of task" existed fall back to their description.
     // Narrowed on the SAME value the header is narrowed on. Read straight from
     // openRow, a task opened on the Daily activity page would drop these cells
@@ -834,6 +835,14 @@
    */
   function active() { return load().filter((t) => !LOGGED(t.status)); }
 
+  /** A task flattened to the words in it, for the search box. */
+  function searchable(t) {
+    const flat = { ...t };
+    flat.description = window.TrackerUI.htmlText(t.description);
+    flat.updates = (t.updates || []).map((u) => ({ ...u, text: window.TrackerUI.htmlText(u.text) }));
+    return JSON.stringify(flat).toLowerCase();
+  }
+
   function view(q) {
     const all = numbered(active());
     // Only the projects tasks actually carry, so a project with no task is
@@ -841,7 +850,10 @@
     const projects = [...new Set(all.map((t) => t.project).filter(Boolean))].sort();
     const picked = window.TrackerUI.colFilter("tasks", "project");
     const rows = window.TrackerUI.sortRows("tasks",
-      all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q))
+      // Searched on the WORDS, not the markup. JSON.stringify over a task
+      // carrying rich text matches on tag names: "table" would hit every task
+      // that contains one, and "li" every bulleted list.
+      all.filter((t) => !q || searchable(t).includes(q))
          .filter((t) => !picked || t.project === picked));
     // The same scoping the log applies: a task open on the other page must not
     // narrow this table or fill this pane. active() is what this page lists.
@@ -971,7 +983,7 @@
       submitLabel: cur ? "Save changes" : "Add entry",
       fields: [
         { name: "date", label: "Date", type: "date", value: cur ? cur.date : today() },
-        { name: "task", label: "Activity", type: "textarea", rows: 3, value: cur ? cur.task : "" },
+        { name: "task", label: "Activity", type: "rich", rows: 3, value: cur ? cur.task : "" },
         // Only the two statuses this page is for. A logged activity is
         // something finished or something stuck; a task still in progress
         // belongs on the To Do List, and offering it here would put the same
@@ -1059,7 +1071,7 @@
    */
   function taskLabel(t) {
     if (!t) return "";
-    return t.name || (t.description || "").split("\n")[0].slice(0, 90) ||
+    return t.name || window.TrackerUI.htmlText(t.description).slice(0, 90) ||
            (t.no ? "Task " + t.no : "Untitled task");
   }
 

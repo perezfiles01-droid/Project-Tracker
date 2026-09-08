@@ -64,7 +64,7 @@
    */
   function activityText(r) {
     const t = r.edited ? null : loggedTask(r);
-    return t ? window.TrackerTasks.taskLabel(t) : (r.task || "");
+    return t ? window.TrackerTasks.taskLabel(t) : window.TrackerUI.htmlText(r.task || "");
   }
 
   /**
@@ -302,7 +302,10 @@
           html += table(`${p.id}-concerns`, [
             { key: "sn", label: "#", render: (r) => esc(r.sn) },
             { key: "concern", label: "Concern", render: (r) => esc(r.concern) },
-            { key: "description", label: "Description", wrap: true, render: (r) => esc(r.description) },
+            // Flat here, formatted in the pane. A nested table inside a 200px
+            // column is unreadable and makes the row height unpredictable.
+            { key: "description", label: "Description", wrap: true,
+              render: (r) => esc(window.TrackerUI.htmlText(r.description)) },
             { key: "reason", label: "Reason", wrap: true, render: (r) => esc(r.reason) },
             { key: "status", label: "Status", render: (r) => statusTag(r.status) },
           ], items);

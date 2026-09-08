@@ -499,6 +499,54 @@ table.tasktable{min-width:0}
    on one line rather than breaking in half in a narrow column. */
 td.stampcell{white-space:nowrap}
 .stamptime{color:var(--dim)}
+/* ---------- the rich text field ---------- */
+.richfield{display:flex;flex-direction:column;gap:0}
+.richbar{display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:5px 6px;
+  background:var(--panel-2);border:1px solid var(--line);border-bottom:0;
+  border-radius:9px 9px 0 0}
+.richbtn{min-width:26px;height:26px;padding:0 6px;background:none;border:0;border-radius:6px;
+  color:var(--muted);cursor:pointer;font-size:13px;line-height:1;font-family:inherit}
+.richbtn:hover{background:var(--panel);color:var(--text)}
+.richbtn.on{background:color-mix(in srgb, var(--accent) 22%, transparent);color:var(--text)}
+.richbtn[data-cmd="bold"]{font-weight:700}
+.richbtn[data-cmd="italic"]{font-style:italic}
+.richbtn[data-cmd="underline"]{text-decoration:underline}
+.richbtn[data-cmd="strikeThrough"]{text-decoration:line-through}
+.richsep{width:1px;height:16px;background:var(--line);margin:0 4px}
+.richbox{background:var(--panel-2);border:1px solid var(--line);border-radius:0 0 9px 9px;
+  padding:10px 12px;outline:none;overflow:auto;max-height:340px}
+.richbox:focus{border-color:var(--accent)}
+/* An empty field says what it is for, the way a placeholder does. A truly
+   empty contenteditable has no text node to style, so this hangs off :empty
+   and off the lone <br> the browser leaves behind. */
+.richbox:empty::before{content:attr(data-placeholder);color:var(--dim)}
+.tabletools{display:inline-flex;gap:2px;align-items:center}
+.tabletools[hidden]{display:none}
+/* The grid picker, the shape Word and Outlook both use. */
+.tablepicker{position:relative;z-index:2;margin-top:-1px;padding:8px;
+  background:var(--panel);border:1px solid var(--line);border-radius:0 0 9px 9px}
+.tablepicker[hidden]{display:none}
+.pickhead{font-size:11px;color:var(--dim);margin-bottom:6px}
+.pickgrid{display:grid;grid-template-columns:repeat(8,16px);gap:2px}
+.pickcell{width:16px;height:16px;border:1px solid var(--line);border-radius:2px;
+  background:var(--panel-2);cursor:pointer}
+.pickcell.lit{background:var(--accent);border-color:var(--accent)}
+
+/* What the fields hold, wherever it is shown: inside the editor and inside
+   the pane. One rule set, so what you type is what you later read. */
+.richbox table,.clamptext.rich table{border-collapse:collapse;margin:6px 0;width:auto;min-width:0}
+.richbox td,.richbox th,.clamptext.rich td,.clamptext.rich th{
+  border:1px solid var(--line);padding:4px 8px;vertical-align:top;min-width:40px}
+.richbox th,.clamptext.rich th{background:var(--panel);font-weight:600;text-align:left}
+.richbox ul,.richbox ol,.clamptext.rich ul,.clamptext.rich ol{margin:4px 0;padding-left:22px}
+.richbox li,.clamptext.rich li{margin:2px 0}
+.richbox p,.clamptext.rich p{margin:4px 0}
+.richbox p:first-child,.clamptext.rich p:first-child{margin-top:0}
+/* Rendered rich text keeps its own line breaks from the markup, so the
+   pre-wrap the plain-text clamp needs would double every gap. */
+.clamptext.rich{white-space:normal}
+.clamptext.rich table{max-width:100%;display:block;overflow-x:auto}
+
 /* Prose bounded to a few lines, with a control that opens it.
    line-height is stated rather than inherited: the max-height fallback below
    is arithmetic on it, and an inherited value makes that arithmetic wrong. */

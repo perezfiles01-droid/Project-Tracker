@@ -85,7 +85,7 @@
           value: cur ? cur.status : ART_STATUS[0] },
         { name: "owner", label: "Owner", value: cur ? cur.owner : "" },
         { name: "url", label: "Link", value: cur ? cur.url : "", placeholder: "https://…" },
-        { name: "description", label: "Description", type: "textarea", rows: 3,
+        { name: "description", label: "Description", type: "rich", rows: 3,
           value: cur ? cur.description : "" },
       ],
     });
@@ -112,7 +112,7 @@
         { name: "status", label: "Status", type: "select", options: TL_STATUS,
           value: cur ? cur.status : TL_STATUS[0] },
         { name: "url", label: "Link", value: cur ? cur.url || "" : "", placeholder: "https://…" },
-        { name: "notes", label: "Notes", type: "textarea", rows: 3, value: cur ? cur.notes : "" },
+        { name: "notes", label: "Notes", type: "rich", rows: 3, value: cur ? cur.notes : "" },
       ],
     });
     if (!v) return;
