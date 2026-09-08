@@ -117,6 +117,18 @@
       rq.onerror = () => reject(rq.error);
     });
   };
+  /**
+   * Bytes the store has finished holding, deleted for real.
+   *
+   * The store keeps a deleted attachment's id against the undo step that
+   * removed it, and calls this only once that step can no longer be undone.
+   * So the bytes outlive the record exactly as long as the record can come
+   * back, and no longer.
+   */
+  window.TrackerBlobs = {
+    purge: (ids) => { for (const id of ids) dropBlob(id).catch(() => {}); },
+  };
+
   const dropBlob = async (id) => {
     const db = await idb();
     return new Promise((resolve) => {
@@ -226,9 +238,8 @@
     });
 
     const kept = (target.attachments || []).filter((a) => values.files.keep.includes(a.id));
-    for (const gone of (target.attachments || []).filter((a) => !kept.includes(a) && a.kind !== "link")) {
-      await dropBlob(gone.id);
-    }
+    const dropped = (target.attachments || [])
+      .filter((a) => !kept.includes(a) && a.kind !== "link").map((a) => a.id);
     for (const file of values.files.added) {
       const aid = "a-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
@@ -239,6 +250,8 @@
     if (!cur) list.push(target);
     save(list);
     syncLog(target);
+    // After the write, so the ids attach to the step this edit just made.
+    window.TrackerStore.holdBlobs(dropped);
     window.TrackerRender();
   }
 
@@ -334,8 +347,15 @@
       confirmLabel: "Remove task",
     });
     if (!yes) return;
-    for (const a of t.attachments || []) if (a.kind !== "link") await dropBlob(a.id);
+    // Held, not dropped. Undoing this delete brings the task back, and a task
+    // whose screenshots went with it is not the task you deleted. The store
+    // deletes them for real once the step falls out of the undo history.
     save(list.filter((x) => x.id !== id));
+    window.TrackerStore.holdBlobs(
+      (t.attachments || []).filter((a) => a.kind !== "link").map((a) => a.id));
+    // Every update the task carried goes too, so its images are held as well.
+    window.TrackerStore.holdBlobs(
+      (t.updates || []).flatMap((u) => (u.images || []).map((a) => a.id)));
     window.TrackerRender();
   }
 
@@ -691,9 +711,7 @@
     if (!entry) return window.TrackerRender();
 
     const kept = (entry.images || []).filter((a) => values.images.keep.includes(a.id));
-    for (const gone of (entry.images || []).filter((a) => !kept.includes(a))) {
-      await dropBlob(gone.id);
-    }
+    const droppedImages = (entry.images || []).filter((a) => !kept.includes(a)).map((a) => a.id);
     for (const file of values.images.added) {
       const aid = "u-img-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
@@ -704,6 +722,7 @@
     entry.images = kept;
     if (!cur) target.updates.push(entry);
     save(list);
+    window.TrackerStore.holdBlobs(droppedImages);
     paneTab = "updates";
     window.TrackerRender();
   }
@@ -721,12 +740,12 @@
       confirmLabel: "Remove update",
     });
     if (!yes) return;
-    for (const a of u.images || []) await dropBlob(a.id);
     const list = load();
     const target = list.find((x) => x.id === taskId);
     if (!target) return window.TrackerRender();
     target.updates = (target.updates || []).filter((x) => x.id !== updateId);
     save(list);
+    window.TrackerStore.holdBlobs((u.images || []).map((a) => a.id));
     window.TrackerRender();
   }
 

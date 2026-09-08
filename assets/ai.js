@@ -28,6 +28,15 @@
   /**
    * The instruction, written as asked for.
    *
+   * It used to end its first paragraph with "if you think there is something
+   * lacking or a gap in the message, fill that gap", and that licence is
+   * deliberately gone. Standardize is asked to tidy what you wrote, and an
+   * instruction to fill perceived gaps invites the model to add a sentence
+   * you never wrote into a work note that goes out under your name. The
+   * remaining rules are the ones that keep it to a rewrite: retain the
+   * message, do not make it longer than it needs to be, and invent no
+   * specifics.
+   *
    * The last line is not decoration. A model told to improve text will often
    * hand back "Here is the improved version:" and a rewrite in quotes, and
    * that whole string would land in the field. The dash rule is repeated in
@@ -36,8 +45,7 @@
    */
   const SYSTEM = [
     "Improve the tone of the text the user gives you. Fix the grammar, retain",
-    "the message, and make it clear and easy to understand. If you think there",
-    "is something lacking or a gap in the message, fill that gap.",
+    "the message, and make it clear and easy to understand.",
     "",
     "Never use an em dash or an en dash. Write plainly, in the register of a",
     "work note written by the person who typed it. Do not make it longer than",

@@ -422,6 +422,17 @@
         </select>` : ""}
       </th>`;
 
+    // A table with nothing left after the search is not a result, so it is not
+    // shown. Searching "uat" used to print MAIN (0) and "Nothing in this table
+    // yet" above the two tables that actually matched, which is the opposite
+    // of what a search is for - the more tables a project has, the more empty
+    // headings you scroll past to reach the answer.
+    //
+    // Only while a search is running. With the box empty an empty table is a
+    // real thing you own and can add to, and hiding it would leave no way to
+    // reach it. The account filter counts as searching for the same reason.
+    if ((q || chosen) && !rows.length) return "";
+
     return `<section class="linksection">
         <div class="sectionhead">
           <div class="sectionleft">
@@ -470,7 +481,8 @@
                   "Search every table for a site or description…")}
             </div>
           </div>
-          ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
+          ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")
+            || `<div class="empty">Nothing matches your search.</div>`}
           ${listFoot("", `<button class="btn primary"
              data-newtable="${esc(g.name)}">Create Table</button>`)}
         </div>` : ""}`;
