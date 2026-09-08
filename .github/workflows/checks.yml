@@ -51,6 +51,8 @@ jobs:
         run: node checks/check_tasks.mjs
       - name: The update trail records, stamps and survives the move to the log
         run: node checks/check_updates.mjs
+      - name: Long prose is bounded, and only clipped text offers to expand
+        run: node checks/check_clamp.mjs
       - name: The task dialog offers the projects the page lists
         run: node checks/check_task_project.mjs
       - name: Task numbers count 1..n and cannot be typed

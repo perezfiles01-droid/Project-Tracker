@@ -489,6 +489,18 @@ table.tasktable{min-width:0}
    on one line rather than breaking in half in a narrow column. */
 td.stampcell{white-space:nowrap}
 .stamptime{color:var(--dim)}
+/* Prose bounded to a few lines, with a control that opens it.
+   line-height is stated rather than inherited: the max-height fallback below
+   is arithmetic on it, and an inherited value makes that arithmetic wrong. */
+.clamptext{white-space:pre-wrap;line-height:1.5;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--clamp-lines,3);
+  /* For a browser without line-clamp: no ellipsis, but still a height bound,
+     which is the part that matters. */
+  max-height:calc(var(--clamp-lines,3) * 1.5em)}
+.clamp.open .clamptext{display:block;-webkit-line-clamp:unset;max-height:none;overflow:visible}
+.clamptoggle{display:inline-block;margin-top:4px;font-size:12px}
+.clamptoggle[hidden]{display:none}
+
 /* The update trail. It is the details table - same wrapper, same class, same
    width - so nothing here touches the frame; only what sits inside a cell. */
 .updatewhen{white-space:nowrap}
@@ -1942,6 +1954,95 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
+  /* ---------- clamped prose ----------
+     Long text in a table cell had no height bound at all, so one update ran
+     the height of the pane and pushed every entry after it off the screen.
+     Written here rather than in the table that reported it, because two
+     places have prose in a cell and a third will be written eventually: one
+     mechanism means the next one inherits the bound instead of repeating the
+     fault.
+
+     Two things this gets right that the obvious version does not:
+
+       1. Whether the text overflows is MEASURED after the browser has laid it
+          out, never counted from newlines. A single unbroken paragraph wraps
+          to eight visual lines with not one "\n" in it, and a toggle offered
+          on text that already fits is a button that does nothing.
+       2. What is expanded is remembered by key. The pane re-renders on any
+          status change or edit, and a toggle that only flipped a class would
+          snap shut on the next render - which reads exactly like a button
+          that does not work. */
+  const CLAMP_LINES = 3;
+  const expandedClamps = new Set();
+
+  /**
+   * A block of prose bounded to `lines`, with a control that opens it.
+   *
+   * The key identifies the text across renders, so it must be the id of the
+   * thing the text belongs to rather than its position in a list: expanding
+   * the third update and then deleting the first must not leave a different
+   * entry open.
+   *
+   * The toggle is rendered hidden and revealed by paintClamps only where the
+   * text really is too tall, so nothing here has to guess.
+   */
+  function clampBlock({ key, text, lines = CLAMP_LINES }) {
+    const open = expandedClamps.has(key);
+    return `<div class="clamp${open ? " open" : ""}" data-clamp="${esc(key)}"
+                 style="--clamp-lines:${Number(lines) || CLAMP_LINES}">
+        <div class="clamptext">${esc(text)}</div>
+        <button type="button" class="linkish clamptoggle" data-clamptoggle="${esc(key)}"
+                aria-expanded="${open}" hidden>${open ? "Show less" : "Show more"}</button>
+      </div>`;
+  }
+
+  /**
+   * Reveal the toggle only where the text is actually clipped.
+   *
+   * Measured with the block collapsed, always - an open block is temporarily
+   * closed for the measurement and reopened, because an expanded block has no
+   * overflow to report and would keep a toggle it no longer needs after its
+   * text was edited down to one line.
+   *
+   * Called on the tick after a render, the same way paintShots is, because
+   * scrollHeight is meaningless until the DOM exists.
+   */
+  function paintClamps(root = document) {
+    for (const box of root.querySelectorAll("[data-clamp]")) {
+      const text = box.querySelector(".clamptext");
+      const btn = box.querySelector(".clamptoggle");
+      if (!text || !btn) continue;
+      const wasOpen = box.classList.contains("open");
+      if (wasOpen) box.classList.remove("open");
+      // One pixel of slack: sub-pixel line heights round scrollHeight up by a
+      // fraction on text that fits exactly, which would offer a toggle that
+      // reveals nothing.
+      const clipped = text.scrollHeight > text.clientHeight + 1;
+      if (wasOpen) box.classList.add("open");
+      btn.hidden = !clipped;
+      if (!clipped && wasOpen) {
+        // The text no longer needs opening, so it is no longer open.
+        box.classList.remove("open");
+        expandedClamps.delete(box.dataset.clamp);
+      }
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-clamptoggle]");
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();   // the row underneath opens a task; this does not
+    const box = t.closest("[data-clamp]");
+    if (!box) return;
+    const key = box.dataset.clamp;
+    const open = !box.classList.contains("open");
+    box.classList.toggle("open", open);
+    if (open) expandedClamps.add(key); else expandedClamps.delete(key);
+    t.textContent = open ? "Show less" : "Show more";
+    t.setAttribute("aria-expanded", String(open));
+  });
+
   /* ---------- standardize a field ----------
      The button belongs to the dialog, not to any one caller, so it is wired
      once here. Whatever produces the improved text is injected as
@@ -2005,7 +2106,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
+  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
 
@@ -2521,8 +2622,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       ["Task No.", val(t.no)],
       ["Name of task", val(t.name)],
       ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
+      // Same bound as an update, for the same reason: an unbounded description
+      // pushes Status, Assignee and Images below the fold in this very pane.
       ["Description", t.description
-        ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
+        ? window.TrackerUI.clampBlock({ key: "d:" + t.id, text: t.description })
+        : dash],
       ["Task Create Date", t.given ? createStamp(t) : dash],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
@@ -2618,8 +2722,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const rows = list.map((u) => `<tr class="updaterow">
         <th scope="row" class="updatewhen">${updateStamp(u)}</th>
         <td class="updatecell">
-          ${u.text ? `<div class="updatetext">${esc(u.text)}</div>`
-                   : `<span class="tag dead">\u2014</span>`}
+          ${u.text
+            ? window.TrackerUI.clampBlock({ key: "u:" + u.id, text: u.text })
+            : `<span class="tag dead">\u2014</span>`}
           ${(u.images || []).length
             ? `<div class="updateshots">${(u.images || []).map((a) =>
                 `<button class="shot" data-att="${esc(a.id)}" title="${esc(a.name)}">
@@ -2646,7 +2751,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       : "";
     const empty = list.length ? "" : `<tr><th scope="row"></th>
         <td><span class="m">No updates yet.</span></td></tr>`;
-    setTimeout(paintShots, 0);
+    setTimeout(paint, 0);
     return `<div class="tablewrap"><table class="detailtable updatetable">
         <tbody>${rows}${empty}${add}</tbody>
       </table></div>`;
@@ -2832,9 +2937,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
-    // The pane's thumbnails need the DOM this string becomes, so they are
-    // filled on the next tick rather than here.
-    setTimeout(paintShots, 0);
+    // The pane's thumbnails and its clamp measurements both need the DOM this
+    // string becomes, so both happen on the next tick rather than here.
+    setTimeout(paint, 0);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks in progress${late ? ` · ${late} overdue` : ""}.
@@ -2873,6 +2978,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * task list left open would otherwise hold one URL per image per click.
    */
   let shotUrls = [];
+  /** Everything that can only be done once the pane is really on screen. */
+  function paint() {
+    paintShots();
+    window.TrackerUI.paintClamps();
+  }
   function paintShots() {
     for (const u of shotUrls) URL.revokeObjectURL(u);
     shotUrls = [];

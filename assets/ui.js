@@ -701,6 +701,95 @@
        <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ""}</svg>
      </button>`;
 
+  /* ---------- clamped prose ----------
+     Long text in a table cell had no height bound at all, so one update ran
+     the height of the pane and pushed every entry after it off the screen.
+     Written here rather than in the table that reported it, because two
+     places have prose in a cell and a third will be written eventually: one
+     mechanism means the next one inherits the bound instead of repeating the
+     fault.
+
+     Two things this gets right that the obvious version does not:
+
+       1. Whether the text overflows is MEASURED after the browser has laid it
+          out, never counted from newlines. A single unbroken paragraph wraps
+          to eight visual lines with not one "\n" in it, and a toggle offered
+          on text that already fits is a button that does nothing.
+       2. What is expanded is remembered by key. The pane re-renders on any
+          status change or edit, and a toggle that only flipped a class would
+          snap shut on the next render - which reads exactly like a button
+          that does not work. */
+  const CLAMP_LINES = 3;
+  const expandedClamps = new Set();
+
+  /**
+   * A block of prose bounded to `lines`, with a control that opens it.
+   *
+   * The key identifies the text across renders, so it must be the id of the
+   * thing the text belongs to rather than its position in a list: expanding
+   * the third update and then deleting the first must not leave a different
+   * entry open.
+   *
+   * The toggle is rendered hidden and revealed by paintClamps only where the
+   * text really is too tall, so nothing here has to guess.
+   */
+  function clampBlock({ key, text, lines = CLAMP_LINES }) {
+    const open = expandedClamps.has(key);
+    return `<div class="clamp${open ? " open" : ""}" data-clamp="${esc(key)}"
+                 style="--clamp-lines:${Number(lines) || CLAMP_LINES}">
+        <div class="clamptext">${esc(text)}</div>
+        <button type="button" class="linkish clamptoggle" data-clamptoggle="${esc(key)}"
+                aria-expanded="${open}" hidden>${open ? "Show less" : "Show more"}</button>
+      </div>`;
+  }
+
+  /**
+   * Reveal the toggle only where the text is actually clipped.
+   *
+   * Measured with the block collapsed, always - an open block is temporarily
+   * closed for the measurement and reopened, because an expanded block has no
+   * overflow to report and would keep a toggle it no longer needs after its
+   * text was edited down to one line.
+   *
+   * Called on the tick after a render, the same way paintShots is, because
+   * scrollHeight is meaningless until the DOM exists.
+   */
+  function paintClamps(root = document) {
+    for (const box of root.querySelectorAll("[data-clamp]")) {
+      const text = box.querySelector(".clamptext");
+      const btn = box.querySelector(".clamptoggle");
+      if (!text || !btn) continue;
+      const wasOpen = box.classList.contains("open");
+      if (wasOpen) box.classList.remove("open");
+      // One pixel of slack: sub-pixel line heights round scrollHeight up by a
+      // fraction on text that fits exactly, which would offer a toggle that
+      // reveals nothing.
+      const clipped = text.scrollHeight > text.clientHeight + 1;
+      if (wasOpen) box.classList.add("open");
+      btn.hidden = !clipped;
+      if (!clipped && wasOpen) {
+        // The text no longer needs opening, so it is no longer open.
+        box.classList.remove("open");
+        expandedClamps.delete(box.dataset.clamp);
+      }
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-clamptoggle]");
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();   // the row underneath opens a task; this does not
+    const box = t.closest("[data-clamp]");
+    if (!box) return;
+    const key = box.dataset.clamp;
+    const open = !box.classList.contains("open");
+    box.classList.toggle("open", open);
+    if (open) expandedClamps.add(key); else expandedClamps.delete(key);
+    t.textContent = open ? "Show less" : "Show more";
+    t.setAttribute("aria-expanded", String(open));
+  });
+
   /* ---------- standardize a field ----------
      The button belongs to the dialog, not to any one caller, so it is wired
      once here. Whatever produces the improved text is injected as
@@ -764,6 +853,6 @@
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
+  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
