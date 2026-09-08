@@ -167,7 +167,12 @@
         { name: "assignee", label: "Assignee", value: cur ? (cur.assignee || "") : DEFAULT_ASSIGNEE },
         { name: "files", label: "Attach an image/file", type: "attachments",
           value: cur ? cur.attachments || [] : [],
-          help: "Paste a screenshot with Ctrl+V, or choose files. Up to five. " +
+          // Interpolated, never spelled out. This sentence used to read "Up to
+          // five" as a literal word while the field took its ceiling from
+          // ATT_MAX, so raising the limit left the help text saying something
+          // the field no longer did.
+          help: `Paste a screenshot with Ctrl+V, or choose files. ` +
+                `Up to ${window.TrackerUI.ATT_MAX}. ` +
                 "Stored in this browser only, and never in the backup file." },
       ],
     });
@@ -569,7 +574,7 @@
      and follow the task when its status moves it to the Daily activity page.
      The image bytes go to IndexedDB exactly as task attachments do - the task
      record keeps only what each one is called. */
-  const UPDATE_IMAGES = 5;
+  const UPDATE_IMAGES = 20;
 
   /**
    * A task's updates, oldest first.

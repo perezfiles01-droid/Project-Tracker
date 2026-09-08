@@ -282,7 +282,10 @@
       </label>`;
   }
 
-  const ATT_MAX = 5;
+  /* The ceiling every attachments field falls back to. One constant, read by
+     the field, by its help text and by the guard - so the number cannot be
+     raised in one place and left stale in another. */
+  const ATT_MAX = 20;
   const isImage = (t) => /^image\//.test(String(t || ""));
 
   function fieldHtml(f) {
@@ -1680,7 +1683,7 @@
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml,
+  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, ATT_MAX,
                        paintImages, imageRefs, storeImage, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();

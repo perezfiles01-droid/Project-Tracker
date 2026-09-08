@@ -169,23 +169,31 @@ const rowsWhen = await page.$$eval(".updaterow .updatewhen", (e) => e.map((x) =>
 const backRow = rowsWhen.find((w) => w.includes("2026-08-15"));
 ok("a back-dated entry shows no clock time", backRow && !/\d{2}:\d{2}/.test(backRow), backRow);
 
-/* --- 4. five images, and the sixth refused out loud ----------------------- */
+/* --- 4. the image ceiling, and the extras refused out loud ---------------- */
+// Read from the app, not written here: the ceiling moved from five to twenty
+// and a check holding its own copy needs an edit every time it moves. It is
+// read BEFORE the paste, because how many to paste depends on it - pasting a
+// fixed six would stop exceeding the limit the moment it rose above six, and
+// the refusal assertions below would pass while testing nothing.
+const MAX_IMAGES = await page.evaluate(() => window.TrackerTasks.UPDATE_IMAGES);
 await page.click("[data-addupdate]");
 await page.waitForSelector("#fd_images");
-await pasteImages(6);
-await page.waitForTimeout(300);
+await pasteImages(MAX_IMAGES + 2);
+await page.waitForTimeout(600);
 const stagedCount = await page.locator(".attstaged .attrow").count();
 const note = await page.locator("[data-attcount]").innerText();
 const refusal = await page.locator('[data-note="fd_images"]').innerText();
-ok("only five images stage", stagedCount === 5, String(stagedCount));
-ok("the count says five of five", /5 of 5/.test(note), note);
-ok("the sixth is refused in words", /not attached/i.test(refusal), refusal);
+ok("only the ceiling's worth of images stage", stagedCount === MAX_IMAGES,
+   `${stagedCount} of ${MAX_IMAGES}`);
+ok("the count says so", new RegExp(`${MAX_IMAGES} of ${MAX_IMAGES}`).test(note), note);
+ok("the extras are refused in words", /not attached/i.test(refusal), refusal);
 await page.fill("#fd_text", "update with pictures");
 await page.click('#formDialog [data-fd="save"]');
 await page.waitForTimeout(600);
 saved = await storedUpdates();
 const withImgs = saved.find((u) => (u.images || []).length);
-ok("five images are stored on that entry", withImgs && withImgs.images.length === 5,
+ok("that many images are stored on that entry",
+   withImgs && withImgs.images.length === MAX_IMAGES,
    String(withImgs && withImgs.images.length));
 const keysAfterAdd = await blobKeys();
 ok("their bytes are in IndexedDB, keyed by the stored ids",

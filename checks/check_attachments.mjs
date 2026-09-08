@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Guard: attaching images and files, by paste or by picker, capped at five.
+ * Guard: attaching images and files, by paste or by picker, capped.
  *
  * Three things fail quietly if nobody checks them:
  *   1. Picking files twice. A file input's FileList is read-only, so the
@@ -110,31 +110,49 @@ ok("pasting with nothing focused attaches too",
    (await staged()).length === 3, (await staged()).join(", "));
 
 /* --- picking twice adds, it does not replace ------------------------------ */
+/* The ceiling is read from the app rather than written here. It moved from
+   five to twenty; a check carrying its own copy of the number needs editing
+   every time that happens, and an edit is where an assertion quietly stops
+   asserting. What is checked is unchanged: N stage, the extras are refused
+   out loud, and the count note reads "N of N". */
+const MAX = await page.evaluate(() => window.TrackerUI.ATT_MAX);
+ok("the app exposes its ceiling", Number.isInteger(MAX) && MAX > 0, String(MAX));
+const names = (n, from = 0) =>
+  Array.from({ length: n }, (_, i) => `file${from + i}.txt`);
+
 await choose(["one.txt"]);
 await page.waitForTimeout(200);
 await choose(["two.txt"]);
 await page.waitForTimeout(200);
 const afterPicks = await staged();
+// Three pasted above, plus these two: the point is that the second pick ADDED
+// rather than replacing the first, which a FileList cannot do on its own.
 ok("choosing files twice adds to the list rather than replacing it",
    afterPicks.length === 5 && afterPicks.includes("one.txt") && afterPicks.includes("two.txt"),
    afterPicks.join(", "));
-ok("the count is shown", /5 of 5/.test(await countNote()), await countNote());
 
-/* --- the sixth is refused, out loud, and the five survive ----------------- */
-await choose(["three.txt", "four.txt", "five.txt"]);
-await page.waitForTimeout(250);
+/* --- the ceiling holds, and the extras are refused out loud --------------- */
+// Enough to overshoot whatever the ceiling is, from wherever the list is now.
+await choose(names(MAX + 3 - afterPicks.length));
+await page.waitForTimeout(600);
 const atLimit = await staged();
-ok("five is the ceiling and the rest are refused", atLimit.length === 5, atLimit.join(", "));
+ok(`${MAX} is the ceiling and the rest are refused`, atLimit.length === MAX,
+   `${atLimit.length} staged`);
+ok("the count is shown", new RegExp(`${MAX} of ${MAX}`).test(await countNote()),
+   await countNote());
 const note = (await page.locator('[data-note="fd_files"]').textContent()).trim();
 ok("the refusal says so rather than dropping them silently",
-   /not attached/i.test(note) && /5/.test(note), note || "(nothing said)");
+   /not attached/i.test(note) && new RegExp(`limit is ${MAX}\\b`).test(note),
+   note || "(nothing said)");
 ok("the picker is disabled once full",
    await page.$eval("#fd_files", (el) => el.disabled));
 
 /* --- removing a staged file frees the slot -------------------------------- */
 await page.click(".attstaged .attdrop");
 await page.waitForTimeout(200);
-ok("removing a staged file frees a slot", (await staged()).length === 4, await countNote());
+const afterDrop = MAX - 1;
+ok("removing a staged file frees a slot", (await staged()).length === afterDrop,
+   await countNote());
 ok("the picker is usable again", !(await page.$eval("#fd_files", (el) => el.disabled)));
 
 /* --- saved, and offered as View plus Download ----------------------------- */
@@ -143,7 +161,8 @@ await page.click("#formDialog .actions button.primary");
 await page.waitForTimeout(700);
 const savedCount = await page.evaluate(() =>
   (JSON.parse(localStorage.getItem("tracker.tasks"))[0].attachments || []).length);
-ok("all four are saved with the task", savedCount === 4, String(savedCount));
+ok("every staged file is saved with the task", savedCount === afterDrop,
+   `${savedCount} of ${afterDrop}`);
 
 /* --- and the listener does not outlive the dialog ------------------------- */
 await pasteImagesOn("body", 1);
@@ -157,9 +176,11 @@ await page.locator("tr.taskrow").first().click();
 await page.waitForTimeout(300);
 // Counted on the chip specifically: image thumbnails in the pane carry
 // data-att as well, so a bare [data-att] count measures both and means neither.
-ok("each attachment offers View", (await page.locator(".attchip[data-att]").count()) === 4,
+ok("each attachment offers View",
+   (await page.locator(".attchip[data-att]").count()) === afterDrop,
    String(await page.locator(".attchip[data-att]").count()));
-ok("each attachment offers Download", (await page.locator("[data-attdl]").count()) === 4);
+ok("each attachment offers Download",
+   (await page.locator("[data-attdl]").count()) === afterDrop);
 
 /* The download must carry the file's own name, or it saves as "download". */
 const dlName = await page.evaluate(async () => {
@@ -202,5 +223,5 @@ ok("a link attached under the old field still renders",
 ok("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 await browser.close();
 console.log(failed ? `\n${failed} attachment check(s) failed`
-                   : "\nPASS: images and files attach, cap at five, and download");
+                   : "\nPASS: images and files attach, cap at the ceiling, and download");
 process.exit(failed ? 1 : 0);
