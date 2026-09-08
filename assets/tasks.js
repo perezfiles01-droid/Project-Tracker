@@ -172,7 +172,12 @@
         { name: "given", label: "Task Create Date", type: "date",
           value: cur ? (cur.given || "") : today() },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
-        { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
+        // Several links, each with a note saying what it is. `ref` is still
+        // written on save - the activity log, the table and every backup
+        // already saved read it - but `refs` is where they live now.
+        { name: "refs", label: "Reference link", type: "links",
+          value: cur ? refsOf(cur) : [], placeholder: "https://…",
+          help: "The note icon beside a link opens a box for what it is." },
         // Only when editing. A new task is In progress by definition - you are
         // writing down something to do - so asking for a status at creation is
         // a field with one sensible answer. It is changed afterwards, from
@@ -212,7 +217,11 @@
     Object.assign(target, {
       // No "no" here: the number is the task's position, worked out at render.
       name: values.name, description: values.description, given: values.given,
-      due: values.due, ref: values.ref, status: values.status || ACTIVE,
+      // ref stays truthful as the first link: dropping it would blank the link
+      // on every activity-log entry already written from a task.
+      due: values.due, refs: values.refs,
+      ref: (values.refs && values.refs[0] && values.refs[0].url) || "",
+      status: values.status || ACTIVE,
       assignee: values.assignee, project: values.project,
     });
 
@@ -387,10 +396,24 @@
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Create Date"];
   let openRow = null;   // the task shown in the pane
 
+  /**
+   * A task's reference links, in the shape the dialog and the pane both want.
+   *
+   * Tasks saved before this carried a single `ref` string. It is read as one
+   * link with no note rather than migrated away, so nothing has to be rewritten
+   * on disk for an old task to open correctly.
+   */
+  function refsOf(t) {
+    if (Array.isArray(t.refs) && t.refs.length) {
+      return t.refs.filter((r) => r && r.url).map((r) => ({ url: r.url, note: r.note || "" }));
+    }
+    return t.ref ? [{ url: t.ref, note: "" }] : [];
+  }
+
   /** Every link on a task, wherever it was entered. */
   function taskLinks(t) {
     const out = [];
-    if (t.ref) out.push({ url: t.ref, label: "Open ↗" });
+    for (const r of refsOf(t)) out.push({ url: r.url, label: "Open ↗" });
     for (const a of t.attachments || []) {
       if (a.kind === "link" && a.url) out.push({ url: a.url, label: "Link ↗" });
     }
@@ -460,8 +483,15 @@
       ["Task Create Date", t.given ? createStamp(t) : dash],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
-      ["Reference link", t.ref
-        ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>` : dash],
+      // Every link, each with its note under it. A list of identical Open
+      // buttons says nothing about which is which; the note is the label.
+      ["Reference link", refsOf(t).length
+        ? `<div class="reflist">${refsOf(t).map((r) => `<div>
+             <a class="btn sm" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>
+             <span class="m">${esc(r.url)}</span>
+             ${r.note ? `<span class="refnote">${esc(r.note)}</span>` : ""}
+           </div>`).join("")}</div>`
+        : dash],
       // The status is set here rather than by a separate tick. A tick could
       // only ever say "Done"; the four statuses a task can be in all belong in
       // one control, in the row that names them. Any status already saved that

@@ -57,11 +57,22 @@ ok("only the first letter is touched, not the rest of the words",
 /* --- a field that did not ask for it is untouched -------------------------
    A capitalised URL is a broken URL, so this is the assertion that stops the
    mechanism leaking into every other field fieldHtml renders. */
-await page.fill("#fd_ref", "");
-await page.type("#fd_ref", "https://example.test/path");
+// The reference link is a repeating field now - one row to start, each row
+// its own input - so it is addressed by row rather than by a single id.
+const refCell = '[data-linkrow] input[type="url"]';
+await page.fill(refCell, "");
+await page.type(refCell, "https://example.test/path");
 ok("the reference link is left exactly as typed",
-   (await page.inputValue("#fd_ref")) === "https://example.test/path",
-   await page.inputValue("#fd_ref"));
+   (await page.inputValue(refCell)) === "https://example.test/path",
+   await page.inputValue(refCell));
+// And the note beside it, which is prose, DOES capitalise - the same opt-in
+// as Name of task. A field type that lost that on one of its rows would
+// otherwise pass unnoticed.
+await page.click("[data-noteopen]");
+await page.type("[data-notebox] textarea", "the design spec for this link");
+ok("a link's note capitalises its first letter",
+   (await page.inputValue("[data-notebox] textarea")) === "The design spec for this link",
+   await page.inputValue("[data-notebox] textarea"));
 
 /* --- a leading digit or symbol is not mangled ----------------------------- */
 await page.fill("#fd_name", "");

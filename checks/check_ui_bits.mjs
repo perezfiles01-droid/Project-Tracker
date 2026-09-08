@@ -80,10 +80,12 @@ const offered = await page.locator("th.emailhead .accountpick option").allTextCo
 ok("the filter offers the accounts present, and an All option",
    offered.length > 1 && offered[0] === "All", offered.join(" · "));
 
+// The artifact tables share one search above them all now, so the gap that
+// matters is between that box and the first table it filters - the assertion
+// followed the box rather than going.
 const gap = await page.evaluate(() => {
-  const s = document.querySelector("section.linksection");
-  const box = s && s.querySelector(".search.sectionsearch");
-  const tbl = s && s.querySelector(".tablewrap");
+  const box = document.querySelector(".artifactsearch .search.sectionsearch");
+  const tbl = document.querySelector("section.linksection .tablewrap");
   if (!box || !tbl) return -1;
   return Math.round(tbl.getBoundingClientRect().top - box.getBoundingClientRect().bottom);
 });

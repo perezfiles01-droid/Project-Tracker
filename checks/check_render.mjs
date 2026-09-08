@@ -190,7 +190,7 @@ await page.click('[data-edit="task:new"]');
 await page.waitForSelector("#formDialog .box");
 await page.fill("#fd_description", "Draft the release note");
 await page.fill("#fd_due", "2020-01-01");            // past, to prove the overdue flag
-await page.fill("#fd_ref", "https://example.test/ref");
+await page.fill('[data-linkrow] input[type="url"]', "https://example.test/ref");
 await page.click('[data-fd="save"]');
 await page.waitForSelector("table.tasktable");
 
@@ -346,18 +346,22 @@ ok("the link table carries Site / Description / Email Access / Link",
    JSON.stringify(heads.slice(0, 4)) === JSON.stringify(["Site", "Description", "Email Access", "Link"]),
    heads.join(" · "));
 
-// Per-section search: one box must not filter another table.
-const firstSection = page.locator("section.linksection").first();
-const before = await firstSection.locator("tbody tr").count();
-const otherBefore = await page.locator("section.linksection").nth(1).locator("tbody tr").count();
-await firstSection.locator("[data-search]").fill("zzz-no-such-site");
-await page.waitForTimeout(200);
-ok("a section search filters its own table",
-   (await page.locator("section.linksection").first().locator("tbody tr").count()) < before);
-ok("a section search leaves the other table alone",
-   (await page.locator("section.linksection").nth(1).locator("tbody tr").count()) === otherBefore);
-await page.locator("section.linksection").first().locator("[data-search]").fill("");
-await page.waitForTimeout(200);
+// One search above the tables, not a box on each: it filters all of them
+// together. Typing something no row matches must empty every table, and
+// clearing it must bring every row back - a search that filtered the first
+// table and left the rest alone was the shape this replaced.
+const artifacts = page.locator(".artifactsearch [data-search]");
+const rowsNow = () => page.locator("section.linksection tbody tr").count();
+const before = await rowsNow();
+ok("there are rows to filter to begin with", before > 0, String(before));
+await artifacts.fill("zzz-no-such-site");
+await page.waitForTimeout(250);
+ok("the one search empties every table at once", (await rowsNow()) === 0,
+   String(await rowsNow()));
+await artifacts.fill("");
+await page.waitForTimeout(250);
+ok("clearing it brings every row back", (await rowsNow()) === before,
+   `${await rowsNow()} of ${before}`);
 
 // The Email Access dropdown offers exactly the accounts present.
 const picker = page.locator("section.linksection").first().locator("[data-account]");

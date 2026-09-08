@@ -50,6 +50,19 @@
     } else if (f.type === "select") {
       control = `<select id="${id}">${(f.options || []).map((o) =>
         `<option value="${esc(o)}"${String(o) === String(v) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    } else if (f.type === "links") {
+      // A repeating field: one row per link, each with a note of its own that
+      // stays out of the way until asked for. Rows are keyed by a counter and
+      // never renumbered - a removed row that renumbered the rest would leave
+      // every standardize button below it pointing at the wrong box.
+      const rows = (f.value || []).length ? f.value : [{ url: "", note: "" }];
+      control = `<div class="linkrows" data-linkfield="${esc(f.name)}">
+          ${rows.map((r, i) => linkRow(f, r, i)).join("")}
+          <div class="linkadd">
+            ${iconButton("add", "Add another link", `data-linkadd="${esc(f.name)}"`)}
+            <span class="m">Add another link</span>
+          </div>
+        </div>`;
     } else if (f.type === "attachments") {
       const list = (f.value || []).map(attachmentRow).join("");
       // Three parts: what is already attached, what you have just added in this
@@ -81,6 +94,105 @@
         <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
+  }
+
+  /**
+   * One link row: the URL, a toggle for its note, and the note itself.
+   *
+   * The note starts open when there is one to read - a note saved last week
+   * that only appears after you happen to click the icon is a note you have
+   * lost. It carries the same wand as Name of task and Detailed description,
+   * which needs no new code: standardize() finds its target by id.
+   *
+   * The URL input is deliberately not capitalised. A capitalised URL is a
+   * broken URL; the note, being prose, is.
+   */
+  function linkRow(f, r = { url: "", note: "" }, key = 0) {
+    const base = `fd_${f.name}__${key}`;
+    const open = !!(r.note || "").trim();
+    return `<div class="linkrow" data-linkrow="${esc(f.name)}:${key}">
+        <div class="linkline">
+          <input id="${base}_url" type="url" value="${esc(r.url || "")}"
+                 placeholder="${esc(f.placeholder || "https://…")}" spellcheck="false">
+          ${iconButton("note", "Add a note about this link",
+              `data-noteopen="${base}" aria-expanded="${open}"`)}
+          ${iconButton("remove", "Remove this link", `data-linkdrop="${esc(f.name)}:${key}"`)}
+        </div>
+        <div class="linknote" data-notebox="${base}"${open ? "" : " hidden"}>
+          <div class="fieldhead">
+            <label for="${base}_note">What this link is</label>
+            <span class="fieldtools">
+              ${iconButton("wand", "Standardize text", `data-standardize="${base}_note"`)}
+            </span>
+          </div>
+          <textarea id="${base}_note" data-capitalize="1" rows="2"
+            placeholder="What this link is for">${esc(r.note || "")}</textarea>
+          <div class="fieldnote" data-note="${base}_note" hidden></div>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Add a row, remove a row, and show or hide a note.
+   *
+   * Bound to the dialog rather than the document, so it dies with the dialog.
+   * A row added here is wired for capitals on the spot: wireCapitals ran once
+   * when the dialog opened, and a row created afterwards would silently miss
+   * it - the third link's note behaving unlike the first two.
+   */
+  function wireLinks(box) {
+    let next = 1e6;   // beyond any key the initial render used
+    box.addEventListener("click", (e) => {
+      const addBtn = e.target.closest("[data-linkadd]");
+      if (addBtn) {
+        e.preventDefault();
+        const name = addBtn.dataset.linkadd;
+        const host = box.querySelector(`[data-linkfield="${cssEsc(name)}"]`);
+        if (!host) return;
+        const holder = document.createElement("div");
+        holder.innerHTML = linkRow({ name }, { url: "", note: "" }, next++);
+        const row = holder.firstElementChild;
+        host.insertBefore(row, host.querySelector(".linkadd"));
+        wireCapitals(row);
+        paintDrops(box);
+        const input = row.querySelector("input");
+        if (input) input.focus();
+        return;
+      }
+      const drop = e.target.closest("[data-linkdrop]");
+      if (drop) {
+        e.preventDefault();
+        const row = drop.closest("[data-linkrow]");
+        if (row) row.remove();
+        paintDrops(box);
+        return;
+      }
+      const toggle = e.target.closest("[data-noteopen]");
+      if (toggle) {
+        e.preventDefault();
+        const note = box.querySelector(`[data-notebox="${cssEsc(toggle.dataset.noteopen)}"]`);
+        if (!note) return;
+        note.hidden = !note.hidden;
+        toggle.setAttribute("aria-expanded", String(!note.hidden));
+        if (!note.hidden) {
+          const ta = note.querySelector("textarea");
+          if (ta) ta.focus();
+        }
+      }
+    });
+    paintDrops(box);
+  }
+
+  /* The last remaining row keeps no Remove button: a field emptied of every
+     row would take its own "add another" affordance down with it. */
+  function paintDrops(box) {
+    for (const host of box.querySelectorAll("[data-linkfield]")) {
+      const rows = host.querySelectorAll("[data-linkrow]");
+      for (const r of rows) {
+        const b = r.querySelector("[data-linkdrop]");
+        if (b) b.hidden = rows.length < 2;
+      }
+    }
   }
 
   /**
@@ -270,6 +382,7 @@
       </div>`;
     box.hidden = false;
     wireCapitals(box);
+    wireLinks(box);
     const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
@@ -294,6 +407,18 @@
               // Staged, not el.files: a file input only remembers the last pick.
               added: [...(atts.staged.get(f.name) || [])],
             };
+          } else if (f.type === "links") {
+            // Read the rows as rendered, not the spec they started from: rows
+            // are added and removed while the dialog is open. A row with no
+            // URL is not a link, so it is dropped along with whatever note was
+            // typed against it.
+            out[f.name] = [...box.querySelectorAll(`[data-linkfield="${cssEsc(f.name)}"] [data-linkrow]`)]
+              .map((row) => ({
+                url: (row.querySelector('input[type="url"]') || {}).value || "",
+                note: (row.querySelector("textarea") || {}).value || "",
+              }))
+              .map((r) => ({ url: r.url.trim(), note: r.note.trim() }))
+              .filter((r) => r.url);
           } else {
             out[f.name] = el ? el.value.trim() : "";
           }
@@ -515,6 +640,9 @@
     // A drawing pin seen side on: head, shaft, point. It reads as pinned
     // when the button fills it, which is the whole point of the control.
     pin: '<path d="M9 3h6l-1 5 3.5 3.5H6.5L10 8z"/><path d="M12 11.5V21"/>',
+    // A page with two lines of writing on it: "there is something written
+    // about this", which is what the note toggle promises.
+    note: '<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h4"/>',
     // A wand with a spark: the conventional "let the machine have a go at
     // this" mark, and distinct at 14px from the pencil that means "edit".
     wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
