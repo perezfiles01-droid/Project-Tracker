@@ -479,6 +479,25 @@ table.tasktable{min-width:0}
    on one line rather than breaking in half in a narrow column. */
 td.stampcell{white-space:nowrap}
 .stamptime{color:var(--dim)}
+/* The update trail. It is the details table - same wrapper, same class, same
+   width - so nothing here touches the frame; only what sits inside a cell. */
+.updatewhen{white-space:nowrap}
+.updatecell{display:block}
+.updatetext{white-space:pre-wrap;margin-bottom:6px}
+.updateshots{display:flex;flex-wrap:wrap;margin-top:4px}
+/* The row's own edit and remove stay quiet until the row is under the pointer,
+   so a trail of six updates reads as six updates rather than twelve buttons.
+   They are still reachable by keyboard, which :focus-within keeps true. */
+.updateactions{display:flex;gap:6px;margin-top:6px;opacity:0;transition:opacity .12s}
+.updaterow:hover .updateactions,.updateactions:focus-within{opacity:1}
+.updateadd td{padding-top:12px}
+.updateadd .m{margin-left:8px;vertical-align:middle}
+/* Pressed, the update icon reads as the tab you are on. */
+.btn.icon.on{border-color:var(--accent);color:var(--accent)}
+/* A trail opened from Daily activity gets the wider box: it holds a table,
+   not a column of form fields. */
+.modal .box.wide{max-width:720px}
+.modal .dialogbody{margin-top:12px}
 .shot{padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;
       margin:0 6px 6px 0;line-height:0}
 .shot img{width:84px;height:84px;object-fit:cover;border-radius:7px;display:block}

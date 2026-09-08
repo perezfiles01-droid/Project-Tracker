@@ -452,6 +452,44 @@
   }
 
   /**
+   * A read-only dialog carrying markup this file did not build.
+   *
+   * formDialog escapes everything it is given, which is right for a title and
+   * an intro typed by a person. A caller that has already rendered a table -
+   * the task update trail, opened from the Daily activity page - needs that
+   * table shown rather than printed as text, and duplicating the renderer so
+   * one copy escapes and one does not is how two views of the same data start
+   * to disagree. The markup is the caller's to make safe; every caller here
+   * builds it with the same esc() the pane does.
+   */
+  function htmlDialog({ title, html, closeLabel = "Close" }) {
+    const box = ensureHost();
+    box.innerHTML = `<div class="box wide">
+        <h3>${esc(title)}</h3>
+        <div class="dialogbody">${html}</div>
+        <div class="actions">
+          <button class="btn primary" data-fd="cancel">${esc(closeLabel)}</button>
+        </div>
+      </div>`;
+    box.hidden = false;
+    return new Promise((resolve) => {
+      const close = () => {
+        box.hidden = true;
+        box.innerHTML = "";
+        document.removeEventListener("keydown", onKey);
+        box.removeEventListener("click", onClick);
+        resolve(null);
+      };
+      const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+      const onClick = (e) => {
+        if (e.target === box || e.target.closest('[data-fd="cancel"]')) close();
+      };
+      document.addEventListener("keydown", onKey);
+      box.addEventListener("click", onClick);
+    });
+  }
+
+  /**
    * One confirmation for every destructive action in the app.
    *
    * Deleting used to mean two different things depending on where you stood:
@@ -643,6 +681,12 @@
     // A page with two lines of writing on it: "there is something written
     // about this", which is what the note toggle promises.
     note: '<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h4"/>',
+    // A clock with an arrow curving back into it: the conventional "history"
+    // mark. Not the pencil, which means "change what this says", and not the
+    // plus, which means "add another one of these" - this opens a trail of
+    // dated entries, and at 14px the dial reads as time rather than as a
+    // circle.
+    update: '<path d="M3.5 12a8.5 8.5 0 1 1 2.6 6.1"/><path d="M3 19v-5h5"/><path d="M12 7.5V12l3 2"/>',
     // A wand with a spark: the conventional "let the machine have a go at
     // this" mark, and distinct at 14px from the pencil that means "edit".
     wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
@@ -720,6 +764,6 @@
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
+  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();

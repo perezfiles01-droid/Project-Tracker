@@ -395,6 +395,12 @@
   // either width, is a row in that pane, which the guard asserts by label.
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Create Date"];
   let openRow = null;   // the task shown in the pane
+  // Which of the pane's two tables is showing. The pane is one box of a fixed
+  // size, so the update trail replaces the details rather than growing beneath
+  // them - a task with ten updates would otherwise push the details it was
+  // opened for off the screen. Reset whenever a different task is opened, so
+  // clicking a second task never lands you on its updates unasked.
+  let paneTab = "details";
 
   /**
    * A task's reference links, in the shape the dialog and the pane both want.
@@ -470,6 +476,30 @@
   }
 
   function detailBody(t) {
+    const showing = paneTab === "updates";
+    return `<div class="taskdetail">
+          <div class="panehead">
+            <h3>${t.name ? esc(t.name) : "Task " + esc(t.no || "")}</h3>
+            <div class="row">
+              ${window.TrackerUI.iconButton("update",
+                  showing ? "Back to details" : updateLabel(t),
+                  `data-updates="${esc(t.id)}" aria-pressed="${showing}"`,
+                  showing ? "on" : "")}
+              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
+            </div>
+          </div>
+          ${showing ? updatesTable(t, { editable: true }) : detailsTable(t)}
+        </div>`;
+  }
+
+  /** How the update icon names itself, so the count is readable without opening it. */
+  function updateLabel(t) {
+    const n = updatesOf(t).length;
+    return n ? `Updates (${n})` : "Add an update";
+  }
+
+  function detailsTable(t) {
     const atts = (t.attachments || []).map(attachmentChip).join("");
     const shots = (t.attachments || []).filter((a) => /^image\//.test(a.type || ""));
     const dash = `<span class="tag dead">—</span>`;
@@ -515,19 +545,208 @@
            <img data-shot="${esc(a.id)}" alt="${esc(a.name)}">
          </button>`).join("")]);
     }
-    return `<div class="taskdetail">
-          <div class="panehead">
-            <h3>${t.name ? esc(t.name) : "Task " + esc(t.no || "")}</h3>
-            <div class="row">
-              ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="task:${esc(t.id)}"`)}
-              ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="task:${esc(t.id)}"`)}
-            </div>
-          </div>
-          <div class="tablewrap"><table class="detailtable">
+    return `<div class="tablewrap"><table class="detailtable">
             <tbody>${rows.map(([k, v]) =>
               `<tr><th scope="row">${esc(k)}</th><td>${v}</td></tr>`).join("")}</tbody>
-          </table></div>
-        </div>`;
+          </table></div>`;
+  }
+
+  /* ---------- the update trail ----------
+     A history you keep by hand: one dated entry per update, oldest first, with
+     the time it was written stamped on it and up to five images attached.
+     Entries live on the task record itself, so they ride along in the backup
+     and follow the task when its status moves it to the Daily activity page.
+     The image bytes go to IndexedDB exactly as task attachments do - the task
+     record keeps only what each one is called. */
+  const UPDATE_IMAGES = 5;
+
+  /**
+   * A task's updates, oldest first.
+   *
+   * Sorted on read rather than on write, because `date` is a day you pick and
+   * can be back-dated: an entry added today about last Tuesday belongs on
+   * Tuesday, not at the end. `at` breaks a tie within one day, so two updates
+   * written the same afternoon keep the order they were written in.
+   */
+  function updatesOf(t) {
+    return [...(t && t.updates || [])].sort((a, b) =>
+      String(a.date || "").localeCompare(String(b.date || "")) ||
+      String(a.at || "").localeCompare(String(b.at || "")));
+  }
+
+  /**
+   * The date an update is filed under, with the clock time it was written.
+   *
+   * Same rule as createStamp: the time is shown only when `at` falls on the
+   * day `date` names. Back-date an entry to last Tuesday and printing this
+   * afternoon's clock time beside it would state something that never
+   * happened, so the date stands alone instead.
+   */
+  function updateStamp(u) {
+    const at = u.at ? new Date(u.at) : null;
+    if (!at || isNaN(at.getTime()) || dayOf(at) !== u.date) return esc(u.date || "");
+    return `${esc(u.date)} <span class="stamptime">${pad2(at.getHours())}:${pad2(at.getMinutes())}</span>`;
+  }
+
+  /**
+   * The trail, in the pane's own table.
+   *
+   * Deliberately the same `detailtable` inside the same `tablewrap` as the
+   * details view: identical width, borders and label column, because it is
+   * literally the same table, not a second one styled to match. The left
+   * column carries the date and time, the right the text and its images.
+   *
+   * `editable` is false when this is opened from the Daily activity page,
+   * which shows the trail of a task that has already moved off the To Do List.
+   * One renderer serves both, so the two views cannot drift apart.
+   */
+  function updatesTable(t, { editable = true } = {}) {
+    const list = updatesOf(t);
+    const rows = list.map((u) => `<tr class="updaterow">
+        <th scope="row" class="updatewhen">${updateStamp(u)}</th>
+        <td class="updatecell">
+          ${u.text ? `<div class="updatetext">${esc(u.text)}</div>`
+                   : `<span class="tag dead">\u2014</span>`}
+          ${(u.images || []).length
+            ? `<div class="updateshots">${(u.images || []).map((a) =>
+                `<button class="shot" data-att="${esc(a.id)}" title="${esc(a.name)}">
+                   <img data-shot="${esc(a.id)}" alt="${esc(a.name)}">
+                 </button>`).join("")}</div>`
+            : ""}
+          ${editable ? `<div class="updateactions">
+              ${window.TrackerUI.iconButton("edit", "Edit this update",
+                  `data-editupdate="${esc(t.id)}|${esc(u.id)}"`)}
+              ${window.TrackerUI.iconButton("remove", "Remove this update",
+                  `data-dropupdate="${esc(t.id)}|${esc(u.id)}"`)}
+            </div>` : ""}
+        </td>
+      </tr>`).join("");
+    // The Add icon sits below the last entry, which is what makes the trail
+    // read downwards: today's update goes under yesterday's, and the button
+    // that writes the next one is always at the end of what is already there.
+    const add = editable
+      ? `<tr class="updateadd"><th scope="row"></th><td>
+           ${window.TrackerUI.iconButton("add", list.length ? "Add another update" : "Add the first update",
+               `data-addupdate="${esc(t.id)}"`)}
+           <span class="m">${list.length ? "Add another update" : "Add the first update"}</span>
+         </td></tr>`
+      : "";
+    const empty = list.length ? "" : `<tr><th scope="row"></th>
+        <td><span class="m">No updates yet.</span></td></tr>`;
+    setTimeout(paintShots, 0);
+    return `<div class="tablewrap"><table class="detailtable updatetable">
+        <tbody>${rows}${empty}${add}</tbody>
+      </table></div>`;
+  }
+
+  /**
+   * Write an update, or correct one already written.
+   *
+   * The date is asked for; the time never is. It is stamped from the clock at
+   * save, because the point of a trail is when each thing was actually
+   * recorded, and a time somebody typed is a time somebody can mistype. The
+   * text field carries `standardize`, so the wand that tidies a task name
+   * tidies an update too - it is the shared dialog's, found by field id, and
+   * needs no code of its own here.
+   *
+   * Editing keeps the original `at`: correcting a typo in Tuesday's update
+   * does not make it Thursday's.
+   */
+  async function editUpdate(taskId, updateId) {
+    const t = load().find((x) => x.id === taskId);
+    if (!t) return;
+    const cur = updateId ? (t.updates || []).find((u) => u.id === updateId) : null;
+    if (updateId && !cur) return;
+    const values = await window.TrackerUI.formDialog({
+      title: cur ? "Edit update" : "Add an update",
+      submitLabel: cur ? "Save update" : "Add update",
+      fields: [
+        { name: "date", label: "Date", type: "date", value: cur ? cur.date : today(),
+          help: "The time is stamped automatically when you save." },
+        { name: "text", label: "Update", type: "textarea", rows: 5,
+          value: cur ? cur.text : "", standardize: true, capitalize: true,
+          placeholder: "What happened, or where this now stands" },
+        { name: "images", label: "Images", type: "attachments", max: UPDATE_IMAGES,
+          value: cur ? cur.images || [] : [],
+          help: `Paste a screenshot with Ctrl+V, or choose files. Up to ${UPDATE_IMAGES}. ` +
+                "Stored in this browser only, and never in the backup file." },
+      ],
+    });
+    if (!values) return;
+
+    // Read again: the dialog was open, and awaiting it is time in which
+    // anything else could have written to storage.
+    const list = load();
+    const target = list.find((x) => x.id === taskId);
+    if (!target) return window.TrackerRender();
+    target.updates = target.updates || [];
+    const entry = cur
+      ? target.updates.find((u) => u.id === cur.id)
+      : { id: "u-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+          at: new Date().toISOString(), images: [] };
+    if (!entry) return window.TrackerRender();
+
+    const kept = (entry.images || []).filter((a) => values.images.keep.includes(a.id));
+    for (const gone of (entry.images || []).filter((a) => !kept.includes(a))) {
+      await dropBlob(gone.id);
+    }
+    for (const file of values.images.added) {
+      const aid = "u-img-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+      await putBlob(aid, file);
+      kept.push({ id: aid, name: file.name, size: file.size, type: file.type });
+    }
+    entry.date = values.date || today();
+    entry.text = values.text;
+    entry.images = kept;
+    if (!cur) target.updates.push(entry);
+    save(list);
+    paneTab = "updates";
+    window.TrackerRender();
+  }
+
+  /** Remove one update, and the image bytes that belong to it. */
+  async function removeUpdate(taskId, updateId) {
+    const t = load().find((x) => x.id === taskId);
+    const u = t && (t.updates || []).find((x) => x.id === updateId);
+    if (!u) return;
+    const n = (u.images || []).length;
+    const yes = await window.TrackerUI.confirmDialog({
+      title: "Remove update",
+      intro: `Remove the update dated ${u.date || "this entry"}?` +
+             (n ? ` Its ${n} image${n === 1 ? "" : "s"} go with it.` : ""),
+      confirmLabel: "Remove update",
+    });
+    if (!yes) return;
+    for (const a of u.images || []) await dropBlob(a.id);
+    const list = load();
+    const target = list.find((x) => x.id === taskId);
+    if (!target) return window.TrackerRender();
+    target.updates = (target.updates || []).filter((x) => x.id !== updateId);
+    save(list);
+    window.TrackerRender();
+  }
+
+  /**
+   * The trail of a task that has moved to the Daily activity page.
+   *
+   * Read-only, because that page lists what a task became rather than what it
+   * is being worked on; the entries are still edited from the To Do List if
+   * the task is put back to In progress. Same renderer as the pane, so the two
+   * cannot show different things.
+   */
+  function openUpdates(taskId) {
+    const t = load().find((x) => x.id === taskId);
+    if (!t) return;
+    return window.TrackerUI.htmlDialog({
+      title: `Updates \u2014 ${t.name || t.description || "Task"}`,
+      html: updatesTable(t, { editable: false }),
+    });
+  }
+
+  /** How many updates a task carries, for the Daily activity page. */
+  function updateCount(taskId) {
+    const t = load().find((x) => x.id === taskId);
+    return t ? updatesOf(t).length : 0;
   }
 
   /**
@@ -658,9 +877,32 @@
   document.addEventListener("click", (e) => {
     const row = e.target.closest("[data-open]");
     if (row && !e.target.closest("a,button")) {
+      // A different task always opens on its details. Carrying the updates tab
+      // across would answer a click on task four with task four's trail, which
+      // is not what clicking a row asks for.
+      paneTab = "details";
       openRow = openRow === row.dataset.open ? null : row.dataset.open;
       return window.TrackerRender();
     }
+    const tab = e.target.closest("[data-updates]");
+    if (tab) {
+      paneTab = paneTab === "updates" ? "details" : "updates";
+      return window.TrackerRender();
+    }
+    const addu = e.target.closest("[data-addupdate]");
+    if (addu) return editUpdate(addu.dataset.addupdate, null);
+    const edu = e.target.closest("[data-editupdate]");
+    if (edu) {
+      const [tid, uid] = edu.dataset.editupdate.split("|");
+      return editUpdate(tid, uid);
+    }
+    const rmu = e.target.closest("[data-dropupdate]");
+    if (rmu) {
+      const [tid, uid] = rmu.dataset.dropupdate.split("|");
+      return removeUpdate(tid, uid);
+    }
+    const seeu = e.target.closest("[data-seeupdates]");
+    if (seeu) return openUpdates(seeu.dataset.seeupdates);
     const ed = e.target.closest('[data-edit^="task:"]');
     if (ed) {
       const id = window.TrackerUI.actionId(ed, "edit");
@@ -733,5 +975,6 @@
   migrate();
 
   window.TrackerTasks = { view, load, active, editTask, setStatus, STATUSES, COLUMNS,
-                          logAll, logEdit, logRemove };
+                          logAll, logEdit, logRemove, updateCount, openUpdates,
+                          updatesOf, UPDATE_IMAGES };
 })();
