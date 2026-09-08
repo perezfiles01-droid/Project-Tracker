@@ -57,6 +57,8 @@ jobs:
         run: node checks/check_capitalize.mjs
       - name: Images and files attach, cap at five, and download
         run: node checks/check_attachments.mjs
+      - name: The create date carries its time, and never invents one
+        run: node checks/check_create_time.mjs
       - name: Three columns, and the rest of the task beside them
         run: node checks/check_task_split.mjs
       - name: The Project column filters itself
