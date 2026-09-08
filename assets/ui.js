@@ -332,7 +332,7 @@
       // dialog, and the picker. The staged list is filled by wireAttachments,
       // because a file input's FileList cannot be appended to - picking twice
       // would otherwise replace the first pick rather than add to it, which is
-      // exactly what "select up to 5" needs.
+      // exactly what a ceiling on the total needs.
       control = `<div class="attachments" data-attfield="${esc(f.name)}">
           ${list || `<div class="m nothingyet">Nothing attached yet.</div>`}
           <div class="attstaged" data-staged="${esc(f.name)}"></div>
@@ -763,8 +763,8 @@
    *
    * Files added in this dialog are held here rather than in the file input,
    * because a FileList is read-only: choosing a second time replaces the first
-   * choice instead of adding to it. Staging them makes "up to five" mean five
-   * across every way of adding one.
+   * choice instead of adding to it. Staging them makes the ceiling mean the
+   * same number across every way of adding one.
    *
    * Pasting is the point of the change - a screenshot on the clipboard is a
    * file in clipboardData.files, and it arrives with a useless name, so it is

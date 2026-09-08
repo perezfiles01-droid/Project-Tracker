@@ -1905,7 +1905,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       // dialog, and the picker. The staged list is filled by wireAttachments,
       // because a file input's FileList cannot be appended to - picking twice
       // would otherwise replace the first pick rather than add to it, which is
-      // exactly what "select up to 5" needs.
+      // exactly what a ceiling on the total needs.
       control = `<div class="attachments" data-attfield="${esc(f.name)}">
           ${list || `<div class="m nothingyet">Nothing attached yet.</div>`}
           <div class="attstaged" data-staged="${esc(f.name)}"></div>
@@ -2336,8 +2336,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    *
    * Files added in this dialog are held here rather than in the file input,
    * because a FileList is read-only: choosing a second time replaces the first
-   * choice instead of adding to it. Staging them makes "up to five" mean five
-   * across every way of adding one.
+   * choice instead of adding to it. Staging them makes the ceiling mean the
+   * same number across every way of adding one.
    *
    * Pasting is the point of the change - a screenshot on the clipboard is a
    * file in clipboardData.files, and it arrives with a useless name, so it is
@@ -3834,7 +3834,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   /* ---------- the update trail ----------
      A history you keep by hand: one dated entry per update, oldest first, with
-     the time it was written stamped on it and up to five images attached.
+     the time it was written stamped on it and images attached up to the
+     ceiling below - stated as UPDATE_IMAGES rather than as a number, because
+     a number written into prose is a copy that goes stale the moment the
+     constant moves, which is precisely what "up to five" did here.
      Entries live on the task record itself, so they ride along in the backup
      and follow the task when its status moves it to the Daily activity page.
      The image bytes go to IndexedDB exactly as task attachments do - the task

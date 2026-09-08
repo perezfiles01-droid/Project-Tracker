@@ -569,7 +569,10 @@
 
   /* ---------- the update trail ----------
      A history you keep by hand: one dated entry per update, oldest first, with
-     the time it was written stamped on it and up to five images attached.
+     the time it was written stamped on it and images attached up to the
+     ceiling below - stated as UPDATE_IMAGES rather than as a number, because
+     a number written into prose is a copy that goes stale the moment the
+     constant moves, which is precisely what "up to five" did here.
      Entries live on the task record itself, so they ride along in the backup
      and follow the task when its status moves it to the Daily activity page.
      The image bytes go to IndexedDB exactly as task attachments do - the task
