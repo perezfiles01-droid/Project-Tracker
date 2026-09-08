@@ -9,6 +9,75 @@
    what this app stores. Adding a key to that list is what puts it in the
    backup; a check fails the build if a module reaches past this file. */
 (() => {
+  /* ---------- blob bytes ----------
+     Lifted out of tasks.js, which owned the only IndexedDB in the app while
+     four of the seven rich fields live in files that had none at all -
+     links.js, projects.js and ui.js contained no reference to indexedDB
+     between them. Duplicating the store would have given the app two
+     databases that disagree about what exists.
+
+     Same database and same object store, so nothing already saved moves or is
+     re-keyed: an attachment written by the previous version is read by this
+     one without migration. */
+  const BLOB_DB = "tracker-files", BLOB_STORE = "blobs";
+  const idb = () => new Promise((resolve, reject) => {
+    const r = indexedDB.open(BLOB_DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(BLOB_STORE);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  const putBlob = async (id, blob) => {
+    const db = await idb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BLOB_STORE, "readwrite");
+      tx.objectStore(BLOB_STORE).put(blob, id);
+      tx.oncomplete = () => resolve(id); tx.onerror = () => reject(tx.error);
+    });
+  };
+  const getBlob = async (id) => {
+    const db = await idb();
+    return new Promise((resolve, reject) => {
+      const rq = db.transaction(BLOB_STORE, "readonly").objectStore(BLOB_STORE).get(id);
+      rq.onsuccess = () => resolve(rq.result || null);
+      rq.onerror = () => reject(rq.error);
+    });
+  };
+  const dropBlob = async (id) => {
+    const db = await idb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(BLOB_STORE, "readwrite");
+      tx.objectStore(BLOB_STORE).delete(id);
+      tx.oncomplete = resolve; tx.onerror = resolve;
+    });
+  };
+  const listBlobs = async () => {
+    const db = await idb();
+    return new Promise((resolve) => {
+      const rq = db.transaction(BLOB_STORE, "readonly").objectStore(BLOB_STORE).getAllKeys();
+      rq.onsuccess = () => resolve([...rq.result]);
+      rq.onerror = () => resolve([]);
+    });
+  };
+
+  /**
+   * One id per stored blob, unguessable enough that two written in the same
+   * millisecond cannot collide.
+   */
+  const blobId = (prefix) =>
+    prefix + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+
+  /**
+   * The bytes store, for every module.
+   *
+   * purge is called by the undo history and by nothing else: a deleted blob's
+   * id is held against the step that removed it, and the bytes are deleted for
+   * real only once that step can no longer be undone.
+   */
+  window.TrackerBlobs = {
+    put: putBlob, get: getBlob, list: listBlobs, id: blobId,
+    purge: (ids) => { for (const id of ids) dropBlob(id).catch(() => {}); },
+  };
+
   /**
    * Every key the app owns.
    *

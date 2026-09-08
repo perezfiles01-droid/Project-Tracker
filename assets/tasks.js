@@ -8,7 +8,6 @@
    reference. */
 (() => {
   const KEY = "tracker.tasks";
-  const DB = "tracker-files", STORE = "blobs";
   /* One vocabulary, used by the task pane, the task dialog and the Daily
      activity dialog. They were three separate lists, and the log wrote
      "Completed" for a status the task list called "Done".
@@ -94,49 +93,13 @@
   // is declared further down, and calling it from this line threw before the
   // app had rendered a single row.
 
-  /* ---------- attachment bytes ---------- */
-  const idb = () => new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
-  const putBlob = async (id, blob) => {
-    const db = await idb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(blob, id);
-      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
-    });
-  };
-  const getBlob = async (id) => {
-    const db = await idb();
-    return new Promise((resolve, reject) => {
-      const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
-      rq.onsuccess = () => resolve(rq.result || null);
-      rq.onerror = () => reject(rq.error);
-    });
-  };
-  /**
-   * Bytes the store has finished holding, deleted for real.
-   *
-   * The store keeps a deleted attachment's id against the undo step that
-   * removed it, and calls this only once that step can no longer be undone.
-   * So the bytes outlive the record exactly as long as the record can come
-   * back, and no longer.
-   */
-  window.TrackerBlobs = {
-    purge: (ids) => { for (const id of ids) dropBlob(id).catch(() => {}); },
-  };
-
-  const dropBlob = async (id) => {
-    const db = await idb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).delete(id);
-      tx.oncomplete = resolve; tx.onerror = resolve;
-    });
-  };
+  /* ---------- attachment bytes ----------
+     The store itself lives in store.js now, which already owns everything this
+     app persists. These are the names this file has always used, pointing at
+     it, so nothing below had to change and no attachment was re-keyed. */
+  const putBlob = (id, blob) => window.TrackerBlobs.put(id, blob);
+  const getBlob = (id) => window.TrackerBlobs.get(id);
+  const dropBlob = (id) => Promise.resolve(window.TrackerBlobs.purge([id]));
 
   /* ---------- dates ---------- */
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -224,6 +187,11 @@
     // and never included in the Object.assign below, so editing a task cannot
     // rewrite when it was made - which is the whole reason the time is not
     // simply read off `given`, a field you are free to change.
+    // Read BEFORE the record is overwritten. target IS cur for an edit, so the
+    // Object.assign below replaces the description in place - capturing after
+    // it reads the NEW value, finds nothing to release, and every picture you
+    // edit out stays in IndexedDB for ever. The guard caught exactly that.
+    const wasEmbedded = window.TrackerUI.imageRefs(cur ? cur.description : "");
     const target = cur || { id: "t-" + Date.now(), created: today(),
                             createdAt: new Date().toISOString(), attachments: [] };
     Object.assign(target, {
@@ -251,7 +219,9 @@
     save(list);
     syncLog(target);
     // After the write, so the ids attach to the step this edit just made.
-    window.TrackerStore.holdBlobs(dropped);
+    const stillEmbedded = window.TrackerUI.imageRefs(target.description);
+    window.TrackerStore.holdBlobs(
+      dropped.concat(wasEmbedded.filter((id) => !stillEmbedded.includes(id))));
     window.TrackerRender();
   }
 
@@ -368,6 +338,12 @@
     // Every update the task carried goes too, so its images are held as well.
     window.TrackerStore.holdBlobs(
       (t.updates || []).flatMap((u) => (u.images || []).map((a) => a.id)));
+    // And the pictures embedded IN the text, which are not attachments and
+    // would otherwise be left in IndexedDB with nothing referring to them.
+    window.TrackerStore.holdBlobs(window.TrackerUI.imageRefs(t.description));
+    for (const u of t.updates || []) {
+      window.TrackerStore.holdBlobs(window.TrackerUI.imageRefs(u.text));
+    }
     window.TrackerRender();
   }
 
@@ -722,6 +698,7 @@
           at: new Date().toISOString(), images: [] };
     if (!entry) return window.TrackerRender();
 
+    const wasInText = window.TrackerUI.imageRefs(cur ? cur.text : "");
     const kept = (entry.images || []).filter((a) => values.images.keep.includes(a.id));
     const droppedImages = (entry.images || []).filter((a) => !kept.includes(a)).map((a) => a.id);
     for (const file of values.images.added) {
@@ -734,7 +711,9 @@
     entry.images = kept;
     if (!cur) target.updates.push(entry);
     save(list);
-    window.TrackerStore.holdBlobs(droppedImages);
+    const nowInText = window.TrackerUI.imageRefs(entry.text);
+    window.TrackerStore.holdBlobs(
+      droppedImages.concat(wasInText.filter((id) => !nowInText.includes(id))));
     paneTab = "updates";
     window.TrackerRender();
   }
@@ -757,7 +736,8 @@
     if (!target) return window.TrackerRender();
     target.updates = (target.updates || []).filter((x) => x.id !== updateId);
     save(list);
-    window.TrackerStore.holdBlobs((u.images || []).map((a) => a.id));
+    window.TrackerStore.holdBlobs((u.images || []).map((a) => a.id)
+      .concat(window.TrackerUI.imageRefs(u.text)));
     window.TrackerRender();
   }
 
@@ -906,6 +886,9 @@
   function paint() {
     paintShots();
     window.TrackerUI.paintClamps();
+    // Pictures embedded in a description or an update resolve their src the
+    // same way the attachment thumbnails do: from IndexedDB, after render.
+    window.TrackerUI.paintImages();
   }
   function paintShots() {
     for (const u of shotUrls) URL.revokeObjectURL(u);

@@ -530,6 +530,13 @@ td.stampcell{white-space:nowrap}
    empty contenteditable has no text node to style, so this hangs off :empty
    and off the lone <br> the browser leaves behind. */
 .richbox:empty::before{content:attr(data-placeholder);color:var(--dim)}
+/* A picture inside a cell must not push the column wide: it fits the space
+   the cell has, and the row grows instead. */
+.richbox img,.clamptext.rich img{max-width:100%;height:auto;border-radius:4px;
+  display:inline-block;vertical-align:top;margin:2px 0}
+.richbox td img,.richbox th img,.clamptext.rich td img,.clamptext.rich th img{max-width:220px}
+/* An image whose bytes are missing shows its alt rather than a broken icon. */
+.richbox img:not([src]),.clamptext.rich img:not([src]){min-height:18px;opacity:.5}
 .tabletools{display:inline-flex;gap:2px;align-items:center}
 .tabletools[hidden]{display:none}
 /* The grid picker, the shape Word and Outlook both use. */
@@ -736,6 +743,75 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    what this app stores. Adding a key to that list is what puts it in the
    backup; a check fails the build if a module reaches past this file. */
 (() => {
+  /* ---------- blob bytes ----------
+     Lifted out of tasks.js, which owned the only IndexedDB in the app while
+     four of the seven rich fields live in files that had none at all -
+     links.js, projects.js and ui.js contained no reference to indexedDB
+     between them. Duplicating the store would have given the app two
+     databases that disagree about what exists.
+
+     Same database and same object store, so nothing already saved moves or is
+     re-keyed: an attachment written by the previous version is read by this
+     one without migration. */
+  const BLOB_DB = "tracker-files", BLOB_STORE = "blobs";
+  const idb = () => new Promise((resolve, reject) => {
+    const r = indexedDB.open(BLOB_DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(BLOB_STORE);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  const putBlob = async (id, blob) => {
+    const db = await idb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(BLOB_STORE, "readwrite");
+      tx.objectStore(BLOB_STORE).put(blob, id);
+      tx.oncomplete = () => resolve(id); tx.onerror = () => reject(tx.error);
+    });
+  };
+  const getBlob = async (id) => {
+    const db = await idb();
+    return new Promise((resolve, reject) => {
+      const rq = db.transaction(BLOB_STORE, "readonly").objectStore(BLOB_STORE).get(id);
+      rq.onsuccess = () => resolve(rq.result || null);
+      rq.onerror = () => reject(rq.error);
+    });
+  };
+  const dropBlob = async (id) => {
+    const db = await idb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(BLOB_STORE, "readwrite");
+      tx.objectStore(BLOB_STORE).delete(id);
+      tx.oncomplete = resolve; tx.onerror = resolve;
+    });
+  };
+  const listBlobs = async () => {
+    const db = await idb();
+    return new Promise((resolve) => {
+      const rq = db.transaction(BLOB_STORE, "readonly").objectStore(BLOB_STORE).getAllKeys();
+      rq.onsuccess = () => resolve([...rq.result]);
+      rq.onerror = () => resolve([]);
+    });
+  };
+
+  /**
+   * One id per stored blob, unguessable enough that two written in the same
+   * millisecond cannot collide.
+   */
+  const blobId = (prefix) =>
+    prefix + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+
+  /**
+   * The bytes store, for every module.
+   *
+   * purge is called by the undo history and by nothing else: a deleted blob's
+   * id is held against the step that removed it, and the bytes are deleted for
+   * real only once that step can no longer be undone.
+   */
+  window.TrackerBlobs = {
+    put: putBlob, get: getBlob, list: listBlobs, id: blobId,
+    purge: (ids) => { for (const id of ids) dropBlob(id).catch(() => {}); },
+  };
+
   /**
    * Every key the app owns.
    *
@@ -1526,12 +1602,31 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
      parsing, before any sanitizer gets a chance to look at it. */
   const ALLOWED = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "STRIKE",
                            "UL", "OL", "LI",
-                           "TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
+                           "TABLE", "THEAD", "TBODY", "TR", "TH", "TD",
+                           "IMG"]);
   /* Every attribute is dropped except these two, on cells only, and only when
      they are small positive integers. colspan="1e9" is a denial of service
      rendered as a table. */
   const SPAN_ATTRS = new Set(["colspan", "rowspan"]);
   const spanOk = (v) => /^[0-9]{1,2}$/.test(String(v)) && Number(v) >= 1;
+
+  /* An image is stored by REFERENCE, never by value.
+   *
+   * data-blob names bytes in IndexedDB; src is never stored and never read
+   * from your content. That is a storage decision and a security one at once.
+   *
+   * Storage: a description lives in localStorage, which holds about 5 MB for
+   * the whole origin. This app's own header already says two screenshots
+   * would exhaust it "taking the pinned links and the task list down with
+   * them", and a failed write returns false rather than throwing - so
+   * embedding base64 here would lose your data quietly.
+   *
+   * Security: because the only thing that ever sets src is this app resolving
+   * an id it wrote itself, no javascript: URL, no remote tracking pixel and
+   * no data: payload can arrive through content at all.
+   */
+  const IMG_ATTRS = new Set(["data-blob", "alt"]);
+  const blobRefOk = (v) => /^[a-z0-9][a-z0-9-]{0,63}$/i.test(String(v));
 
   /**
    * Arbitrary HTML in, only what this app permits out.
@@ -1570,14 +1665,149 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         }
         for (const attr of [...child.attributes]) {
           const name = attr.name.toLowerCase();
-          const keep = SPAN_ATTRS.has(name) && (tag === "TD" || tag === "TH") &&
-                       spanOk(attr.value);
+          const keep = tag === "IMG"
+            ? (IMG_ATTRS.has(name) && (name !== "data-blob" || blobRefOk(attr.value)))
+            : (SPAN_ATTRS.has(name) && (tag === "TD" || tag === "TH") && spanOk(attr.value));
           if (!keep) child.removeAttribute(attr.name);
         }
+        // An image with no bytes behind it is not an image. Dropped rather
+        // than left as a broken icon in the middle of your text - and this is
+        // what removes a pasted <img src="https://..."> whose src has just
+        // been stripped, because this app opens from one file with no network
+        // and cannot fetch it later.
+        if (tag === "IMG" && !child.getAttribute("data-blob")) child.remove();
       }
     };
     walk(doc.body);
     return doc.body.innerHTML;
+  }
+
+  /* ---------- images in a rich field ----------
+     Bytes to IndexedDB, a reference in the text. See IMG_ATTRS above for why
+     this is not negotiable. */
+  const IMG_MAX_EDGE = 1600;      // a phone screenshot is far larger than any cell
+  const IMG_MAX_BYTES = 20 * 1024 * 1024;
+
+  /**
+   * Shrink a picture to something a table cell can live with.
+   *
+   * A phone screenshot is several megabytes and thousands of pixels wide.
+   * IndexedDB would take it, but six of them in one description makes the pane
+   * crawl and every render decode them again. Anything already small enough is
+   * returned untouched rather than re-encoded, so a small PNG does not become
+   * a slightly worse JPEG for no reason.
+   */
+  function shrinkImage(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const { width: w, height: h } = img;
+        const scale = Math.min(1, IMG_MAX_EDGE / Math.max(w, h));
+        if (scale >= 1) { URL.revokeObjectURL(url); return resolve(file); }
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(w * scale);
+          canvas.height = Math.round(h * scale);
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => {
+            URL.revokeObjectURL(url);
+            resolve(blob || file);       // a failed encode keeps the original
+          }, "image/jpeg", 0.85);
+        } catch { URL.revokeObjectURL(url); resolve(file); }
+      };
+      // A file the browser cannot decode is stored as it came: it may still be
+      // a format something else can open, and refusing it would be a guess.
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  /** Store one picture and return the markup that refers to it. */
+  async function storeImage(file) {
+    if (!file || !/^image\//.test(file.type || "")) return null;
+    if (file.size > IMG_MAX_BYTES) return { error: `That image is ` +
+      `${Math.round(file.size / 1048576)} MB. The limit is ` +
+      `${IMG_MAX_BYTES / 1048576} MB.` };
+    const blob = await shrinkImage(file);
+    const id = window.TrackerBlobs.id("img");
+    await window.TrackerBlobs.put(id, blob);
+    return { html: `<img data-blob="${esc(id)}" alt="${esc(file.name || "image")}">` };
+  }
+
+  /**
+   * Turn any data: image in some markup into stored bytes, BEFORE sanitizing.
+   *
+   * Order matters and is easy to get wrong. cleanHtml drops an <img> that
+   * carries no data-blob, so a picture pasted from Word - which uses data:
+   * URIs - would be deleted before anything had a chance to convert it. This
+   * runs first, so what reaches the sanitizer already refers to bytes.
+   *
+   * Returns the markup unchanged when there is nothing to adopt, so the
+   * ordinary paste path costs one regex test.
+   */
+  async function adoptDataUris(html) {
+    const src = String(html ?? "");
+    if (!/<img[^>]+src\s*=\s*["']?data:image\//i.test(src)) return src;
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString("<body>" + src + "</body>", "text/html");
+    } catch { return src; }
+    for (const img of [...doc.querySelectorAll("img")]) {
+      const url = img.getAttribute("src") || "";
+      if (!/^data:image\//i.test(url)) continue;
+      try {
+        const res = await fetch(url);            // a data: URL, not the network
+        const blob = await res.blob();
+        const stored = await storeImage(new File([blob], img.getAttribute("alt") || "image",
+                                                 { type: blob.type || "image/png" }));
+        if (stored && stored.html) {
+          const holder = doc.createElement("div");
+          holder.innerHTML = stored.html;        // inert document, not the page
+          img.replaceWith(holder.firstElementChild);
+        } else {
+          img.remove();
+        }
+      } catch { img.remove(); }
+    }
+    return doc.body.innerHTML;
+  }
+
+  /**
+   * Fill in every referenced picture, wherever it is on the page.
+   *
+   * src is resolved here and only here, from an id this app wrote. Object URLs
+   * from the previous pass are revoked first: a pane re-rendered on every edit
+   * would otherwise leak one URL per image per render for the life of the tab.
+   */
+  let imgUrls = [];
+  function paintImages(root = document) {
+    for (const u of imgUrls) URL.revokeObjectURL(u);
+    imgUrls = [];
+    for (const img of root.querySelectorAll("img[data-blob]")) {
+      const id = img.getAttribute("data-blob");
+      window.TrackerBlobs.get(id).then((blob) => {
+        if (!blob || !img.isConnected) return;
+        const u = URL.createObjectURL(blob);
+        imgUrls.push(u);
+        img.src = u;
+      }).catch(() => { /* a missing blob simply shows no picture */ });
+    }
+  }
+
+  /** Every picture a piece of markup refers to, for the lifecycle in store.js. */
+  function imageRefs(html) {
+    const out = [];
+    const src = String(html ?? "");
+    if (!/data-blob/i.test(src)) return out;
+    try {
+      const doc = new DOMParser().parseFromString("<body>" + src + "</body>", "text/html");
+      for (const img of doc.querySelectorAll("img[data-blob]")) {
+        const id = img.getAttribute("data-blob");
+        if (id && !out.includes(id)) out.push(id);
+      }
+    } catch { /* unparseable markup refers to nothing */ }
+    return out;
   }
 
   /** The words in some markup, for searching and for narrow table columns. */
@@ -1982,6 +2212,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <span class="richsep"></span>
         ${RICH_COMMANDS.slice(4).map(btn).join("")}
         <span class="richsep"></span>
+        <button type="button" class="richbtn" data-imgpick="${id}"
+                title="Insert an image" aria-label="Insert an image"
+                tabindex="-1">\u1f5bc</button>
+        <input type="file" accept="image/*" hidden data-imginput="${id}" multiple>
+        <span class="richsep"></span>
         <button type="button" class="richbtn" data-tableopen="${id}"
                 title="Insert table" aria-label="Insert table" tabindex="-1">\u25a6</button>
         <span class="tabletools" data-tabletools="${id}" hidden>
@@ -2262,13 +2497,35 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       el.addEventListener("paste", (e) => {
         const cd = e.clipboardData;
         if (!cd) return;
+        const files = [...(cd.files || [])].filter((f) => /^image\//.test(f.type || ""));
+        e.preventDefault();
+        // A pasted screenshot arrives as a FILE, not as markup, so the files
+        // are taken first. Copying an image from a web page usually puts both
+        // on the clipboard; preferring the file is what stores the bytes
+        // rather than a remote URL this app could never fetch offline.
+        if (files.length) {
+          rememberCaret(el.id);
+          insertImages(el.id, files);
+          return;
+        }
         const html = cd.getData("text/html");
         const plain = cd.getData("text/plain");
-        e.preventDefault();
-        const safe = html ? cleanHtml(html)
-                          : esc(plain).replace(/\n/g, "<br>");
-        el.ownerDocument.execCommand("insertHTML", false, safe);
-        paintState();
+        if (!html) {
+          el.ownerDocument.execCommand("insertHTML", false,
+            esc(plain).replace(/\n/g, "<br>"));
+          paintState();
+          return;
+        }
+        // Data URIs become stored bytes FIRST, then the markup is sanitized:
+        // the other order deletes the picture before it can be adopted, and
+        // the order after that would put base64 into localStorage.
+        rememberCaret(el.id);
+        adoptDataUris(html).then((adopted) => {
+          restoreCaret(el.id, el);
+          el.ownerDocument.execCommand("insertHTML", false, cleanHtml(adopted));
+          paintImages(el);
+          paintState();
+        });
       });
       // Enter inside a table cell must not split the table into two.
       el.addEventListener("keydown", (e) => {
@@ -2294,6 +2551,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         el.focus();
         try { el.ownerDocument.execCommand(cmd.dataset.cmd, false, null); } catch { /* ignore */ }
         paintState();
+        return;
+      }
+      const pickImg = e.target.closest("[data-imgpick]");
+      if (pickImg) {
+        e.preventDefault();
+        const id = pickImg.dataset.imgpick;
+        // The caret is remembered before the file dialog opens: choosing a
+        // file takes focus away, and without this the image would land at the
+        // start of the field rather than in the cell you were standing in.
+        rememberCaret(id);
+        const input = box.querySelector(`[data-imginput="${cssEsc(id)}"]`);
+        if (input) input.click();
         return;
       }
       const open = e.target.closest("[data-tableopen]");
@@ -2328,6 +2597,54 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         paintState();
       }
     });
+
+    /* Where the caret was before focus moved to a file dialog. Without it an
+       image chosen from the picker lands at the top of the field instead of
+       in the cell you were working in, which is the whole point of the
+       request. */
+    const carets = new Map();
+    function rememberCaret(id) {
+      const el = box.querySelector("#" + cssEsc(id));
+      const sel = el && el.ownerDocument.getSelection();
+      if (sel && sel.rangeCount && el.contains(sel.anchorNode)) {
+        carets.set(id, sel.getRangeAt(0).cloneRange());
+      }
+    }
+    function restoreCaret(id, el) {
+      const range = carets.get(id);
+      el.focus();
+      if (!range || !el.contains(range.startContainer)) return;
+      const sel = el.ownerDocument.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    /** Store each picture and insert it where the caret is. */
+    async function insertImages(id, files) {
+      const el = box.querySelector("#" + cssEsc(id));
+      if (!el) return;
+      const problems = [];
+      for (const file of [...files]) {
+        const res = await storeImage(file);
+        if (!res) continue;
+        if (res.error) { problems.push(res.error); continue; }
+        restoreCaret(id, el);
+        el.ownerDocument.execCommand("insertHTML", false, res.html);
+        rememberCaret(id);
+      }
+      say(id, problems.join(" "));
+      paintImages(el);
+      paintState();
+    }
+
+    for (const el of boxes) {
+      const input = box.querySelector(`[data-imginput="${cssEsc(el.id)}"]`);
+      if (!input) continue;
+      input.addEventListener("change", async () => {
+        await insertImages(el.id, input.files || []);
+        input.value = "";      // so choosing the same file twice still registers
+      });
+    }
 
     // Hovering the picker shows the size it would insert, the way Word does.
     box.addEventListener("mouseover", (e) => {
@@ -2936,7 +3253,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
+  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml,
+                       paintImages, imageRefs, storeImage, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
 
@@ -2952,7 +3270,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    reference. */
 (() => {
   const KEY = "tracker.tasks";
-  const DB = "tracker-files", STORE = "blobs";
   /* One vocabulary, used by the task pane, the task dialog and the Daily
      activity dialog. They were three separate lists, and the log wrote
      "Completed" for a status the task list called "Done".
@@ -3038,49 +3355,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   // is declared further down, and calling it from this line threw before the
   // app had rendered a single row.
 
-  /* ---------- attachment bytes ---------- */
-  const idb = () => new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
-  const putBlob = async (id, blob) => {
-    const db = await idb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(blob, id);
-      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
-    });
-  };
-  const getBlob = async (id) => {
-    const db = await idb();
-    return new Promise((resolve, reject) => {
-      const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
-      rq.onsuccess = () => resolve(rq.result || null);
-      rq.onerror = () => reject(rq.error);
-    });
-  };
-  /**
-   * Bytes the store has finished holding, deleted for real.
-   *
-   * The store keeps a deleted attachment's id against the undo step that
-   * removed it, and calls this only once that step can no longer be undone.
-   * So the bytes outlive the record exactly as long as the record can come
-   * back, and no longer.
-   */
-  window.TrackerBlobs = {
-    purge: (ids) => { for (const id of ids) dropBlob(id).catch(() => {}); },
-  };
-
-  const dropBlob = async (id) => {
-    const db = await idb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).delete(id);
-      tx.oncomplete = resolve; tx.onerror = resolve;
-    });
-  };
+  /* ---------- attachment bytes ----------
+     The store itself lives in store.js now, which already owns everything this
+     app persists. These are the names this file has always used, pointing at
+     it, so nothing below had to change and no attachment was re-keyed. */
+  const putBlob = (id, blob) => window.TrackerBlobs.put(id, blob);
+  const getBlob = (id) => window.TrackerBlobs.get(id);
+  const dropBlob = (id) => Promise.resolve(window.TrackerBlobs.purge([id]));
 
   /* ---------- dates ---------- */
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -3168,6 +3449,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     // and never included in the Object.assign below, so editing a task cannot
     // rewrite when it was made - which is the whole reason the time is not
     // simply read off `given`, a field you are free to change.
+    // Read BEFORE the record is overwritten. target IS cur for an edit, so the
+    // Object.assign below replaces the description in place - capturing after
+    // it reads the NEW value, finds nothing to release, and every picture you
+    // edit out stays in IndexedDB for ever. The guard caught exactly that.
+    const wasEmbedded = window.TrackerUI.imageRefs(cur ? cur.description : "");
     const target = cur || { id: "t-" + Date.now(), created: today(),
                             createdAt: new Date().toISOString(), attachments: [] };
     Object.assign(target, {
@@ -3195,7 +3481,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     save(list);
     syncLog(target);
     // After the write, so the ids attach to the step this edit just made.
-    window.TrackerStore.holdBlobs(dropped);
+    const stillEmbedded = window.TrackerUI.imageRefs(target.description);
+    window.TrackerStore.holdBlobs(
+      dropped.concat(wasEmbedded.filter((id) => !stillEmbedded.includes(id))));
     window.TrackerRender();
   }
 
@@ -3312,6 +3600,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     // Every update the task carried goes too, so its images are held as well.
     window.TrackerStore.holdBlobs(
       (t.updates || []).flatMap((u) => (u.images || []).map((a) => a.id)));
+    // And the pictures embedded IN the text, which are not attachments and
+    // would otherwise be left in IndexedDB with nothing referring to them.
+    window.TrackerStore.holdBlobs(window.TrackerUI.imageRefs(t.description));
+    for (const u of t.updates || []) {
+      window.TrackerStore.holdBlobs(window.TrackerUI.imageRefs(u.text));
+    }
     window.TrackerRender();
   }
 
@@ -3666,6 +3960,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           at: new Date().toISOString(), images: [] };
     if (!entry) return window.TrackerRender();
 
+    const wasInText = window.TrackerUI.imageRefs(cur ? cur.text : "");
     const kept = (entry.images || []).filter((a) => values.images.keep.includes(a.id));
     const droppedImages = (entry.images || []).filter((a) => !kept.includes(a)).map((a) => a.id);
     for (const file of values.images.added) {
@@ -3678,7 +3973,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     entry.images = kept;
     if (!cur) target.updates.push(entry);
     save(list);
-    window.TrackerStore.holdBlobs(droppedImages);
+    const nowInText = window.TrackerUI.imageRefs(entry.text);
+    window.TrackerStore.holdBlobs(
+      droppedImages.concat(wasInText.filter((id) => !nowInText.includes(id))));
     paneTab = "updates";
     window.TrackerRender();
   }
@@ -3701,7 +3998,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!target) return window.TrackerRender();
     target.updates = (target.updates || []).filter((x) => x.id !== updateId);
     save(list);
-    window.TrackerStore.holdBlobs((u.images || []).map((a) => a.id));
+    window.TrackerStore.holdBlobs((u.images || []).map((a) => a.id)
+      .concat(window.TrackerUI.imageRefs(u.text)));
     window.TrackerRender();
   }
 
@@ -3850,6 +4148,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function paint() {
     paintShots();
     window.TrackerUI.paintClamps();
+    // Pictures embedded in a description or an update resolve their src the
+    // same way the attachment thumbnails do: from IndexedDB, after render.
+    window.TrackerUI.paintImages();
   }
   function paintShots() {
     for (const u of shotUrls) URL.revokeObjectURL(u);
