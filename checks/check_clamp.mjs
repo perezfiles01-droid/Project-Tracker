@@ -153,7 +153,10 @@ ok("an expanded update is still expanded after a re-render",
    (await measure("u:u-long")).open === true,
    "a collapse nobody asked for reads as a broken button");
 
-/* --- the read-only trail on Daily activity clamps identically ------------ */
+/* --- the trail clamps on the Daily activity page too --------------------- */
+/* It used to be reached there through a read-only modal; a logged task's row
+   opens the same pane the To Do List opens now, so the clamp has to hold on
+   that page for the same reason - it is the same renderer. */
 await page.click(".taskpane [data-updates]");   // back to details for the picker
 await page.waitForTimeout(200);
 await page.selectOption(".taskpane .statuspick", "Done");
@@ -161,19 +164,23 @@ await page.waitForSelector('#formDialog [data-fd="choice"]');
 await page.click('#formDialog [data-fd="choice"]');
 await page.waitForTimeout(400);
 await page.click('#nav button[data-route="daily"]');
-await page.waitForTimeout(300);
-await page.click("[data-seeupdates]");
 await page.waitForTimeout(400);
-const inDialog = await page.evaluate(() => {
-  const box = document.querySelector('#formDialog [data-clamp="u:u-long"]');
+if (await page.locator(".taskpane .taskdetail").count() === 0) {
+  await page.click("tr.taskrow[data-open]");
+  await page.waitForSelector(".taskpane .taskdetail");
+}
+await page.click(".taskpane [data-updates]");
+await page.waitForTimeout(400);
+const onDaily = await page.evaluate(() => {
+  const box = document.querySelector('.taskpane [data-clamp="u:u-long"]');
   if (!box) return null;
   const text = box.querySelector(".clamptext");
   const btn = box.querySelector(".clamptoggle");
   return { clipped: text.scrollHeight > text.clientHeight + 1 || box.classList.contains("open"),
            toggleShown: !!btn && !btn.hidden };
 });
-ok("the trail opened from Daily activity clamps too", !!inDialog && inDialog.toggleShown,
-   JSON.stringify(inDialog));
+ok("the trail opened from Daily activity clamps too", !!onDaily && onDaily.toggleShown,
+   JSON.stringify(onDaily));
 
 /* --- every consumer, enumerated from the page, obeys the same rules ------ */
 const all = await page.evaluate(() => [...document.querySelectorAll("[data-clamp]")].map((b) => {

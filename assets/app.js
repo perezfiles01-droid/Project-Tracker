@@ -35,24 +35,96 @@
   }
 
   /**
-   * The update trail of a logged task, reachable from the row it became.
+   * The task behind a logged row, or null for one typed by hand.
    *
-   * A task marked Done or Blocked leaves the To Do List, and with it the pane
-   * that holds its updates - so a trail you kept for three weeks would become
-   * unreadable at the moment the work finished, which is exactly when you want
-   * to look back over it. Shown only for rows the app wrote from a task that
-   * still exists and actually carries updates: a hand-typed entry has no task
-   * behind it, the same rule the status picker beside it already follows, and
-   * an icon that opens an empty table is a button that lies about having
-   * something to show. The count is in the button's name, so the table says
-   * which finished tasks have a trail worth opening.
+   * The single rule this page follows about its two kinds of row: an entry the
+   * app wrote from a task can reach that task, and an entry you typed cannot,
+   * because there is nothing behind it. The status picker already followed it;
+   * the pane and the row label follow it now too.
    */
-  function updatesButton(r) {
-    if (r.origin !== "task" || !r.taskId) return "";
-    const n = window.TrackerTasks.updateCount(r.taskId);
-    if (!n) return "";
-    return window.TrackerUI.iconButton("update",
-      `${n} update${n === 1 ? "" : "s"}`, `data-seeupdates="${esc(r.taskId)}"`);
+  function loggedTask(r) {
+    if (r.origin !== "task" || !r.taskId) return null;
+    return window.TrackerTasks.load().find((x) => x.id === r.taskId) || null;
+  }
+
+  /**
+   * What a logged row calls itself.
+   *
+   * `task` on the entry is a snapshot taken the moment it was logged, so a
+   * task renamed afterwards left the log reading the old words - and a task
+   * logged before it had a name left the row reading the literal word "Task",
+   * which is what the fallback used to write. A row that came from a task now
+   * reads that task's current name, so it always matches the pane it opens.
+   *
+   * Wording you typed over an entry by hand is never overwritten: logEdit
+   * stamps `edited` on it, and an edited entry keeps exactly what you wrote.
+   * Entries written before that flag existed are treated as un-edited, which
+   * is true of every one the app wrote itself - the only way to have changed
+   * one is through logEdit, which stamps it.
+   */
+  function activityText(r) {
+    const t = r.edited ? null : loggedTask(r);
+    return t ? window.TrackerTasks.taskLabel(t) : (r.task || "");
+  }
+
+  /**
+   * The log's columns. With a task open it drops to the two that identify a
+   * row, exactly as the To Do List drops to its number and its name, and the
+   * pane takes the width that frees.
+   */
+  function dailyColumns(open) {
+    const cols = [
+      { key: "date", label: "Date", render: (r) => esc(r.date) },
+      { key: "task", label: "Activity", wrap: true, render: (r) => esc(activityText(r)) },
+    ];
+    if (open) return cols;
+    return cols.concat([
+      // A logged task keeps its status control here, because here is where
+      // the task now lives: it is off the To Do List, and without this the
+      // only way back to In progress would be a page that no longer lists
+      // it. Hand-typed entries have no task behind them, so they show the
+      // tag they always did.
+      { key: "status", label: "Status", render: (r) => taskStatusPicker(r) || statusTag(r.status) },
+      { key: "origin", label: "Source", render: (r) =>
+          `<span class="tag">${r.origin === "task" ? "task completed" : "manual"}</span>` },
+      { key: "url", label: "Link", render: linkCell },
+      { key: "id", label: "", render: (r) =>
+          `<span class="actions">
+             ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="act:${esc(r.id)}"`)}
+             ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="act:${esc(r.id)}"`)}
+           </span>` },
+    ]);
+  }
+
+  /**
+   * The log beside the pane, the same shape the To Do List uses.
+   *
+   * A row that came from a task carries data-open, so the click handler in
+   * tasks.js opens it in the pane - the same pane, from the same renderer, so
+   * clicking a task means one thing wherever you are standing. An entry you
+   * typed by hand carries none: there is no task behind it and nothing to
+   * show, and a row that looks clickable and does nothing is worse than a row
+   * that plainly is not.
+   */
+  function dailySplit(rows) {
+    // Only a task this page is actually listing may fill its pane.
+    const open = window.TrackerTasks.openTask(rows.map((r) => r.taskId).filter(Boolean));
+    // The pane's thumbnails and clamp measurements need the DOM this string
+    // becomes, so they happen on the next tick rather than here.
+    setTimeout(window.TrackerTasks.paintPane, 0);
+    return `<div class="tasksplit${open ? " open" : ""}">
+        <div class="tasklist">${table("daily", dailyColumns(open), rows,
+            (r) => rowAttrs(r, open))}</div>
+        ${window.TrackerTasks.taskPane(open)}
+      </div>`;
+  }
+
+  /** What makes a logged row clickable, or leaves it inert. */
+  function rowAttrs(r, open) {
+    const t = loggedTask(r);
+    if (!t) return { class: "logrow" };
+    return { class: "taskrow logrow" + (open === t.id ? " open" : ""),
+             attrs: `data-open="${esc(t.id)}"` };
   }
 
   function statusTag(s) {
@@ -88,7 +160,7 @@
   /* ---------- sortable table ---------- */
   const ROWS_PER_PAGE = 10;
 
-  function table(routeKey, cols, rows) {
+  function table(routeKey, cols, rows, rowAttr) {
     const s = state.sort[routeKey];
     let data = rows.slice();
     if (s) {
@@ -103,9 +175,14 @@
     // Paged like every other table in the app, so a long log does not grow
     // the page without limit.
     const cur = window.TrackerUI.pageIndex(routeKey, data.length, ROWS_PER_PAGE);
-    const body = data.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE).map((r) =>
-      `<tr>${cols.map((c) => `<td class="${c.wrap ? "wrap" : ""}">${c.render(r)}</td>`).join("")}</tr>`
-    ).join("");
+    // A caller can say what each row carries - a class, a data attribute - so
+    // the Daily activity log can make its task rows clickable without a second
+    // copy of this renderer existing to drift away from it.
+    const body = data.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE).map((r) => {
+      const a = rowAttr ? rowAttr(r) : null;
+      return `<tr${a && a.class ? ` class="${a.class}"` : ""}${a && a.attrs ? " " + a.attrs : ""}>${
+        cols.map((c) => `<td class="${c.wrap ? "wrap" : ""}">${c.render(r)}</td>`).join("")}</tr>`;
+    }).join("");
     return data.length
       ? `<div class="tablewrap"><table data-route="${routeKey}">
            <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` +
@@ -264,25 +341,7 @@
           ${window.TrackerLinks.searchBox("daily", "Search activities…")}
           <button class="btn primary" data-edit="act:new">Log an activity</button>
         </div>
-        ${table("daily", [
-          { key: "date", label: "Date", render: (r) => esc(r.date) },
-          { key: "task", label: "Activity", wrap: true, render: (r) => esc(r.task) },
-          // A logged task keeps its status control here, because here is where
-          // the task now lives: it is off the To Do List, and without this the
-          // only way back to In progress would be a page that no longer lists
-          // it. Hand-typed entries have no task behind them, so they show the
-          // tag they always did.
-          { key: "status", label: "Status", render: (r) => taskStatusPicker(r) || statusTag(r.status) },
-          { key: "origin", label: "Source", render: (r) =>
-              `<span class="tag">${r.origin === "task" ? "task completed" : "manual"}</span>` },
-          { key: "url", label: "Link", render: linkCell },
-          { key: "id", label: "", render: (r) =>
-              `<span class="actions">
-                 ${updatesButton(r)}
-                 ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="act:${esc(r.id)}"`)}
-                 ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="act:${esc(r.id)}"`)}
-               </span>` },
-        ], rows)}`;
+        ${rows.length ? dailySplit(rows) : table("daily", dailyColumns(null), rows)}`;
     },
 
     comms() {

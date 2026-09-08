@@ -249,8 +249,13 @@ ok("tasks survive a reload", (await page.locator("tr.taskrow").count()) === 2);
 --------------------------------------------------------------------------- */
 await page.click('button[data-route="daily"]');
 await page.waitForSelector("#view");
+// Scoped to the log's own table. The page carries a second one now - the
+// detail pane beside the list, which is itself a table of the open task's
+// fields - so "#view table tbody tr" counted ten pane rows alongside the one
+// log row and reported eleven activities where there was one.
+const logRows = () => page.locator('table[data-route="daily"] tbody tr');
 ok("Daily activity starts empty — the 34 workbook rows are gone",
-   (await page.locator("#view table tbody tr").count()) === 0,
+   (await logRows().count()) === 0,
    (await page.locator("#view").innerText()).slice(0, 80));
 
 await page.click('button[data-route="todo"]');
@@ -266,16 +271,14 @@ await page.waitForTimeout(300);
 await page.click('button[data-route="daily"]');
 await page.waitForTimeout(150);
 ok("finishing a task logs exactly one activity",
-   (await page.locator("#view table tbody tr").count()) === 1,
-   String(await page.locator("#view table tbody tr").count()));
+   (await logRows().count()) === 1, String(await logRows().count()));
 ok("the entry names the task",
-   (await page.locator("#view table").innerText()).includes("Draft the release note"));
+   (await page.locator('table[data-route="daily"]').innerText()).includes("Draft the release note"));
 
 await page.reload({ waitUntil: "load" });
 await page.click('button[data-route="daily"]');
 await page.waitForTimeout(200);
-ok("the activity entry survives a reload",
-   (await page.locator("#view table tbody tr").count()) === 1);
+ok("the activity entry survives a reload", (await logRows().count()) === 1);
 
 // A manual entry, for work that never was a task.
 await page.click('[data-edit="act:new"]');
@@ -284,7 +287,7 @@ await page.fill("#fd_task", "Something I did by hand");
 await page.click('[data-fd="save"]');
 await page.waitForTimeout(150);
 ok("a manual entry can be logged",
-   (await page.locator("#view table").innerText()).includes("Something I did by hand"));
+   (await page.locator('table[data-route="daily"]').innerText()).includes("Something I did by hand"));
 
 /* ---------------------------------------------------------------------------
    Renaming a pinned link, the thing that used to cost a delete and a re-add.
