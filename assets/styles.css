@@ -431,8 +431,12 @@ th.emailhead .accountpick{
    what left a 130px list beside a 535px pane. The pane cannot be sticky and
    stretch at the same time - sticky is what made it size itself independently -
    so it scrolls inside its own box instead. */
-.tasksplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;
+/* Closed, the pane is about a quarter of the row: the table carries four
+   columns now and needs the rest. Open, it becomes the wider half, because the
+   list is down to a number and a name and everything else is in the pane. */
+.tasksplit{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);gap:16px;
            align-items:stretch}
+.tasksplit.open{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
 .tasklist{min-width:0;display:flex;flex-direction:column;
           background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
           padding:14px}
@@ -450,7 +454,7 @@ table.tasktable{min-width:0}
       margin:0 6px 6px 0;line-height:0}
 .shot img{width:84px;height:84px;object-fit:cover;border-radius:7px;display:block}
 @media (max-width:900px){
-  .tasksplit{grid-template-columns:minmax(0,1fr)}
+  .tasksplit,.tasksplit.open{grid-template-columns:minmax(0,1fr)}
   .taskpane{max-height:none}
 }
 
