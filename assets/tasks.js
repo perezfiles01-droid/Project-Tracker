@@ -508,8 +508,11 @@
       ["Task No.", val(t.no)],
       ["Name of task", val(t.name)],
       ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
+      // Same bound as an update, for the same reason: an unbounded description
+      // pushes Status, Assignee and Images below the fold in this very pane.
       ["Description", t.description
-        ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
+        ? window.TrackerUI.clampBlock({ key: "d:" + t.id, text: t.description })
+        : dash],
       ["Task Create Date", t.given ? createStamp(t) : dash],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
@@ -605,8 +608,9 @@
     const rows = list.map((u) => `<tr class="updaterow">
         <th scope="row" class="updatewhen">${updateStamp(u)}</th>
         <td class="updatecell">
-          ${u.text ? `<div class="updatetext">${esc(u.text)}</div>`
-                   : `<span class="tag dead">\u2014</span>`}
+          ${u.text
+            ? window.TrackerUI.clampBlock({ key: "u:" + u.id, text: u.text })
+            : `<span class="tag dead">\u2014</span>`}
           ${(u.images || []).length
             ? `<div class="updateshots">${(u.images || []).map((a) =>
                 `<button class="shot" data-att="${esc(a.id)}" title="${esc(a.name)}">
@@ -633,7 +637,7 @@
       : "";
     const empty = list.length ? "" : `<tr><th scope="row"></th>
         <td><span class="m">No updates yet.</span></td></tr>`;
-    setTimeout(paintShots, 0);
+    setTimeout(paint, 0);
     return `<div class="tablewrap"><table class="detailtable updatetable">
         <tbody>${rows}${empty}${add}</tbody>
       </table></div>`;
@@ -819,9 +823,9 @@
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
-    // The pane's thumbnails need the DOM this string becomes, so they are
-    // filled on the next tick rather than here.
-    setTimeout(paintShots, 0);
+    // The pane's thumbnails and its clamp measurements both need the DOM this
+    // string becomes, so both happen on the next tick rather than here.
+    setTimeout(paint, 0);
     return `
       <h2 class="page">To Do List</h2>
       <p class="lede">${rows.length} of ${all.length} tasks in progress${late ? ` · ${late} overdue` : ""}.
@@ -860,6 +864,11 @@
    * task list left open would otherwise hold one URL per image per click.
    */
   let shotUrls = [];
+  /** Everything that can only be done once the pane is really on screen. */
+  function paint() {
+    paintShots();
+    window.TrackerUI.paintClamps();
+  }
   function paintShots() {
     for (const u of shotUrls) URL.revokeObjectURL(u);
     shotUrls = [];

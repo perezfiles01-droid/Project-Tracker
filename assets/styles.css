@@ -479,6 +479,18 @@ table.tasktable{min-width:0}
    on one line rather than breaking in half in a narrow column. */
 td.stampcell{white-space:nowrap}
 .stamptime{color:var(--dim)}
+/* Prose bounded to a few lines, with a control that opens it.
+   line-height is stated rather than inherited: the max-height fallback below
+   is arithmetic on it, and an inherited value makes that arithmetic wrong. */
+.clamptext{white-space:pre-wrap;line-height:1.5;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--clamp-lines,3);
+  /* For a browser without line-clamp: no ellipsis, but still a height bound,
+     which is the part that matters. */
+  max-height:calc(var(--clamp-lines,3) * 1.5em)}
+.clamp.open .clamptext{display:block;-webkit-line-clamp:unset;max-height:none;overflow:visible}
+.clamptoggle{display:inline-block;margin-top:4px;font-size:12px}
+.clamptoggle[hidden]{display:none}
+
 /* The update trail. It is the details table - same wrapper, same class, same
    width - so nothing here touches the frame; only what sits inside a cell. */
 .updatewhen{white-space:nowrap}
