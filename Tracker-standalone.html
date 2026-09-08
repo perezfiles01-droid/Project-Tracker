@@ -1064,11 +1064,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   /**
    * The instruction, written as asked for.
    *
-   * It used to end its first paragraph with "if you think there is something
-   * lacking or a gap in the message, fill that gap", and that licence is
-   * deliberately gone. Standardize is asked to tidy what you wrote, and an
-   * instruction to fill perceived gaps invites the model to add a sentence
-   * you never wrote into a work note that goes out under your name. The
+   * Its first paragraph used to end with a licence to fill any perceived gap
+   * in the message, and that sentence is deliberately gone - it is not quoted
+   * here, so check_prompt.mjs can scan this file for it strictly rather than
+   * having to tiptoe around a comment about it. Standardize is asked to tidy
+   * what you wrote, and an instruction to fill perceived gaps invites the
+   * model to add a sentence you never wrote into a work note that goes out
+   * under your name. The
    * remaining rules are the ones that keep it to a rewrite: retain the
    * message, do not make it longer than it needs to be, and invent no
    * specifics.
