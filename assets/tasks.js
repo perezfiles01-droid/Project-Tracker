@@ -56,6 +56,14 @@
     let touched = false;
     for (const t of tasks) {
       if (!t.status || t.status === "To do") { t.status = ACTIVE; touched = true; }
+      // Tasks saved before createdAt existed still carry their creation
+      // instant: the id is "t-" + Date.now(). Recovered from there, and only
+      // from there - an id of any other shape gets nothing, because a
+      // plausible-looking time nobody recorded is worse than no time at all.
+      if (!t.createdAt && /^t-\d{13}$/.test(t.id || "")) {
+        t.createdAt = new Date(Number(t.id.slice(2))).toISOString();
+        touched = true;
+      }
     }
     if (touched) window.TrackerStore.set(KEY, tasks);
 
@@ -119,7 +127,14 @@
   };
 
   /* ---------- dates ---------- */
-  const today = () => new Date().toISOString().slice(0, 10);
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const dayOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  // The local day, not the UTC one. toISOString() reads midnight-to-midnight in
+  // Greenwich, so east of it every morning was yesterday: a task created at
+  // 07:00 in Manila was dated the day before, and a task due that day did not
+  // read as overdue until eight hours late. Every date in this file is a
+  // calendar date somebody typed or read, so all of them mean the local one.
+  const today = () => dayOf(new Date());
   const overdue = (t) => t.due && t.status !== "Done" && t.due < today();
   const dueSoon = (t) => {
     if (!t.due || t.status === "Done" || overdue(t)) return false;
@@ -188,7 +203,12 @@
       values.status = cur.status;
     }
 
-    const target = cur || { id: "t-" + Date.now(), created: today(), attachments: [] };
+    // createdAt is the instant, `created` and `given` are days. It is set here
+    // and never included in the Object.assign below, so editing a task cannot
+    // rewrite when it was made - which is the whole reason the time is not
+    // simply read off `given`, a field you are free to change.
+    const target = cur || { id: "t-" + Date.now(), created: today(),
+                            createdAt: new Date().toISOString(), attachments: [] };
     Object.assign(target, {
       // No "no" here: the number is the task's position, worked out at render.
       name: values.name, description: values.description, given: values.given,
@@ -437,7 +457,7 @@
       ["Project", t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash],
       ["Description", t.description
         ? `<span class="detaildesc">${esc(t.description)}</span>` : dash],
-      ["Task Create Date", val(t.given)],
+      ["Task Create Date", t.given ? createStamp(t) : dash],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
       ["Reference link", t.ref
@@ -480,6 +500,21 @@
         </div>`;
   }
 
+  /**
+   * The create date, with the time it was created beside it.
+   *
+   * The time is shown only when createdAt falls on the day `given` names. They
+   * are the same day for a task left alone; they differ when the date has been
+   * edited, and printing this morning's clock time beside a date moved to last
+   * week states something that never happened.
+   */
+  function createStamp(t) {
+    if (!t.given) return "";
+    const at = t.createdAt ? new Date(t.createdAt) : null;
+    if (!at || isNaN(at.getTime()) || dayOf(at) !== t.given) return esc(t.given);
+    return `${esc(t.given)} <span class="stamptime">${pad2(at.getHours())}:${pad2(at.getMinutes())}</span>`;
+  }
+
   function taskRow(t) {
     const dash = `<span class="tag dead">—</span>`;
     const short = (t.description || "").split("\n")[0].slice(0, 90);
@@ -487,7 +522,7 @@
     const rest = openRow ? "" : `
         <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
           overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
-        <td>${t.given ? esc(t.given) : dash}</td>`;
+        <td class="stampcell">${t.given ? createStamp(t) : dash}</td>`;
     return `<tr class="taskrow${t.status === "Done" ? " done" : ""}${openRow === t.id ? " open" : ""}"
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>

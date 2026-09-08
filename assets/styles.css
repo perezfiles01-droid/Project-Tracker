@@ -450,6 +450,10 @@ th.emailhead .accountpick{
 .taskpane.empty-pane{display:flex;align-items:center;justify-content:center;min-height:160px}
 .taskpane .detailtable{min-width:0}
 table.tasktable{min-width:0}
+/* The stamp is one thing - a date and the minute it was created - so it stays
+   on one line rather than breaking in half in a narrow column. */
+td.stampcell{white-space:nowrap}
+.stamptime{color:var(--dim)}
 .shot{padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;
       margin:0 6px 6px 0;line-height:0}
 .shot img{width:84px;height:84px;object-fit:cover;border-radius:7px;display:block}
