@@ -33,14 +33,18 @@ await page.waitForTimeout(400);
 const pick = page.locator("[data-pick]").first();
 if (await pick.count()) { await pick.click(); await page.waitForTimeout(500); }
 
+// The artifact tables share one search above them now, rather than carrying a
+// box each, so the sections measured here are the ones that still own a
+// search - plus that shared one, which is held to the same rule. Its position
+// under the heading is asserted in checks/check_open_highlight.mjs.
 const measured = await page.evaluate(() => {
   const out = [];
-  for (const s of document.querySelectorAll("section.linksection")) {
+  for (const s of document.querySelectorAll("section.linksection, .sectionhead")) {
     const input = s.querySelector("[data-search]");
-    const head = s.querySelector(".sectionhead");
+    const head = s.matches(".sectionhead") ? s : s.querySelector(".sectionhead");
     if (!input || !head) continue;
     const i = input.getBoundingClientRect(), h = head.getBoundingClientRect();
-    const title = s.querySelector("h3.sec");
+    const title = s.querySelector("h3.sec") || document.querySelector(".opened h2.page.sub");
     out.push({
       name: title ? title.textContent.trim().slice(0, 30) : "?",
       inputLeft: Math.round(i.left), headLeft: Math.round(h.left),

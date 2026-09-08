@@ -62,7 +62,7 @@ ok("Enter in a field does not submit the dialog",
    await page.locator("#formDialog").isVisible());
 
 // --- fault 1: a saved link must show in the Reference link column -----------
-await page.fill("#fd_ref", "https://example.test/attached-only");
+await page.fill('[data-linkrow] input[type="url"]', "https://example.test/attached-only");
 await page.click("#formDialog .actions button.primary");
 await page.waitForTimeout(400);
 

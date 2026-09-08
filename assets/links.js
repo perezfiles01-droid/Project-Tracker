@@ -314,7 +314,10 @@
 
   // Per-section state. Each search box and each account filter is its own,
   // so filtering one table never disturbs another.
-  const find = {};        // { "projects": q, "links:<proj>:<table>": q }
+  // { "projects": q, "artifacts:<project>": q }. One search for the whole Table
+  // of Artifacts rather than one per table: the tables are one collection, and
+  // a box on each meant typing the same thing four times to find one row.
+  const find = {};
   let selected = null;    // the project whose tables are open underneath
   const account = {};     // { "<proj>:<table>": chosen email }
 
@@ -370,7 +373,9 @@
     const all = rowsIn(projectName, tableName);
     const emails = [...new Set(all.map((r) => r.account).filter(Boolean))].sort();
     const chosen = account[key] || "";
-    let rows = all.filter((r) => has(r, (find[key] || "").toLowerCase()));
+    // The one search above the tables, not a box of this table's own.
+    const q = (find[`artifacts:${slug(projectName)}`] || "").toLowerCase();
+    let rows = all.filter((r) => has(r, q));
     if (chosen) rows = rows.filter((r) => r.account === chosen);
     rows = window.TrackerUI.sortRows(key, rows);
     // Pinned rows are lifted BEFORE paging, so a pinned link is on page one
@@ -421,7 +426,6 @@
         <div class="sectionhead">
           <div class="sectionleft">
             <h3 class="sec">${esc(tableName)} (${rows.length})</h3>
-            ${searchBox(key, "Search site or description…")}
           </div>
           <div class="sectiontools">
             ${window.TrackerUI.iconButton("add", "Add link", `data-addto="${esc(projectName)}|${esc(tableName)}"`)}
@@ -459,6 +463,12 @@
         <div class="opened">
           <div class="sectionhead">
             <h2 class="page sub">Table of Artifacts</h2>
+          </div>
+          <div class="sectionhead artifactsearch">
+            <div class="sectionleft">
+              ${searchBox(`artifacts:${slug(g.name)}`,
+                  "Search every table for a site or description…")}
+            </div>
           </div>
           ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
           ${listFoot("", `<button class="btn primary"

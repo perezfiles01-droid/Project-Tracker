@@ -266,7 +266,14 @@ table.linktable a.btn{display:inline-block;text-decoration:none}
 /* ---------- task table ---------- */
 table.tasktable{min-width:760px}
 table.tasktable tr.taskrow{cursor:pointer}
-table.tasktable tr.taskrow.open{background:var(--panel-2)}
+/* The open row was var(--panel-2) - the same colour as the .tasklist panel
+   behind it, so the highlight it was meant to be was invisible. It is the
+   accent now, tinted, with a bar down its leading edge: which task is open has
+   to be answerable at a glance, and colour alone is not an answer on every
+   screen. */
+table.tasktable tr.taskrow.open td{background:color-mix(in srgb, var(--accent) 16%, transparent)}
+table.tasktable tr.taskrow.open td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+table.tasktable tr.taskrow.open .taskname{font-weight:600;color:var(--text)}
 table.tasktable tr.taskrow.done td{color:var(--dim)}
 table.tasktable tr.detail td{background:var(--panel-2)}
 .taskdetail{display:flex;flex-direction:column;gap:9px;padding:4px 2px}
@@ -411,6 +418,24 @@ th.emailhead .accountpick{
 .navscroll::-webkit-scrollbar-track{background:transparent}
 .navscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .navscroll:hover::-webkit-scrollbar-thumb{background:var(--dim)}
+
+/* The one search over every artifact table needs room before the first of
+   them, the same as a section search had above its own table. */
+.artifactsearch{margin:10px 0 16px}
+
+/* A repeating link field: rows of URL + its own note, and one add button. */
+.linkrows{display:flex;flex-direction:column;gap:10px}
+.linkline{display:flex;align-items:center;gap:8px}
+.linkline input{flex:1;min-width:0}
+.linknote{margin:2px 0 2px 2px;padding-left:10px;border-left:2px solid var(--line);
+          display:flex;flex-direction:column;gap:5px}
+.linknote label{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.linkadd{display:flex;align-items:center;gap:8px}
+.linkadd .m{color:var(--dim);font-size:12px}
+.linkrow + .linkrow{border-top:1px solid var(--line);padding-top:10px}
+/* Every link on a task, in the pane: the address, and what it is for. */
+.reflist{display:flex;flex-direction:column;gap:8px}
+.refnote{display:block;color:var(--dim);font-size:12px;margin-top:3px}
 
 /* A field's label row, with its own tools on the right. */
 .fieldhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -1247,6 +1272,19 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     } else if (f.type === "select") {
       control = `<select id="${id}">${(f.options || []).map((o) =>
         `<option value="${esc(o)}"${String(o) === String(v) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    } else if (f.type === "links") {
+      // A repeating field: one row per link, each with a note of its own that
+      // stays out of the way until asked for. Rows are keyed by a counter and
+      // never renumbered - a removed row that renumbered the rest would leave
+      // every standardize button below it pointing at the wrong box.
+      const rows = (f.value || []).length ? f.value : [{ url: "", note: "" }];
+      control = `<div class="linkrows" data-linkfield="${esc(f.name)}">
+          ${rows.map((r, i) => linkRow(f, r, i)).join("")}
+          <div class="linkadd">
+            ${iconButton("add", "Add another link", `data-linkadd="${esc(f.name)}"`)}
+            <span class="m">Add another link</span>
+          </div>
+        </div>`;
     } else if (f.type === "attachments") {
       const list = (f.value || []).map(attachmentRow).join("");
       // Three parts: what is already attached, what you have just added in this
@@ -1278,6 +1316,105 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
+  }
+
+  /**
+   * One link row: the URL, a toggle for its note, and the note itself.
+   *
+   * The note starts open when there is one to read - a note saved last week
+   * that only appears after you happen to click the icon is a note you have
+   * lost. It carries the same wand as Name of task and Detailed description,
+   * which needs no new code: standardize() finds its target by id.
+   *
+   * The URL input is deliberately not capitalised. A capitalised URL is a
+   * broken URL; the note, being prose, is.
+   */
+  function linkRow(f, r = { url: "", note: "" }, key = 0) {
+    const base = `fd_${f.name}__${key}`;
+    const open = !!(r.note || "").trim();
+    return `<div class="linkrow" data-linkrow="${esc(f.name)}:${key}">
+        <div class="linkline">
+          <input id="${base}_url" type="url" value="${esc(r.url || "")}"
+                 placeholder="${esc(f.placeholder || "https://…")}" spellcheck="false">
+          ${iconButton("note", "Add a note about this link",
+              `data-noteopen="${base}" aria-expanded="${open}"`)}
+          ${iconButton("remove", "Remove this link", `data-linkdrop="${esc(f.name)}:${key}"`)}
+        </div>
+        <div class="linknote" data-notebox="${base}"${open ? "" : " hidden"}>
+          <div class="fieldhead">
+            <label for="${base}_note">What this link is</label>
+            <span class="fieldtools">
+              ${iconButton("wand", "Standardize text", `data-standardize="${base}_note"`)}
+            </span>
+          </div>
+          <textarea id="${base}_note" data-capitalize="1" rows="2"
+            placeholder="What this link is for">${esc(r.note || "")}</textarea>
+          <div class="fieldnote" data-note="${base}_note" hidden></div>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Add a row, remove a row, and show or hide a note.
+   *
+   * Bound to the dialog rather than the document, so it dies with the dialog.
+   * A row added here is wired for capitals on the spot: wireCapitals ran once
+   * when the dialog opened, and a row created afterwards would silently miss
+   * it - the third link's note behaving unlike the first two.
+   */
+  function wireLinks(box) {
+    let next = 1e6;   // beyond any key the initial render used
+    box.addEventListener("click", (e) => {
+      const addBtn = e.target.closest("[data-linkadd]");
+      if (addBtn) {
+        e.preventDefault();
+        const name = addBtn.dataset.linkadd;
+        const host = box.querySelector(`[data-linkfield="${cssEsc(name)}"]`);
+        if (!host) return;
+        const holder = document.createElement("div");
+        holder.innerHTML = linkRow({ name }, { url: "", note: "" }, next++);
+        const row = holder.firstElementChild;
+        host.insertBefore(row, host.querySelector(".linkadd"));
+        wireCapitals(row);
+        paintDrops(box);
+        const input = row.querySelector("input");
+        if (input) input.focus();
+        return;
+      }
+      const drop = e.target.closest("[data-linkdrop]");
+      if (drop) {
+        e.preventDefault();
+        const row = drop.closest("[data-linkrow]");
+        if (row) row.remove();
+        paintDrops(box);
+        return;
+      }
+      const toggle = e.target.closest("[data-noteopen]");
+      if (toggle) {
+        e.preventDefault();
+        const note = box.querySelector(`[data-notebox="${cssEsc(toggle.dataset.noteopen)}"]`);
+        if (!note) return;
+        note.hidden = !note.hidden;
+        toggle.setAttribute("aria-expanded", String(!note.hidden));
+        if (!note.hidden) {
+          const ta = note.querySelector("textarea");
+          if (ta) ta.focus();
+        }
+      }
+    });
+    paintDrops(box);
+  }
+
+  /* The last remaining row keeps no Remove button: a field emptied of every
+     row would take its own "add another" affordance down with it. */
+  function paintDrops(box) {
+    for (const host of box.querySelectorAll("[data-linkfield]")) {
+      const rows = host.querySelectorAll("[data-linkrow]");
+      for (const r of rows) {
+        const b = r.querySelector("[data-linkdrop]");
+        if (b) b.hidden = rows.length < 2;
+      }
+    }
   }
 
   /**
@@ -1467,6 +1604,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       </div>`;
     box.hidden = false;
     wireCapitals(box);
+    wireLinks(box);
     const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
@@ -1491,6 +1629,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
               // Staged, not el.files: a file input only remembers the last pick.
               added: [...(atts.staged.get(f.name) || [])],
             };
+          } else if (f.type === "links") {
+            // Read the rows as rendered, not the spec they started from: rows
+            // are added and removed while the dialog is open. A row with no
+            // URL is not a link, so it is dropped along with whatever note was
+            // typed against it.
+            out[f.name] = [...box.querySelectorAll(`[data-linkfield="${cssEsc(f.name)}"] [data-linkrow]`)]
+              .map((row) => ({
+                url: (row.querySelector('input[type="url"]') || {}).value || "",
+                note: (row.querySelector("textarea") || {}).value || "",
+              }))
+              .map((r) => ({ url: r.url.trim(), note: r.note.trim() }))
+              .filter((r) => r.url);
           } else {
             out[f.name] = el ? el.value.trim() : "";
           }
@@ -1712,6 +1862,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     // A drawing pin seen side on: head, shaft, point. It reads as pinned
     // when the button fills it, which is the whole point of the control.
     pin: '<path d="M9 3h6l-1 5 3.5 3.5H6.5L10 8z"/><path d="M12 11.5V21"/>',
+    // A page with two lines of writing on it: "there is something written
+    // about this", which is what the note toggle promises.
+    note: '<path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h4"/>',
     // A wand with a spark: the conventional "let the machine have a go at
     // this" mark, and distinct at 14px from the pencil that means "edit".
     wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
@@ -1969,7 +2122,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         { name: "given", label: "Task Create Date", type: "date",
           value: cur ? (cur.given || "") : today() },
         { name: "due", label: "Due Date", type: "date", value: cur ? cur.due : "" },
-        { name: "ref", label: "Reference link", value: cur ? cur.ref : "", placeholder: "https://…" },
+        // Several links, each with a note saying what it is. `ref` is still
+        // written on save - the activity log, the table and every backup
+        // already saved read it - but `refs` is where they live now.
+        { name: "refs", label: "Reference link", type: "links",
+          value: cur ? refsOf(cur) : [], placeholder: "https://…",
+          help: "The note icon beside a link opens a box for what it is." },
         // Only when editing. A new task is In progress by definition - you are
         // writing down something to do - so asking for a status at creation is
         // a field with one sensible answer. It is changed afterwards, from
@@ -2009,7 +2167,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     Object.assign(target, {
       // No "no" here: the number is the task's position, worked out at render.
       name: values.name, description: values.description, given: values.given,
-      due: values.due, ref: values.ref, status: values.status || ACTIVE,
+      // ref stays truthful as the first link: dropping it would blank the link
+      // on every activity-log entry already written from a task.
+      due: values.due, refs: values.refs,
+      ref: (values.refs && values.refs[0] && values.refs[0].url) || "",
+      status: values.status || ACTIVE,
       assignee: values.assignee, project: values.project,
     });
 
@@ -2184,10 +2346,24 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const COLUMNS = ["Task No.", "Name of task", "Project", "Task Create Date"];
   let openRow = null;   // the task shown in the pane
 
+  /**
+   * A task's reference links, in the shape the dialog and the pane both want.
+   *
+   * Tasks saved before this carried a single `ref` string. It is read as one
+   * link with no note rather than migrated away, so nothing has to be rewritten
+   * on disk for an old task to open correctly.
+   */
+  function refsOf(t) {
+    if (Array.isArray(t.refs) && t.refs.length) {
+      return t.refs.filter((r) => r && r.url).map((r) => ({ url: r.url, note: r.note || "" }));
+    }
+    return t.ref ? [{ url: t.ref, note: "" }] : [];
+  }
+
   /** Every link on a task, wherever it was entered. */
   function taskLinks(t) {
     const out = [];
-    if (t.ref) out.push({ url: t.ref, label: "Open ↗" });
+    for (const r of refsOf(t)) out.push({ url: r.url, label: "Open ↗" });
     for (const a of t.attachments || []) {
       if (a.kind === "link" && a.url) out.push({ url: a.url, label: "Link ↗" });
     }
@@ -2257,8 +2433,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       ["Task Create Date", t.given ? createStamp(t) : dash],
       ["Due Date", t.due
         ? `${esc(t.due)}${overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}` : dash],
-      ["Reference link", t.ref
-        ? `<a class="btn sm" href="${esc(t.ref)}" target="_blank" rel="noopener">Open ↗</a>` : dash],
+      // Every link, each with its note under it. A list of identical Open
+      // buttons says nothing about which is which; the note is the label.
+      ["Reference link", refsOf(t).length
+        ? `<div class="reflist">${refsOf(t).map((r) => `<div>
+             <a class="btn sm" href="${esc(r.url)}" target="_blank" rel="noopener">Open ↗</a>
+             <span class="m">${esc(r.url)}</span>
+             ${r.note ? `<span class="refnote">${esc(r.note)}</span>` : ""}
+           </div>`).join("")}</div>`
+        : dash],
       // The status is set here rather than by a separate tick. A tick could
       // only ever say "Done"; the four statuses a task can be in all belong in
       // one control, in the row that names them. Any status already saved that
@@ -3089,7 +3272,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   // Per-section state. Each search box and each account filter is its own,
   // so filtering one table never disturbs another.
-  const find = {};        // { "projects": q, "links:<proj>:<table>": q }
+  // { "projects": q, "artifacts:<project>": q }. One search for the whole Table
+  // of Artifacts rather than one per table: the tables are one collection, and
+  // a box on each meant typing the same thing four times to find one row.
+  const find = {};
   let selected = null;    // the project whose tables are open underneath
   const account = {};     // { "<proj>:<table>": chosen email }
 
@@ -3145,7 +3331,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const all = rowsIn(projectName, tableName);
     const emails = [...new Set(all.map((r) => r.account).filter(Boolean))].sort();
     const chosen = account[key] || "";
-    let rows = all.filter((r) => has(r, (find[key] || "").toLowerCase()));
+    // The one search above the tables, not a box of this table's own.
+    const q = (find[`artifacts:${slug(projectName)}`] || "").toLowerCase();
+    let rows = all.filter((r) => has(r, q));
     if (chosen) rows = rows.filter((r) => r.account === chosen);
     rows = window.TrackerUI.sortRows(key, rows);
     // Pinned rows are lifted BEFORE paging, so a pinned link is on page one
@@ -3196,7 +3384,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <div class="sectionhead">
           <div class="sectionleft">
             <h3 class="sec">${esc(tableName)} (${rows.length})</h3>
-            ${searchBox(key, "Search site or description…")}
           </div>
           <div class="sectiontools">
             ${window.TrackerUI.iconButton("add", "Add link", `data-addto="${esc(projectName)}|${esc(tableName)}"`)}
@@ -3234,6 +3421,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <div class="opened">
           <div class="sectionhead">
             <h2 class="page sub">Table of Artifacts</h2>
+          </div>
+          <div class="sectionhead artifactsearch">
+            <div class="sectionleft">
+              ${searchBox(`artifacts:${slug(g.name)}`,
+                  "Search every table for a site or description…")}
+            </div>
           </div>
           ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
           ${listFoot("", `<button class="btn primary"
