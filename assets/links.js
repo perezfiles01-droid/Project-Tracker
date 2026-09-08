@@ -392,7 +392,8 @@
 
     const body = slice.map((r) => `<tr>
         <td class="wrap"><span class="sitename">${esc(r.name)}</span></td>
-        <td class="wrap">${r.description ? esc(r.description) : dash}</td>
+        <td class="wrap">${r.description
+          ? esc(window.TrackerUI.htmlText(r.description)) : dash}</td>
         <td class="acct">${r.account
           ? `<button class="acctcell" data-copy="${esc(r.account)}"
                      title="Click to copy ${esc(r.account)}">${esc(r.account)}</button>`
@@ -504,7 +505,7 @@
   /* ---------- wiring ---------- */
   const fields = (r, projectName, tableName) => [
     { name: "name", label: "Site", value: r ? r.name : "", placeholder: "What this link is" },
-    { name: "description", label: "Description", type: "textarea", rows: 3,
+    { name: "description", label: "Description", type: "rich", rows: 3,
       value: r ? r.description : "", placeholder: "What it is for, in your own words" },
     { name: "account", label: "Email Access", value: r ? r.account : "",
       placeholder: "Which account opens it" },
@@ -604,7 +605,7 @@
       title: "Edit project", submitLabel: "Save changes",
       fields: [
         { name: "name", label: "Project name", value: g.name },
-        { name: "description", label: "Description", type: "textarea", rows: 2,
+        { name: "description", label: "Description", type: "rich", rows: 2,
           value: g.description || "",
           placeholder: "One line about what this project is",
           help: "Shown under the project's name in the list." },

@@ -12,6 +12,99 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  /* ---------- the sanitizer ----------
+     Nothing in this app may store or render markup that has not been through
+     here. It is written first, and applied on save AND again on render,
+     because content written by an older version or edited in storage by hand
+     must not be able to bypass it.
+
+     An ALLOWLIST, never a blocklist. A blocklist is a list of the attacks
+     somebody thought of; anything not on this list is unwrapped to its text,
+     so a tag invented after this was written is inert by default rather than
+     dangerous by default.
+
+     Parsed with DOMParser into an inert document, never assigned to a live
+     node's innerHTML. That distinction is the whole point: assigning
+     "<img src=x onerror=alert(1)>" to a live element fires the handler during
+     parsing, before any sanitizer gets a chance to look at it. */
+  const ALLOWED = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "STRIKE",
+                           "UL", "OL", "LI",
+                           "TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
+  /* Every attribute is dropped except these two, on cells only, and only when
+     they are small positive integers. colspan="1e9" is a denial of service
+     rendered as a table. */
+  const SPAN_ATTRS = new Set(["colspan", "rowspan"]);
+  const spanOk = (v) => /^[0-9]{1,2}$/.test(String(v)) && Number(v) >= 1;
+
+  /**
+   * Arbitrary HTML in, only what this app permits out.
+   *
+   * A disallowed element is UNWRAPPED rather than deleted - its text survives
+   * and only the tag goes - except for the few whose content is not prose and
+   * would be dumped into the page as visible garbage if kept.
+   */
+  const DROP_WHOLE = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "IFRAME",
+                              "OBJECT", "EMBED", "SVG", "MATH", "HEAD", "LINK", "META"]);
+
+  function cleanHtml(dirty) {
+    const src = String(dirty ?? "");
+    if (!src) return "";
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString("<body>" + src + "</body>", "text/html");
+    } catch { return ""; }
+    if (!doc || !doc.body) return "";
+
+    const walk = (node) => {
+      // A static list: the loop below moves and removes children, and a live
+      // childNodes collection would skip half of them as it went.
+      for (const child of [...node.childNodes]) {
+        if (child.nodeType === 3) continue;                 // text, always kept
+        if (child.nodeType !== 1) { child.remove(); continue; }  // comments, PIs
+        const tag = child.tagName.toUpperCase();
+        if (DROP_WHOLE.has(tag)) { child.remove(); continue; }
+        walk(child);
+        if (!ALLOWED.has(tag)) {
+          // Unwrap: keep what the person wrote, lose the tag around it.
+          const parent = child.parentNode;
+          while (child.firstChild) parent.insertBefore(child.firstChild, child);
+          child.remove();
+          continue;
+        }
+        for (const attr of [...child.attributes]) {
+          const name = attr.name.toLowerCase();
+          const keep = SPAN_ATTRS.has(name) && (tag === "TD" || tag === "TH") &&
+                       spanOk(attr.value);
+          if (!keep) child.removeAttribute(attr.name);
+        }
+      }
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  }
+
+  /** The words in some markup, for searching and for narrow table columns. */
+  function htmlText(html) {
+    const src = String(html ?? "");
+    if (!src) return "";
+    if (!/[<&]/.test(src)) return src;          // already plain, nothing to parse
+    try {
+      const doc = new DOMParser().parseFromString("<body>" + src + "</body>", "text/html");
+      // A separator between block elements, or textContent runs adjacent cells
+      // together: a two-column row came back as "ItemDescription", which reads
+      // as one word in a flat column and lets a search for "itemdescription"
+      // match a table that contains no such phrase.
+      for (const el of doc.body.querySelectorAll("td,th,li,p,br,tr")) {
+        el.insertAdjacentText("beforebegin", " ");
+      }
+      return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+    } catch { return src; }
+  }
+
+  /** Does this value carry markup, or is it the plain text an older save left? */
+  const isHtml = (v) => /<(p|br|b|strong|i|em|u|s|strike|ul|ol|li|table|tr|td|th)\b/i
+    .test(String(v ?? ""));
+
   let host = null;
   const ensureHost = () => {
     if (!host) {
@@ -63,6 +156,19 @@
             <span class="m">Add another link</span>
           </div>
         </div>`;
+    } else if (f.type === "rich") {
+      // contenteditable, not a textarea: a textarea holds characters, and what
+      // this field holds is a small document. Rendered through cleanHtml even
+      // on the way IN, because the value may have been written by an older
+      // version or edited in storage by hand.
+      control = `<div class="richfield">
+          ${richToolbar(id)}
+          <div class="richbox" id="${id}" contenteditable="true" spellcheck="true"
+               role="textbox" aria-multiline="true" aria-label="${esc(f.label)}"
+               data-rich="1"${cap} data-placeholder="${esc(f.placeholder || "")}"
+               style="min-height:${(f.rows || 4) * 22}px">${
+            isHtml(v) ? cleanHtml(v) : esc(v).replace(/\n/g, "<br>")}</div>
+        </div>`;
     } else if (f.type === "attachments") {
       const list = (f.value || []).map(attachmentRow).join("");
       // Three parts: what is already attached, what you have just added in this
@@ -94,6 +200,301 @@
         <div class="fieldnote" data-note="${id}" hidden></div>
         ${f.help ? `<small>${esc(f.help)}</small>` : ""}
       </div>`;
+  }
+
+  /* ---------- the rich text toolbar ----------
+     execCommand is deprecated and has no replacement with comparable support
+     and no build step. This app inlines itself into one file that opens by
+     double-clicking with no server, so an editor library from a CDN would be
+     a blank field the moment the file is opened offline. Hand-rolled it is,
+     and the deprecation is stated in the brief rather than hidden here. */
+  const RICH_COMMANDS = [
+    ["bold", "B", "Bold", "b"],
+    ["italic", "I", "Italic", "i"],
+    ["underline", "U", "Underline", "u"],
+    ["strikeThrough", "S", "Strikethrough", ""],
+    ["insertUnorderedList", "\u2022", "Bulleted list", ""],
+    ["insertOrderedList", "1.", "Numbered list", ""],
+  ];
+
+  const TABLE_OPS = [
+    ["rowAbove", "\u2912", "Insert row above"],
+    ["rowBelow", "\u2913", "Insert row below"],
+    ["colLeft", "\u21e4", "Insert column left"],
+    ["colRight", "\u21e5", "Insert column right"],
+    ["delRow", "\u2296R", "Delete row"],
+    ["delCol", "\u2296C", "Delete column"],
+    ["merge", "\u29c9", "Merge selected cells"],
+    ["split", "\u2ae8", "Split cell"],
+    ["delTable", "\u2327", "Delete table"],
+  ];
+
+  /* ---------- table operations ----------
+     execCommand has nothing for any of this, so the grid is walked by hand.
+
+     The invariant every one of these must preserve: every row has the same
+     total column count once colspan is counted. Insert a cell at an index
+     without accounting for a merged cell earlier in the row and the table
+     silently goes crooked - the guard asserts the invariant after each
+     operation rather than eyeballing the markup. */
+
+  /**
+   * The cell the selection is in.
+   *
+   * Three nodes are tried, not one. A caret sitting in text gives a
+   * startContainer inside the cell, but a selection that spans whole cells -
+   * which is what selecting a row produces, and what a merge is made of - has
+   * its startContainer on the <tr>, with no cell above it at all. Reading only
+   * that node made the table tools vanish at exactly the moment you were
+   * trying to merge.
+   */
+  function cellAt(box) {
+    const sel = box.ownerDocument.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    const up = (n) => {
+      if (!n) return null;
+      if (n.nodeType === 3) n = n.parentNode;
+      return n && n.closest ? n.closest("td,th") : null;
+    };
+    // The row case: a range starting on a <tr> points at its cells by offset.
+    const fromOffset = () => {
+      let n = range.startContainer;
+      if (n && n.nodeType === 1 && /^(TR|TABLE|TBODY|THEAD)$/.test(n.tagName)) {
+        const kid = n.childNodes[range.startOffset] || n.firstChild;
+        return up(kid) || (kid && kid.querySelector ? kid.querySelector("td,th") : null);
+      }
+      return null;
+    };
+    const cell = up(range.startContainer) || up(sel.anchorNode) ||
+                 fromOffset() || up(range.commonAncestorContainer);
+    return cell && box.contains(cell) ? cell : null;
+  }
+
+  /**
+   * The table as a grid of cells, one entry per occupied position.
+   *
+   * A merged cell appears at every position it spans, so "the cell at column
+   * 3" is answerable without counting colspans by hand at each call site -
+   * which is exactly where off-by-ones in this kind of code live.
+   */
+  function gridOf(table) {
+    const rows = [...table.rows];
+    const grid = rows.map(() => []);
+    rows.forEach((tr, r) => {
+      let c = 0;
+      for (const cell of tr.cells) {
+        while (grid[r][c]) c++;                       // skip spots taken from above
+        const cs = Math.max(1, cell.colSpan || 1);
+        const rs = Math.max(1, cell.rowSpan || 1);
+        for (let dr = 0; dr < rs; dr++) {
+          for (let dc = 0; dc < cs; dc++) {
+            if (grid[r + dr]) grid[r + dr][c + dc] = cell;
+          }
+        }
+        c += cs;
+      }
+    });
+    return grid;
+  }
+
+  const newCell = (doc, tag = "td") => {
+    const el = doc.createElement(tag);
+    el.innerHTML = "<br>";      // an empty cell you cannot click into is not a cell
+    return el;
+  };
+
+  /** Where in the grid a given cell starts. */
+  function posOf(grid, cell) {
+    for (let r = 0; r < grid.length; r++) {
+      for (let c = 0; c < grid[r].length; c++) {
+        if (grid[r][c] === cell) return { r, c };
+      }
+    }
+    return null;
+  }
+
+  /** Every cell the current selection touches, and whether it is a rectangle. */
+  function selectedCells(box, table) {
+    const sel = box.ownerDocument.getSelection();
+    const cells = [...table.querySelectorAll("td,th")].filter((cell) => {
+      if (!sel || !sel.rangeCount) return false;
+      const range = sel.getRangeAt(0);
+      return range.intersectsNode ? range.intersectsNode(cell) : false;
+    });
+    return cells.length ? cells : [];
+  }
+
+  function tableOp(box, op) {
+    const cell = cellAt(box);
+    if (!cell) return "Put the caret inside a table first.";
+    const table = cell.closest("table");
+    const doc = box.ownerDocument;
+    const grid = gridOf(table);
+    const at = posOf(grid, cell);
+    if (!at) return "";
+
+    if (op === "delTable") { table.remove(); return ""; }
+
+    if (op === "rowAbove" || op === "rowBelow") {
+      const width = grid[0] ? grid[0].length : 1;
+      const tr = doc.createElement("tr");
+      for (let i = 0; i < width; i++) tr.appendChild(newCell(doc));
+      const ref = cell.parentNode;
+      // Below a merged cell means below every row it spans, not the next line.
+      const span = Math.max(1, cell.rowSpan || 1);
+      const target = op === "rowAbove" ? ref : table.rows[at.r + span] || null;
+      ref.parentNode.insertBefore(tr, op === "rowAbove" ? ref : target);
+      return "";
+    }
+
+    if (op === "colLeft" || op === "colRight") {
+      const span = Math.max(1, cell.colSpan || 1);
+      const index = op === "colLeft" ? at.c : at.c + span;
+      const seen = new Set();
+      for (let r = 0; r < grid.length; r++) {
+        const occupant = grid[r][index];
+        if (occupant && grid[r][index - 1] === occupant) {
+          // The new column falls INSIDE a merged cell, so that cell widens
+          // rather than a new one being inserted beside it.
+          if (!seen.has(occupant)) { occupant.colSpan = (occupant.colSpan || 1) + 1; seen.add(occupant); }
+          continue;
+        }
+        const tr = table.rows[r];
+        if (!tr) continue;
+        const before = occupant && occupant.parentNode === tr ? occupant : null;
+        tr.insertBefore(newCell(doc, tr.parentNode.tagName === "THEAD" ? "th" : "td"), before);
+      }
+      return "";
+    }
+
+    if (op === "delRow") {
+      if (table.rows.length <= 1) { table.remove(); return ""; }
+      const tr = cell.parentNode;
+      for (const c of [...tr.cells]) {
+        if ((c.rowSpan || 1) > 1) c.rowSpan = c.rowSpan - 1;   // keep the grid square
+      }
+      tr.remove();
+      return "";
+    }
+
+    if (op === "delCol") {
+      const width = grid[0] ? grid[0].length : 0;
+      if (width <= 1) { table.remove(); return ""; }
+      const dropped = new Set();
+      for (let r = 0; r < grid.length; r++) {
+        const occupant = grid[r][at.c];
+        if (!occupant || dropped.has(occupant)) continue;
+        if ((occupant.colSpan || 1) > 1) occupant.colSpan = occupant.colSpan - 1;
+        else occupant.remove();
+        dropped.add(occupant);
+      }
+      return "";
+    }
+
+    if (op === "split") {
+      const cs = Math.max(1, cell.colSpan || 1), rs = Math.max(1, cell.rowSpan || 1);
+      if (cs === 1 && rs === 1) return "That cell is not merged.";
+      cell.colSpan = 1; cell.rowSpan = 1;
+      for (let dr = 0; dr < rs; dr++) {
+        const tr = table.rows[at.r + dr];
+        if (!tr) continue;
+        for (let dc = 0; dc < cs; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const g = gridOf(table);
+          const after = (g[at.r + dr] || [])[at.c + dc - 1] || null;
+          tr.insertBefore(newCell(doc), after && after.parentNode === tr ? after.nextSibling : null);
+        }
+      }
+      return "";
+    }
+
+    if (op === "merge") {
+      const cells = selectedCells(box, table);
+      if (cells.length < 2) return "Select the cells to merge first.";
+      const g = gridOf(table);
+      const spots = cells.map((c) => posOf(g, c)).filter(Boolean);
+      const r0 = Math.min(...spots.map((s) => s.r)), r1 = Math.max(...spots.map((s, i) =>
+        s.r + Math.max(1, cells[i].rowSpan || 1) - 1));
+      const c0 = Math.min(...spots.map((s) => s.c)), c1 = Math.max(...spots.map((s, i) =>
+        s.c + Math.max(1, cells[i].colSpan || 1) - 1));
+      // A rectangle, or nothing. Merging an L shape cannot produce a valid
+      // table, and quietly merging its bounding box would swallow cells the
+      // person never selected.
+      const inside = new Set();
+      for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) if (g[r] && g[r][c]) inside.add(g[r][c]);
+      }
+      if (inside.size !== cells.length) {
+        return "Select a rectangle of cells to merge.";
+      }
+      const keep = g[r0][c0];
+      const parts = [];
+      for (const c of inside) {
+        if (c === keep) continue;
+        const t = c.innerHTML.replace(/<br\s*\/?>/gi, "").trim();
+        if (t) parts.push(t);            // nothing typed is ever silently lost
+        c.remove();
+      }
+      if (parts.length) keep.innerHTML = [keep.innerHTML, ...parts].join(" ");
+      keep.colSpan = c1 - c0 + 1;
+      keep.rowSpan = r1 - r0 + 1;
+      return "";
+    }
+    return "";
+  }
+
+  /** The n x m grid picker, the shape Word and Outlook both use. */
+  function pickerGrid(id, rows = 8, cols = 8) {
+    // Built as ONE balanced template rather than a string accumulated across
+    // several. check_views reads these files for markup that opens more tags
+    // than it closes, and a closing tag added by a later `+` reads to it - and
+    // to a person skimming - as a div that was never closed.
+    const cells = [];
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        cells.push(`<span class="pickcell" data-pick="${id}:${r}:${c}"></span>`);
+      }
+    }
+    return `<div class="pickhead" data-picklabel="${id}">Insert table</div>
+      <div class="pickgrid">${cells.join("")}</div>`;
+  }
+
+  function insertTable(box, rows, cols) {
+    const doc = box.ownerDocument;
+    let html = "<table><thead><tr>";
+    for (let c = 0; c < cols; c++) html += "<th><br></th>";
+    html += "</tr></thead><tbody>";
+    for (let r = 1; r < rows; r++) {
+      html += "<tr>";
+      for (let c = 0; c < cols; c++) html += "<td><br></td>";
+      html += "</tr>";
+    }
+    html += "</tbody></table><p><br></p>";
+    box.focus();
+    doc.execCommand("insertHTML", false, html);
+  }
+
+  function richToolbar(id) {
+    const btn = ([cmd, face, label]) =>
+      `<button type="button" class="richbtn" data-cmd="${cmd}" data-for="${id}"
+               title="${esc(label)}" aria-label="${esc(label)}" aria-pressed="false"
+               tabindex="-1">${face}</button>`;
+    return `<div class="richbar" data-richbar="${id}">
+        ${RICH_COMMANDS.slice(0, 4).map(btn).join("")}
+        <span class="richsep"></span>
+        ${RICH_COMMANDS.slice(4).map(btn).join("")}
+        <span class="richsep"></span>
+        <button type="button" class="richbtn" data-tableopen="${id}"
+                title="Insert table" aria-label="Insert table" tabindex="-1">\u25a6</button>
+        <span class="tabletools" data-tabletools="${id}" hidden>
+          ${TABLE_OPS.map(([op, face, label]) =>
+            `<button type="button" class="richbtn" data-tableop="${op}" data-for="${id}"
+                     title="${esc(label)}" aria-label="${esc(label)}"
+                     tabindex="-1">${face}</button>`).join("")}
+        </span>
+      </div>
+      <div class="tablepicker" data-picker="${id}" hidden></div>`;
   }
 
   /**
@@ -326,6 +727,128 @@
   const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
 
   /**
+   * Everything a rich field needs, bound to the dialog rather than the document
+   * so it dies with it.
+   */
+  function wireRich(box) {
+    const boxes = [...box.querySelectorAll("[data-rich]")];
+    if (!boxes.length) return;
+
+    const say = (id, msg, kind = "warn") => setNote(id, msg ? esc(msg) : "", msg ? kind : "");
+
+    /** Light the buttons that apply where the caret is, and offer table tools. */
+    function paintState() {
+      for (const el of boxes) {
+        const bar = box.querySelector(`[data-richbar="${cssEsc(el.id)}"]`);
+        if (!bar) continue;
+        const active = el.contains(el.ownerDocument.activeElement) ||
+                       el === el.ownerDocument.activeElement;
+        for (const b of bar.querySelectorAll("[data-cmd]")) {
+          let on = false;
+          try { on = active && document.queryCommandState(b.dataset.cmd); } catch { on = false; }
+          b.setAttribute("aria-pressed", String(!!on));
+          b.classList.toggle("on", !!on);
+        }
+        const tools = bar.querySelector(`[data-tabletools="${cssEsc(el.id)}"]`);
+        if (tools) tools.hidden = !(active && cellAt(el));
+      }
+    }
+    box.addEventListener("keyup", paintState);
+    box.addEventListener("mouseup", paintState);
+    document.addEventListener("selectionchange", paintState);
+
+    /* A paste is sanitized BEFORE it reaches the document, never after.
+       Letting the browser insert Word's markup and cleaning up afterwards
+       means the dangerous markup is briefly live in the page - which is
+       exactly when an onerror handler fires. */
+    for (const el of boxes) {
+      el.addEventListener("paste", (e) => {
+        const cd = e.clipboardData;
+        if (!cd) return;
+        const html = cd.getData("text/html");
+        const plain = cd.getData("text/plain");
+        e.preventDefault();
+        const safe = html ? cleanHtml(html)
+                          : esc(plain).replace(/\n/g, "<br>");
+        el.ownerDocument.execCommand("insertHTML", false, safe);
+        paintState();
+      });
+      // Enter inside a table cell must not split the table into two.
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey && cellAt(el)) {
+          e.preventDefault();
+          el.ownerDocument.execCommand("insertLineBreak");
+        }
+      });
+    }
+
+    box.addEventListener("mousedown", (e) => {
+      // Keep the caret where it is: focusing a toolbar button would collapse
+      // the selection the command is about to act on.
+      if (e.target.closest(".richbtn, .pickcell")) e.preventDefault();
+    });
+
+    box.addEventListener("click", (e) => {
+      const cmd = e.target.closest("[data-cmd]");
+      if (cmd) {
+        e.preventDefault();
+        const el = box.querySelector("#" + cssEsc(cmd.dataset.for));
+        if (!el) return;
+        el.focus();
+        try { el.ownerDocument.execCommand(cmd.dataset.cmd, false, null); } catch { /* ignore */ }
+        paintState();
+        return;
+      }
+      const open = e.target.closest("[data-tableopen]");
+      if (open) {
+        e.preventDefault();
+        const id = open.dataset.tableopen;
+        const picker = box.querySelector(`[data-picker="${cssEsc(id)}"]`);
+        if (!picker) return;
+        if (picker.hidden) picker.innerHTML = pickerGrid(id);
+        picker.hidden = !picker.hidden;
+        return;
+      }
+      const pick = e.target.closest("[data-pick]");
+      if (pick) {
+        e.preventDefault();
+        const [id, r, c] = pick.dataset.pick.split(":");
+        const el = box.querySelector("#" + cssEsc(id));
+        const picker = box.querySelector(`[data-picker="${cssEsc(id)}"]`);
+        if (el) insertTable(el, Number(r), Number(c));
+        if (picker) picker.hidden = true;
+        paintState();
+        return;
+      }
+      const op = e.target.closest("[data-tableop]");
+      if (op) {
+        e.preventDefault();
+        const el = box.querySelector("#" + cssEsc(op.dataset.for));
+        if (!el) return;
+        el.focus();
+        const problem = tableOp(el, op.dataset.tableop);
+        say(el.id, problem);
+        paintState();
+      }
+    });
+
+    // Hovering the picker shows the size it would insert, the way Word does.
+    box.addEventListener("mouseover", (e) => {
+      const cell = e.target.closest("[data-pick]");
+      if (!cell) return;
+      const [id, r, c] = cell.dataset.pick.split(":");
+      const picker = box.querySelector(`[data-picker="${cssEsc(id)}"]`);
+      const label = picker && picker.querySelector("[data-picklabel]");
+      if (label) label.textContent = `Insert ${r}x${c} table`;
+      for (const s of picker.querySelectorAll("[data-pick]")) {
+        const [, sr, sc] = s.dataset.pick.split(":");
+        s.classList.toggle("lit", Number(sr) <= Number(r) && Number(sc) <= Number(c));
+      }
+    });
+    paintState();
+  }
+
+  /**
    * Upper-case the first letter of a marked field, as it is typed or pasted.
    *
    * Only the first character, and only when it is a lower-case letter: a name
@@ -340,6 +863,7 @@
   function wireCapitals(box) {
     for (const el of box.querySelectorAll("[data-capitalize]")) {
       el.addEventListener("input", () => {
+        if (el.dataset.rich) return capitaliseRich(el);
         const v = el.value;
         if (!v) return;
         const up = v[0].toUpperCase();
@@ -348,6 +872,44 @@
         el.value = up + v.slice(1);
         try { el.setSelectionRange(at, to); } catch { /* a date input has no range */ }
       });
+    }
+  }
+
+  /**
+   * The same rule inside a rich field: only the first character, only when it
+   * is a lower-case letter.
+   *
+   * Dropping this when the description became a rich field would have quietly
+   * removed a behaviour that was already there - the guard caught exactly that
+   * and it is restored rather than explained away.
+   *
+   * The caret is put back by offset within the same text node, which is safe
+   * because only index 0 changes and the length is unaltered. Anything more
+   * ambitious would fight the browser for control of the selection.
+   */
+  function capitaliseRich(el) {
+    const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && !node.nodeValue.trim()) node = walker.nextNode();
+    if (!node) return;
+    const v = node.nodeValue;
+    const i = v.search(/\S/);
+    if (i < 0) return;
+    const up = v[i].toUpperCase();
+    if (up === v[i]) return;
+    const sel = el.ownerDocument.getSelection();
+    const keep = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    const sameNode = keep && keep.startContainer === node;
+    const at = sameNode ? keep.startOffset : -1;
+    node.nodeValue = v.slice(0, i) + up + v.slice(i + 1);
+    if (sameNode) {
+      try {
+        const r = el.ownerDocument.createRange();
+        r.setStart(node, Math.min(at, node.nodeValue.length));
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } catch { /* the caret moved elsewhere; leave it */ }
     }
   }
 
@@ -383,6 +945,7 @@
     box.hidden = false;
     wireCapitals(box);
     wireLinks(box);
+    wireRich(box);
     const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
@@ -419,6 +982,13 @@
               }))
               .map((r) => ({ url: r.url.trim(), note: r.note.trim() }))
               .filter((r) => r.url);
+          } else if (f.type === "rich") {
+            // innerHTML, not value - a contenteditable has no value, and a
+            // field read with .value would save empty every time. Sanitized on
+            // the way out as well as on the way in.
+            const html = el ? cleanHtml(el.innerHTML) : "";
+            // A document holding nothing but an empty paragraph is empty.
+            out[f.name] = htmlText(html) || /<(table|img)/i.test(html) ? html : "";
           } else {
             out[f.name] = el ? el.value.trim() : "";
           }
@@ -432,6 +1002,7 @@
         // task could be created with its link fields empty. Enter now moves to
         // the next field; Ctrl/Cmd+Enter or the button saves.
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); close(collect()); return; }
+        if (e.key === "Enter" && e.target.closest && e.target.closest("[data-rich]")) return;
         if (e.key === "Enter" && e.target.tagName === "INPUT" && e.target.type !== "file") {
           e.preventDefault();
           const inputs = [...box.querySelectorAll("input, textarea, select")]
@@ -738,11 +1309,14 @@
    * The toggle is rendered hidden and revealed by paintClamps only where the
    * text really is too tall, so nothing here has to guess.
    */
-  function clampBlock({ key, text, lines = CLAMP_LINES }) {
+  function clampBlock({ key, text, lines = CLAMP_LINES, html = false }) {
     const open = expandedClamps.has(key);
+    // Sanitized again here, not only on save: a value written by an older
+    // version, or edited in storage by hand, must not reach the page unfiltered.
+    const body = html && isHtml(text) ? cleanHtml(text) : esc(text);
     return `<div class="clamp${open ? " open" : ""}" data-clamp="${esc(key)}"
                  style="--clamp-lines:${Number(lines) || CLAMP_LINES}">
-        <div class="clamptext">${esc(text)}</div>
+        <div class="clamptext${html ? " rich" : ""}">${body}</div>
         <button type="button" class="linkish clamptoggle" data-clamptoggle="${esc(key)}"
                 aria-expanded="${open}" hidden>${open ? "Show less" : "Show more"}</button>
       </div>`;
@@ -819,7 +1393,8 @@
     const id = btn.dataset.standardize;
     const field = document.getElementById(id);
     if (!field) return;
-    const text = field.value.trim();
+    const rich = field.dataset && field.dataset.rich;
+    const text = (rich ? field.innerText : field.value).trim();
     if (!text) return setNote(id, "Write something first.", "warn");
     if (!window.TrackerAI) return setNote(id, "The text helper is not loaded.", "warn");
 
@@ -831,8 +1406,11 @@
         kind: field.tagName === "TEXTAREA" ? "description" : "title",
       }));
       if (!improved) throw new Error("Nothing came back.");
-      originals.set(id, text);            // only on success: nothing to undo otherwise
-      field.value = improved;
+      // The original is kept as it really is - the markup for a rich field, so
+      // Undo restores the formatting and not a flattened copy of it.
+      originals.set(id, rich ? field.innerHTML : text);
+      if (rich) field.innerHTML = esc(improved).replace(/\n/g, "<br>");
+      else field.value = improved;
       setNote(id, `Standardized. <button type="button" class="linkish"
                      data-undo="${id}">Undo</button>`, "ok");
     } catch (err) {
@@ -852,12 +1430,15 @@
       e.preventDefault();
       const id = u.dataset.undo;
       const field = document.getElementById(id);
-      if (field && originals.has(id)) field.value = originals.get(id);
+      if (field && originals.has(id)) {
+        if (field.dataset && field.dataset.rich) field.innerHTML = originals.get(id);
+        else field.value = originals.get(id);
+      }
       originals.delete(id);
       return setNote(id, "");
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
+  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();

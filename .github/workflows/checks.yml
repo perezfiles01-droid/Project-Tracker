@@ -61,6 +61,10 @@ jobs:
         run: node checks/check_search_empty.mjs
       - name: A completed task is the same task, on whichever page lists it
         run: node checks/check_daily_pane.mjs
+      # The sanitizer runs before the editor: a hole here is script execution
+      # in the user's own tracker, from content pasted out of Word.
+      - name: Rich text is sanitized, formats, and keeps its tables square
+        run: node checks/check_richtext.mjs
       - name: The task dialog offers the projects the page lists
         run: node checks/check_task_project.mjs
       - name: Task numbers count 1..n and cannot be typed

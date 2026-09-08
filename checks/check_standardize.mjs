@@ -155,10 +155,19 @@ for (const p of providers) {
    they read it back rather than assuming it: comparing against the literal
    would fail on a first byte the app changes on purpose. */
 const typed = "the report is not yet done i need to finish it and send to the team";
-const inField = () => page.inputValue("#fd_description");
+/* The description is a rich field now: read the text it holds, and set it by
+   typing into it. What is asserted is unchanged - the wand still rewrites the
+   field, a failure still leaves it alone, and Undo still restores it exactly. */
+const inField = () => page.$eval("#fd_description", (el) => el.innerText.trim());
+const setField = (text) => page.evaluate((t) => {
+  const el = document.querySelector("#fd_description");
+  el.focus();
+  el.textContent = t;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}, text);
 /** Fill the field and return what it actually ended up holding. */
 async function typeIn(text = typed) {
-  await page.fill("#fd_description", text);
+  await setField(text);
   return inField();
 }
 
@@ -196,7 +205,7 @@ for (const p of providers) {
   ok(`${p.id}: it sends the typed text`, body.includes(before.slice(1, 30)));
   ok(`${p.id}: the instruction forbids the dashes`, /em dash/i.test(body));
   ok(`${p.id}: the reply lands in the field`,
-     (await page.inputValue("#fd_description")).startsWith("The report is not finished"));
+     (await inField()).startsWith("The report is not finished"));
 
   // Undo is the promise that matters most, so it is checked per engine.
   await page.click('[data-undo="fd_description"]');
@@ -260,10 +269,10 @@ ok("a trailing dash is dropped", dashes.trailing === "ends with one", dashes.tra
 const first = providers[0];
 await openTask({ engine: first.id });
 await stub(replyFor(first.id, "We shipped it — it works, and the 2024–2025 range is fine."));
-await page.fill("#fd_description", "we shipped it and it works");
+await setField("we shipped it and it works");
 await page.click('[data-standardize="fd_description"]');
 await page.waitForTimeout(400);
-const dashed = await page.inputValue("#fd_description");
+const dashed = await inField();
 ok("an em dash from the model never reaches the field", !dashed.includes("—"), dashed);
 ok("a numeric range survives it", dashed.includes("2024-2025"), dashed);
 
@@ -287,7 +296,7 @@ for (const [label, spec] of [
 
 /* --- with no key anywhere, it says where to get one, free --- */
 await openTask({ engine: null, key: null });
-await page.fill("#fd_description", typed);
+await setField(typed);
 await page.click('[data-standardize="fd_description"]');
 await page.waitForTimeout(300);
 const noKey = (await page.locator('[data-note="fd_description"]').textContent()).trim();

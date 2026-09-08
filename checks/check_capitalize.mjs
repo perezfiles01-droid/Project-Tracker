@@ -41,11 +41,15 @@ ok("the name capitalises its first letter as you type",
    (await page.inputValue("#fd_name")) === "Review the draft",
    await page.inputValue("#fd_name"));
 
+// The description is a rich field now, so its value is read from the text it
+// holds rather than from an .value that a contenteditable does not have. The
+// RULE being asserted is unchanged: the first letter, and only the first.
+const richText = (sel) => page.$eval(sel, (el) => el.innerText.trim());
 await page.click("#fd_description");
 await page.type("#fd_description", "needs doing before friday");
 ok("the description capitalises its first letter as you type",
-   (await page.inputValue("#fd_description")) === "Needs doing before friday",
-   await page.inputValue("#fd_description"));
+   (await richText("#fd_description")) === "Needs doing before friday",
+   await richText("#fd_description"));
 
 /* --- the rest of the text is left exactly alone --------------------------- */
 await page.fill("#fd_name", "");
