@@ -272,24 +272,29 @@ ok("the task has left the To Do List", await page.locator(".taskrow").count() ==
 
 await page.click('#nav button[data-route="daily"]');
 await page.waitForTimeout(300);
-const seeBtn = page.locator("[data-seeupdates]");
-ok("the logged row offers its updates", await seeBtn.count() === 1);
-ok("the button names how many there are",
-   /2 updates/.test(await seeBtn.getAttribute("aria-label") || ""),
-   await seeBtn.getAttribute("aria-label"));
-await seeBtn.click();
-await page.waitForTimeout(400);
-ok("it opens the same trail table",
-   await page.locator("#formDialog table.detailtable.updatetable").count() === 1);
-const dialogRows = await page.$$eval("#formDialog .updaterow .updatewhen",
+/* The trail used to be reached here through a small read-only modal of its
+   own. It is reached by opening the row now, which gives the same pane the To
+   Do List gives - the details AND the trail, editable, behind the same toggle.
+   The modal showed strictly less; this asserts the route that replaced it. */
+const logRow = page.locator("tr.taskrow[data-open]");
+ok("the logged task's row is clickable", await logRow.count() === 1);
+if (await page.locator(".taskpane .taskdetail").count() === 0) {
+  await logRow.click();
+  await page.waitForSelector(".taskpane .taskdetail");
+}
+await page.waitForTimeout(300);
+ok("it opens the full pane, not just a trail",
+   (await page.locator(".taskpane").innerText()).includes("Assignee"));
+await page.click(".taskpane [data-updates]");
+await page.waitForTimeout(300);
+ok("and the trail is the same table",
+   await page.locator(".taskpane table.detailtable.updatetable").count() === 1);
+const dialogRows = await page.$$eval(".taskpane .updaterow .updatewhen",
   (e) => e.map((x) => x.innerText.trim()));
 ok("both updates are readable from there", dialogRows.length === 2, dialogRows.join(" | "));
-ok("it is read-only: no add, edit or remove",
-   await page.locator("#formDialog [data-addupdate]").count() === 0 &&
-   await page.locator("#formDialog [data-editupdate]").count() === 0 &&
-   await page.locator("#formDialog [data-dropupdate]").count() === 0);
-await page.click('#formDialog [data-fd="cancel"]');
-await page.waitForTimeout(200);
+ok("it is the editable trail, so the history can still be kept up",
+   await page.locator(".taskpane [data-addupdate]").count() === 1 &&
+   await page.locator(".taskpane [data-editupdate]").count() === 2);
 
 /* A hand-typed log entry has no task behind it, so it offers no trail. */
 await page.click('[data-edit="act:new"]');
@@ -297,9 +302,9 @@ await page.waitForSelector("#fd_task");
 await page.fill("#fd_task", "typed by hand");
 await page.click('#formDialog [data-fd="save"]');
 await page.waitForTimeout(400);
-ok("a manual entry offers no updates button",
-   await page.locator("[data-seeupdates]").count() === 1,
-   String(await page.locator("[data-seeupdates]").count()));
+ok("a manual entry is not clickable",
+   await page.locator("tr.logrow:not(.taskrow)").count() === 1,
+   String(await page.locator("tr.logrow:not(.taskrow)").count()));
 
 /* --- the trail rides along in the backup --------------------------------- */
 const backup = await page.evaluate(() => window.TrackerStore.exportData());

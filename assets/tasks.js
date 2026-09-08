@@ -351,6 +351,17 @@
     // whose screenshots went with it is not the task you deleted. The store
     // deletes them for real once the step falls out of the undo history.
     save(list.filter((x) => x.id !== id));
+    // The task's own log entry goes with it, in this same tick so the pair is
+    // one undo step rather than two. It used to be left behind: migrate()
+    // swept the orphan on the NEXT page load, which hid it well enough while
+    // the only way to delete a task was from the To Do List. The pane puts a
+    // Remove button on the Daily activity page, so the orphan would now be
+    // left sitting in front of you, with no status and nothing behind it.
+    // Entries typed by hand are never touched, the rule migrate() already
+    // states.
+    const log = logRead();
+    const mine = log.filter((e) => e.origin === "task" && e.taskId === id);
+    if (mine.length) logWrite(log.filter((e) => !mine.includes(e)));
     window.TrackerStore.holdBlobs(
       (t.attachments || []).filter((a) => a.kind !== "link").map((a) => a.id));
     // Every update the task carried goes too, so its images are held as well.
@@ -749,22 +760,11 @@
     window.TrackerRender();
   }
 
-  /**
-   * The trail of a task that has moved to the Daily activity page.
-   *
-   * Read-only, because that page lists what a task became rather than what it
-   * is being worked on; the entries are still edited from the To Do List if
-   * the task is put back to In progress. Same renderer as the pane, so the two
-   * cannot show different things.
-   */
-  function openUpdates(taskId) {
-    const t = load().find((x) => x.id === taskId);
-    if (!t) return;
-    return window.TrackerUI.htmlDialog({
-      title: `Updates \u2014 ${t.name || t.description || "Task"}`,
-      html: updatesTable(t, { editable: false }),
-    });
-  }
+  /* The Daily activity page used to reach a task's trail through a read-only
+     modal of its own. It does not any more: the row opens the same pane the To
+     Do List opens, which carries the details AND the trail behind the same
+     toggle. The modal showed strictly less, and two ways to look at one thing
+     is how the two come to disagree. */
 
   /** How many updates a task carries, for the Daily activity page. */
   function updateCount(taskId) {
@@ -787,15 +787,19 @@
     return `${esc(t.given)} <span class="stamptime">${pad2(at.getHours())}:${pad2(at.getMinutes())}</span>`;
   }
 
-  function taskRow(t) {
+  function taskRow(t, openHere) {
     const dash = `<span class="tag dead">—</span>`;
     const short = (t.description || "").split("\n")[0].slice(0, 90);
     // Tasks created before "Name of task" existed fall back to their description.
-    const rest = openRow ? "" : `
+    // Narrowed on the SAME value the header is narrowed on. Read straight from
+    // openRow, a task opened on the Daily activity page would drop these cells
+    // while the header above them kept its four columns - a body and a head
+    // that disagree about how many columns the table has.
+    const rest = openHere ? "" : `
         <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
           overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
         <td class="stampcell">${t.given ? createStamp(t) : dash}</td>`;
-    return `<tr class="taskrow${t.status === "Done" ? " done" : ""}${openRow === t.id ? " open" : ""}"
+    return `<tr class="taskrow${t.status === "Done" ? " done" : ""}${openHere === t.id ? " open" : ""}"
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>
         <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>${rest}
@@ -839,6 +843,9 @@
     const rows = window.TrackerUI.sortRows("tasks",
       all.filter((t) => !q || JSON.stringify(t).toLowerCase().includes(q))
          .filter((t) => !picked || t.project === picked));
+    // The same scoping the log applies: a task open on the other page must not
+    // narrow this table or fill this pane. active() is what this page lists.
+    const openHere = openTask(all.map((t) => t.id));
     const late = rows.filter(overdue).length;
     const cur = window.TrackerUI.pageIndex("tasks", rows.length, ROWS_PER_PAGE);
     const slice = rows.slice(cur * ROWS_PER_PAGE, (cur + 1) * ROWS_PER_PAGE);
@@ -855,22 +862,22 @@
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
-        ? `<div class="tasksplit${openRow ? " open" : ""}">
+        ? `<div class="tasksplit${openHere ? " open" : ""}">
              <div class="tasklist">
                <div class="tablewrap"><table class="tasktable">
                  <thead><tr>
                    ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
                    ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
-                   ${openRow ? "" : `
+                   ${openHere ? "" : `
                    ${window.TrackerUI.filterHeader("tasks", "project", COLUMNS[2],
                        projects, picked, "Filter by project")}
                    ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[3])}`}
                  </tr></thead>
-                 <tbody>${slice.map(taskRow).join("")}</tbody>
+                 <tbody>${slice.map((t) => taskRow(t, openHere)).join("")}</tbody>
                </table></div>
                ${window.TrackerUI.pager("tasks", rows.length, ROWS_PER_PAGE)}
              </div>
-             ${detailPane(load().find((t) => t.id === openRow) || null)}
+             ${detailPane(load().find((t) => t.id === openHere) || null)}
            </div>`
         : `<div class="empty">No tasks yet.</div>`}`;
   }
@@ -929,8 +936,6 @@
       const [tid, uid] = rmu.dataset.dropupdate.split("|");
       return removeUpdate(tid, uid);
     }
-    const seeu = e.target.closest("[data-seeupdates]");
-    if (seeu) return openUpdates(seeu.dataset.seeupdates);
     const ed = e.target.closest('[data-edit^="task:"]');
     if (ed) {
       const id = window.TrackerUI.actionId(ed, "edit");
@@ -979,8 +984,17 @@
       ],
     });
     if (!v) return;
-    if (cur) Object.assign(cur, v);
-    else log.push({ id: "m-" + Date.now(), origin: "manual", ...v });
+    if (cur) {
+      // Stamped only when the wording actually changed. A logged task's row
+      // otherwise follows the task's own name, so opening this dialog to
+      // correct a date must not silently freeze the text as it stands - and
+      // changing the text must not be undone the next time the task is
+      // renamed. Editing it is what makes it yours.
+      if (v.task !== cur.task) v.edited = true;
+      Object.assign(cur, v);
+    } else {
+      log.push({ id: "m-" + Date.now(), origin: "manual", ...v });
+    }
     logWrite(log);
     window.TrackerRender();
   }
@@ -1002,7 +1016,55 @@
 
   migrate();
 
+  /* ---------- the pane, for whichever page is listing tasks ----------
+     Two pages list the same tasks: the To Do List holds the ones in progress,
+     Daily activity holds the ones that are Done or Blocked. Clicking a task
+     has to mean the same thing on both, so the pane is exported rather than
+     copied - one renderer, so the two cannot drift apart, and a third page
+     listing tasks would inherit it rather than hand-roll a third variant.
+
+     openRow and paneTab stay single module-level variables, and that is safe
+     precisely because a task is on exactly one page at a time: its status
+     decides which, so "which row is open" can never be ambiguous. */
+
+  /** The pane for a task id, or the empty pane when nothing is open. */
+  function taskPane(id) {
+    return detailPane((id && load().find((t) => t.id === id)) || null);
+  }
+
+  /**
+   * Which task the pane is showing, IF the asking page is listing it.
+   *
+   * The open row is remembered across a change of page, which is what lets the
+   * pane follow a task when marking it Done moves it from the To Do List to
+   * the log. Unscoped, that same memory is a bug: open a task on the To Do
+   * List, walk over to Daily activity, and that page would narrow its columns
+   * and render a pane for a task it is not listing at all. So a caller passes
+   * the ids it is showing, and gets an answer only when the open task is one
+   * of them.
+   */
+  function openTask(ids) {
+    if (!openRow) return null;
+    if (ids && !ids.includes(openRow)) return null;
+    return openRow;
+  }
+
+  /**
+   * What a row on either page calls a task.
+   *
+   * Falls back through the fields a task might actually have rather than to
+   * the word "Task": a task with no name has a description, and one with
+   * neither still has a number, so a row can never read as a placeholder
+   * while the task behind it has something to say for itself.
+   */
+  function taskLabel(t) {
+    if (!t) return "";
+    return t.name || (t.description || "").split("\n")[0].slice(0, 90) ||
+           (t.no ? "Task " + t.no : "Untitled task");
+  }
+
   window.TrackerTasks = { view, load, active, editTask, setStatus, STATUSES, COLUMNS,
-                          logAll, logEdit, logRemove, updateCount, openUpdates,
-                          updatesOf, UPDATE_IMAGES };
+                          logAll, logEdit, logRemove, updateCount,
+                          updatesOf, UPDATE_IMAGES,
+                          taskPane, openTask, taskLabel, paintPane: paint };
 })();

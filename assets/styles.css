@@ -261,16 +261,30 @@ table.linktable a.btn{display:inline-block;text-decoration:none}
 
 /* ---------- task table ---------- */
 table.tasktable{min-width:760px}
-table.tasktable tr.taskrow{cursor:pointer}
+/* Open, the log drops to two columns and the pane takes the width, so the
+   table must be free to become narrow - the six-column minimum would other-
+   wise force a horizontal scrollbar under a two-column table. */
+.tasksplit.open table[data-route="daily"]{min-width:0}
+/* Keyed on the row, not on the table it happens to sit in.
+   Two pages list tasks - the To Do List and the Daily activity log - and a
+   task row has to look and behave the same on both. Scoped to table.tasktable
+   these rules reached only the first of them, so a clickable row on the log
+   would have had no pointer, no hover and no open highlight: clickable in
+   fact and dead to look at. */
+tr.taskrow{cursor:pointer}
 /* The open row was var(--panel-2) - the same colour as the .tasklist panel
    behind it, so the highlight it was meant to be was invisible. It is the
    accent now, tinted, with a bar down its leading edge: which task is open has
    to be answerable at a glance, and colour alone is not an answer on every
    screen. */
-table.tasktable tr.taskrow.open td{background:color-mix(in srgb, var(--accent) 16%, transparent)}
-table.tasktable tr.taskrow.open td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
-table.tasktable tr.taskrow.open .taskname{font-weight:600;color:var(--text)}
-table.tasktable tr.taskrow.done td{color:var(--dim)}
+tr.taskrow.open td{background:color-mix(in srgb, var(--accent) 16%, transparent)}
+tr.taskrow.open td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+tr.taskrow.open .taskname{font-weight:600;color:var(--text)}
+tr.taskrow.done td{color:var(--dim)}
+/* An entry typed by hand has no task behind it and nothing to open, so it
+   keeps the default cursor. A row that looks clickable and does nothing is
+   worse than one that plainly is not. */
+tr.logrow:not(.taskrow){cursor:default}
 table.tasktable tr.detail td{background:var(--panel-2)}
 .taskdetail{display:flex;flex-direction:column;gap:9px;padding:4px 2px}
 .taskdetail .desc{white-space:pre-wrap;color:var(--text)}
