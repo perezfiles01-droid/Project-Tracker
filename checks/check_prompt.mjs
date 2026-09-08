@@ -77,16 +77,43 @@ for (const [id, body] of Object.entries(bodies)) {
      /nothing else/i.test(body));
 }
 
-/* The source string itself, as a second reading - a prompt assembled from
-   pieces could pass the per-engine check and still carry the sentence in a
-   branch none of them took. */
-const src = await page.evaluate(() => {
-  const m = [...document.querySelectorAll("script")].map((s) => s.textContent).join("\n");
-  return m;
-});
-ok("the sentence is not anywhere in the shipped source",
-   !/feel free to add and fill that gap/i.test(src) &&
-   !/is something lacking or a gap in the message/i.test(src));
+/* The source itself, as a second reading - a prompt assembled from pieces
+   could pass the per-engine check and still carry the sentence in a branch
+   none of them took.
+
+   Whitespace is flattened first, and that is not a detail. The first version
+   of this scan tested the raw text and passed, and it passed for the wrong
+   reason: the phrase it looked for happened to be split across a line break,
+   so the regex never matched. A prompt string wrapped the same way - which is
+   exactly how every prompt in this file IS written, as an array of short
+   lines joined with newlines - would have slipped past it silently. A check
+   that cannot fail reads exactly like protection.
+
+   Comment markers go too, so a line continuation like "\n   * lacking" cannot
+   hide a phrase either. */
+const flatten = (t) => String(t).replace(/[*\/]/g, " ").replace(/\s+/g, " ");
+const BANNED_SOURCE = [
+  /feel free to add and fill that gap/i,
+  /is something lacking or a gap in the message/i,
+  /fill that gap/i,
+];
+
+/* The machinery, tested before anything is concluded from it. A scanner that
+   silently fails to match makes a clean report indistinguishable from a clean
+   file. */
+const wrapped = "improve the tone. If you think there is something\n   * lacking " +
+                "or a gap in the message,\n   * fill that gap.";
+ok("the scanner catches the phrase even when it is wrapped across lines",
+   BANNED_SOURCE.some((re) => re.test(flatten(wrapped))),
+   "if this fails, every clean report below is meaningless");
+ok("and does not fire on ordinary prose",
+   !BANNED_SOURCE.some((re) => re.test(flatten("Fix the grammar and retain the message."))));
+
+const src = flatten(await page.evaluate(() =>
+  [...document.querySelectorAll("script")].map((s) => s.textContent).join("\n")));
+const srcHit = BANNED_SOURCE.find((re) => re.test(src));
+ok("the sentence is not anywhere in the shipped source", !srcHit,
+   srcHit ? String(srcHit) : "clean");
 
 await browser.close();
 console.log(`\n${failed} prompt check(s) failed`);
