@@ -360,7 +360,11 @@
   // The table carries what you scan by; everything else is in the pane beside
   // it. A column removed from here must stay reachable there, which the guard
   // asserts field by field.
-  const COLUMNS = ["Task No.", "Name of task", "Project"];
+  // Closed, the table carries what you scan by. With a task open it drops to
+  // the two columns that identify a row - the number and the name - and the
+  // pane beside it takes the width that frees. Every column it drops, at
+  // either width, is a row in that pane, which the guard asserts by label.
+  const COLUMNS = ["Task No.", "Name of task", "Project", "Task Create Date"];
   let openRow = null;   // the task shown in the pane
 
   /** Every link on a task, wherever it was entered. */
@@ -480,12 +484,14 @@
     const dash = `<span class="tag dead">—</span>`;
     const short = (t.description || "").split("\n")[0].slice(0, 90);
     // Tasks created before "Name of task" existed fall back to their description.
+    const rest = openRow ? "" : `
+        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
+          overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
+        <td>${t.given ? esc(t.given) : dash}</td>`;
     return `<tr class="taskrow${t.status === "Done" ? " done" : ""}${openRow === t.id ? " open" : ""}"
                 data-open="${esc(t.id)}">
         <td>${t.no ? esc(t.no) : dash}</td>
-        <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>
-        <td>${t.project ? `<span class="tag accent">${esc(t.project)}</span>` : dash}${
-          overdue(t) ? ` <span class="tag warn">overdue</span>` : ""}</td>
+        <td class="wrap"><span class="taskname">${t.name ? esc(t.name) : (short ? esc(short) : dash)}</span></td>${rest}
       </tr>`;
   }
 
@@ -542,14 +548,16 @@
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
-        ? `<div class="tasksplit">
+        ? `<div class="tasksplit${openRow ? " open" : ""}">
              <div class="tasklist">
                <div class="tablewrap"><table class="tasktable">
                  <thead><tr>
                    ${window.TrackerUI.sortHeader("tasks", "no", COLUMNS[0])}
                    ${window.TrackerUI.sortHeader("tasks", "name", COLUMNS[1])}
+                   ${openRow ? "" : `
                    ${window.TrackerUI.filterHeader("tasks", "project", COLUMNS[2],
                        projects, picked, "Filter by project")}
+                   ${window.TrackerUI.sortHeader("tasks", "given", COLUMNS[3])}`}
                  </tr></thead>
                  <tbody>${slice.map(taskRow).join("")}</tbody>
                </table></div>

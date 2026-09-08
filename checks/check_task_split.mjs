@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Guard: three columns, and nothing lost behind them.
+ * Guard: four columns closed, two open, and nothing lost behind them.
  *
  * Cutting a table down is the easy half. The half that goes wrong quietly is
  * the field that was in a column yesterday and is now in neither the table nor
@@ -42,14 +42,38 @@ await page.waitForTimeout(300);
 await page.click('#nav button[data-route="todo"]');
 await page.waitForTimeout(300);
 
-/* --- the table is three columns ------------------------------------------- */
-const headers = await page.$$eval("table.tasktable thead th", (th) => th.map((h) => h.innerText.trim()));
-ok("the table shows exactly three columns", headers.length === 3, headers.join(" | "));
-ok("they are Task No., Name of task and Project",
-   /task no/i.test(headers[0]) && /name of task/i.test(headers[1]) && /project/i.test(headers[2]),
+/* --- with nothing open the table is four columns -------------------------- */
+const heads = () => page.$$eval("table.tasktable thead th",
+  (th) => th.map((h) => h.innerText.trim().replace(/[ \u2191\u2193]+$/, "")));
+const headers = await heads();
+ok("the table shows exactly four columns", headers.length === 4, headers.join(" | "));
+ok("they are Task No., Name of task, Project and Task Create Date",
+   /task no/i.test(headers[0]) && /name of task/i.test(headers[1]) &&
+   /project/i.test(headers[2]) && /task create date/i.test(headers[3]),
    headers.join(" | "));
 const cells = await page.$$eval("tr.taskrow:first-child td", (td) => td.length);
-ok("the rows carry three cells too", cells === 3, String(cells));
+ok("the rows carry four cells too", cells === 4, String(cells));
+// The date is the value, not the label: a column that renders an empty cell
+// for every task reads exactly like a working one.
+const dateCells = await page.$$eval("tr.taskrow td:nth-child(4)",
+  (td) => td.map((c) => c.innerText.trim()));
+ok("the date column carries the task's create date", dateCells[0] === "2026-09-01",
+   dateCells.join(" | "));
+ok("a task with no create date falls back to a dash rather than an empty cell",
+   dateCells[1] === "\u2014", JSON.stringify(dateCells[1]));
+
+/* --- closed, the list is the wide half, the pane about a quarter ----------
+   Measured, not read from the stylesheet: a grid rule that is present but
+   overridden by a later one reads as passing when only the CSS text is
+   checked, which is how table.tasktable kept a min-width nothing applied. */
+const split = () => page.evaluate(() => {
+  const l = document.querySelector(".tasklist").getBoundingClientRect();
+  const p = document.querySelector(".taskpane").getBoundingClientRect();
+  return { lw: Math.round(l.width), pw: Math.round(p.width) };
+});
+const closed = await split();
+ok("with nothing open the pane is well under half the list",
+   closed.pw > 0 && closed.pw < closed.lw * 0.45, JSON.stringify(closed));
 
 /* --- with nothing selected the pane says so ------------------------------- */
 ok("the pane is there before anything is clicked",
@@ -61,6 +85,19 @@ ok("it says what to do", /click a task/i.test(await page.locator(".taskpane").in
 await page.locator("tr.taskrow").first().click();
 await page.waitForTimeout(300);
 ok("clicking a task fills the pane", (await page.locator(".taskpane .taskdetail").count()) === 1);
+
+/* --- open, the list collapses to two columns and the pane takes the room -- */
+const openHeaders = await heads();
+ok("with a task open the table shows only two columns", openHeaders.length === 2,
+   openHeaders.join(" | "));
+ok("they are Task No. and Name of task",
+   /task no/i.test(openHeaders[0]) && /name of task/i.test(openHeaders[1]),
+   openHeaders.join(" | "));
+ok("the rows carry two cells too",
+   (await page.$$eval("tr.taskrow:first-child td", (td) => td.length)) === 2);
+const opened = await split();
+ok("with a task open the pane is the wider half", opened.pw > opened.lw,
+   JSON.stringify(opened));
 ok("nothing is inserted into the table itself",
    (await page.locator("table.tasktable tr.detail").count()) === 0);
 
@@ -117,7 +154,10 @@ ok("with a short list the two halves start level", Math.abs(short.lt - short.pt)
    JSON.stringify(short));
 ok("with a short list the two halves are the same height",
    Math.abs(short.lh - short.ph) <= 2, JSON.stringify(short));
-ok("and the same width", Math.abs(short.lw - short.pw) <= 2, JSON.stringify(short));
+// Not the same width any more, and deliberately so: with a task open the pane
+// is the half that needs the space, and the list is down to two columns.
+ok("with a task open the pane is still the wider half", short.pw > short.lw,
+   JSON.stringify(short));
 
 // Case two: a long list, a short task.
 await page.evaluate(() => {
@@ -151,8 +191,19 @@ const stacked = await page.evaluate(() => {
 ok("on a narrow screen the pane stacks under the list", stacked);
 await page.setViewportSize({ width: 1440, height: 1000 });
 
+/* --- closing the task brings all four columns back ------------------------ */
+await page.setViewportSize({ width: 1440, height: 1000 });
+await page.locator("tr.taskrow.open").first().click();
+await page.waitForTimeout(300);
+const reclosed = await heads();
+ok("closing the task restores all four columns", reclosed.length === 4,
+   reclosed.join(" | "));
+const reclosedSplit = await split();
+ok("and the pane goes back to about a quarter",
+   reclosedSplit.pw < reclosedSplit.lw * 0.45, JSON.stringify(reclosedSplit));
+
 ok("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 await browser.close();
 console.log(failed ? `\n${failed} split-view check(s) failed`
-                   : "\nPASS: three columns, and the rest of the task beside them");
+                   : "\nPASS: four columns, two when open, and the rest of the task beside them");
 process.exit(failed ? 1 : 0);

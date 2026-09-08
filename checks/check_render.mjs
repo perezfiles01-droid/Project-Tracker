@@ -196,9 +196,11 @@ await page.waitForSelector("table.tasktable");
 
 const taskHeads = await page.locator("table.tasktable thead th").allTextContents();
 // The table is what you scan by; every other field lives in the pane beside
-// it, which check_task_split asserts field by field.
-const wantTasks = ["Task No.", "Name of task", "Project"];
-ok("the task table carries exactly the three named columns",
+// it, which check_task_split asserts field by field. These are the columns
+// with nothing open - opening a task collapses the list to two, which
+// check_task_split covers.
+const wantTasks = ["Task No.", "Name of task", "Project", "Task Create Date"];
+ok("the task table carries exactly the four named columns",
    // Trimmed: a filtering header spans several lines of markup, so its text
    // carries the surrounding whitespace that a trailing-space strip misses.
    JSON.stringify(taskHeads.map((h) => h.trim().replace(/[ ↑↓]+$/, ""))) === JSON.stringify(wantTasks),
