@@ -34,6 +34,27 @@
       </select>`;
   }
 
+  /**
+   * The update trail of a logged task, reachable from the row it became.
+   *
+   * A task marked Done or Blocked leaves the To Do List, and with it the pane
+   * that holds its updates - so a trail you kept for three weeks would become
+   * unreadable at the moment the work finished, which is exactly when you want
+   * to look back over it. Shown only for rows the app wrote from a task that
+   * still exists and actually carries updates: a hand-typed entry has no task
+   * behind it, the same rule the status picker beside it already follows, and
+   * an icon that opens an empty table is a button that lies about having
+   * something to show. The count is in the button's name, so the table says
+   * which finished tasks have a trail worth opening.
+   */
+  function updatesButton(r) {
+    if (r.origin !== "task" || !r.taskId) return "";
+    const n = window.TrackerTasks.updateCount(r.taskId);
+    if (!n) return "";
+    return window.TrackerUI.iconButton("update",
+      `${n} update${n === 1 ? "" : "s"}`, `data-seeupdates="${esc(r.taskId)}"`);
+  }
+
   function statusTag(s) {
     if (!s) return "";
     const v = s.toLowerCase();
@@ -244,6 +265,7 @@
           { key: "url", label: "Link", render: linkCell },
           { key: "id", label: "", render: (r) =>
               `<span class="actions">
+                 ${updatesButton(r)}
                  ${window.TrackerUI.iconButton("edit", "Edit", `data-edit="act:${esc(r.id)}"`)}
                  ${window.TrackerUI.iconButton("remove", "Remove", `data-remove="act:${esc(r.id)}"`)}
                </span>` },
