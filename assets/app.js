@@ -193,7 +193,17 @@
         ${window.TrackerProjects.view(p)}
         <h2 class="page sub">Reference</h2>
         <div class="pagetools">${window.TrackerLinks.searchBox(key, "Search this project…")}</div>`;
+      // The same rule the artifact tables follow: while a search is running, a
+      // section with nothing left in it is not a result and is not shown. A
+      // project with six sections used to print six headings and five copies
+      // of "Nothing matches your search" around the one that matched.
+      let shown = 0;
       for (const sec of p.sections) {
+        const secItems = sec.type === "phases"
+          ? sec.items.flatMap((ph) => ph.steps).filter((s) => matches(s, q))
+          : (sec.items || []).filter((i) => matches(i, q));
+        if (q && !secItems.length) continue;
+        shown++;
         html += `<h3 class="sec">${esc(sec.title)}</h3>`;
         if (sec.type === "links") {
           const items = sec.items.filter((i) => matches(i, q));
@@ -236,6 +246,9 @@
           if (sec.note) html += `<div class="note">${esc(sec.note)}</div>`;
         }
       }
+      // Every section hidden means the search found nothing at all, which has
+      // to say so rather than leave the page looking broken below the box.
+      if (q && !shown) html += `<div class="empty">Nothing matches your search.</div>`;
       return html;
     },
 
@@ -353,8 +366,38 @@
     ).join("");
   }
 
+  /**
+   * The undo and redo buttons, told what they can currently do.
+   *
+   * The depth is in the accessible name rather than on the face of the
+   * button, so hovering says how far back you can go without putting two
+   * numbers in a sidebar that has counts down its whole length already.
+   * Painted from here and also called by the store the moment the history
+   * changes, so the buttons are never a render behind the truth.
+   */
+  function paintHistory() {
+    const box = $("#history");
+    if (!box || !window.TrackerStore.canUndo) return;
+    const S = window.TrackerStore;
+    const un = S.undoDepth(), re = S.redoDepth();
+    box.innerHTML =
+      window.TrackerUI.iconButton("undo",
+        un ? `Undo (${un} of ${S.DEPTH})` : "Nothing to undo",
+        `id="doUndo"${S.canUndo() ? "" : " disabled"}`) +
+      window.TrackerUI.iconButton("redo",
+        re ? `Redo (${re} of ${S.DEPTH})` : "Nothing to redo",
+        `id="doRedo"${S.canRedo() ? "" : " disabled"}`);
+  }
+  window.TrackerPaintHistory = paintHistory;
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#doUndo")) return window.TrackerStore.undo();
+    if (e.target.closest("#doRedo")) return window.TrackerStore.redo();
+  });
+
   function render() {
     renderNav();
+    paintHistory();
     let html;
     if (state.route.startsWith("p:")) {
       const p = state.data.projects.find((x) => x.id === state.route.slice(2));

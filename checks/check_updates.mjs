@@ -18,7 +18,8 @@
  *      every attachments field in the app, so the new one must join that
  *      family rather than quietly opt out of it.
  *   5. Oldest first, with the Add icon below the last entry, and one update
- *      removed takes its own image bytes and nobody else's.
+ *      removed takes its own record away while its image bytes are held, so
+ *      the removal can be undone with its images intact.
  *   6. A task marked Done leaves the To Do List, and its trail is still
  *      readable from the Daily activity row it became. That is the whole
  *      second half of the request, and it is the half that breaks silently:
@@ -219,7 +220,17 @@ ok("editing keeps the instant it was first written",
    after.find((u) => u.text === "Corrected wording").at ===
    before.find((u) => u.date === "2026-08-15").at);
 
-// Removing the entry with images drops its bytes, and only its bytes.
+// Removing the entry takes the record away and HOLDS its bytes.
+//
+// This assertion used to read "its image bytes go with it", which was right
+// when a delete dropped them immediately. Undo changed that contract
+// deliberately: the store keeps a deleted attachment's bytes against the undo
+// step that removed it, so undoing the delete gives you back the update AND
+// its images. They are purged for real once that step falls out of the
+// seven-deep history, which check_undo.mjs asserts by counting keys either
+// side of that boundary. What this check still owns is that the RECORD goes,
+// that nobody else's bytes are touched, and that the held bytes belong only
+// to the entry that was removed.
 const doomed = (await storedUpdates()).find((u) => (u.images || []).length);
 const otherKeys = keysAfterAdd.filter((k) => !doomed.images.some((a) => a.id === k));
 await page.click(`[data-dropupdate$="|${doomed.id}"]`);
@@ -230,10 +241,25 @@ const left = await storedUpdates();
 const keysAfterDrop = await blobKeys();
 ok("removing an update leaves the rest", left.length === 2 && !left.some((u) => u.id === doomed.id),
    left.map((u) => u.date).join(", "));
-ok("its image bytes go with it",
-   doomed.images.every((a) => !keysAfterDrop.includes(a.id)), keysAfterDrop.join(", "));
-ok("nobody else's bytes go with it",
+ok("its image bytes are held, so the delete can be undone",
+   doomed.images.every((a) => keysAfterDrop.includes(a.id)), keysAfterDrop.join(", "));
+ok("nobody else's bytes are disturbed",
    otherKeys.every((k) => keysAfterDrop.includes(k)), otherKeys.join(", "));
+ok("and undoing the removal brings the update back with its images",
+   await (async () => {
+     await page.click("#doUndo");
+     await page.waitForTimeout(500);
+     const back = await storedUpdates();
+     const it = back.find((u) => u.id === doomed.id);
+     if (!it) return false;
+     const keys = await blobKeys();
+     const restored = (it.images || []).length === doomed.images.length &&
+       (it.images || []).every((a) => keys.includes(a.id));
+     // Put it back where the rest of this check expects it.
+     await page.click("#doRedo");
+     await page.waitForTimeout(500);
+     return restored;
+   })());
 
 /* --- 6. the trail survives the move to Daily activity --------------------- */
 await page.click(".taskpane [data-updates]");   // back to details, for the status picker

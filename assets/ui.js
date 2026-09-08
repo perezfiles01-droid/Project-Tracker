@@ -687,6 +687,11 @@
     // dated entries, and at 14px the dial reads as time rather than as a
     // circle.
     update: '<path d="M3.5 12a8.5 8.5 0 1 1 2.6 6.1"/><path d="M3 19v-5h5"/><path d="M12 7.5V12l3 2"/>',
+    // An arrow curving back on itself, anticlockwise: the conventional undo
+    // mark. Redo is its mirror, so the pair reads as one control at a glance
+    // rather than as two unrelated buttons.
+    undo: '<path d="M4 9h10a5 5 0 0 1 0 10H9"/><path d="M8 5L4 9l4 4"/>',
+    redo: '<path d="M20 9H10a5 5 0 0 0 0 10h5"/><path d="M16 5l4 4-4 4"/>',
     // A wand with a spark: the conventional "let the machine have a go at
     // this" mark, and distinct at 14px from the pencil that means "edit".
     wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',

@@ -62,6 +62,12 @@ button,input,select{font:inherit;color:inherit}
 .side-foot{font-size:11px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px;margin-top:18px}
 .side-foot button{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 0;display:block}
 .side-foot button:hover{color:var(--accent)}
+/* The two history buttons are icons, not links, so they sit in a row of their
+   own above the three text links rather than in the column with them. */
+.history{display:flex;gap:8px;margin-bottom:10px}
+.history .btn.icon{padding:6px}
+.history .btn.icon:disabled{opacity:.35;cursor:default}
+.history .btn.icon:disabled:hover{color:inherit;background:none}
 
 .main{padding:26px 30px 70px;max-width:1180px;width:100%}
 /* Theme switch sits at the far right: it is a setting, not a page control,

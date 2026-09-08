@@ -18,6 +18,10 @@
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
+      <!-- Undo and redo sit above the links because they act on what you were
+           just doing, not on a page you are going to. Disabled rather than
+           hidden, so they do not move as you work. -->
+      <div class="history" id="history"></div>
       <button id="openDrive">Google Drive</button>
       <button id="openBackup">Backup</button>
       <button id="openSettings">Settings</button>

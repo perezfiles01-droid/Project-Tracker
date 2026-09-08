@@ -72,6 +72,12 @@ button,input,select{font:inherit;color:inherit}
 .side-foot{font-size:11px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px;margin-top:18px}
 .side-foot button{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 0;display:block}
 .side-foot button:hover{color:var(--accent)}
+/* The two history buttons are icons, not links, so they sit in a row of their
+   own above the three text links rather than in the column with them. */
+.history{display:flex;gap:8px;margin-bottom:10px}
+.history .btn.icon{padding:6px}
+.history .btn.icon:disabled{opacity:.35;cursor:default}
+.history .btn.icon:disabled:hover{color:inherit;background:none}
 
 .main{padding:26px 30px 70px;max-width:1180px;width:100%}
 /* Theme switch sits at the far right: it is a setting, not a page control,
@@ -552,6 +558,10 @@ th.filterhead .colpick:focus{border-color:var(--accent)}
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
+      <!-- Undo and redo sit above the links because they act on what you were
+           just doing, not on a page you are going to. Disabled rather than
+           hidden, so they do not move as you work. -->
+      <div class="history" id="history"></div>
       <button id="openDrive">Google Drive</button>
       <button id="openBackup">Backup</button>
       <button id="openSettings">Settings</button>
@@ -730,6 +740,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   };
 
   const set = (key, value) => {
+    record(key);
     try { localStorage.setItem(key, JSON.stringify(value)); return true; }
     catch { return false; }
   };
@@ -740,12 +751,167 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return v === null ? fallback : v;
   };
   const setText = (key, value) => {
+    record(key);
     try { localStorage.setItem(key, value); return true; } catch { return false; }
   };
 
   const remove = (key) => {
-    try { localStorage.removeItem(key); } catch { /* nothing to undo */ }
+    record(key);
+    try { localStorage.removeItem(key); } catch { /* nothing to remove */ }
   };
+
+  /* ---------- undo and redo ----------
+     Written here and nowhere else, because this file is already the one place
+     the app talks to localStorage: five modules and about twenty-five write
+     sites all arrive at set(), so one change makes every one of them
+     undoable, including a module nobody has written yet.
+
+     Three decisions that the obvious version gets wrong:
+
+       1. Writes are grouped by tick, not one step per write. editTask calls
+          save() and then syncLog() from a single click; ungrouped, marking a
+          task Done would take two undo clicks and the first would leave the
+          log disagreeing with the task.
+       2. Only the data keys have history. Undoing "I changed the theme" with
+          the same button that undoes "I deleted a task" makes the button
+          unpredictable, and this file already draws that line for the backup.
+       3. Deleted attachment bytes are held, not dropped, for as long as the
+          step that deleted them can still be undone. An undo that gives you
+          the task back and loses its screenshots is worse than no undo. */
+  const DEPTH = 7;
+  let undoStack = [];
+  let redoStack = [];
+  let pending = null;      // the step being collected this tick
+  let replaying = false;   // true while undo/redo write, so they do not stack
+
+  /** A snapshot of one key as it is right now, raw, null when absent. */
+  const snap = (key) => raw(key);
+
+  /**
+   * Remember a key's value before it is overwritten.
+   *
+   * First write of the tick opens a step and schedules its close. Later writes
+   * in the same tick join it, and a key written twice keeps its FIRST value -
+   * that is the one undo has to return to.
+   */
+  function record(key) {
+    if (replaying || !KEYS.data.includes(key)) return;
+    if (!pending) {
+      pending = { before: new Map(), blobs: [] };
+      queueMicrotask(commit);
+    }
+    if (!pending.before.has(key)) pending.before.set(key, snap(key));
+  }
+
+  /** Close the tick's step and put it on the stack. */
+  function commit() {
+    const step = pending;
+    pending = null;
+    if (!step) return;
+    // A write that changed nothing is not a step: undoing it would look like
+    // the button doing nothing at all.
+    let changed = false;
+    for (const [k, before] of step.before) {
+      step.before.set(k, before);
+      if (snap(k) !== before) changed = true;
+    }
+    if (!changed) return dropBlobs(step);
+    undoStack.push(step);
+    while (undoStack.length > DEPTH) dropBlobs(undoStack.shift());
+    // A new edit makes every redo unreachable, which is the only rule that
+    // cannot produce a redo onto a state that no longer exists.
+    redoStack.splice(0).forEach(dropBlobs);
+    paint();
+  }
+
+  /**
+   * Bytes whose owning step is gone are now genuinely deleted.
+   *
+   * Held only while the record that names them can still come back, so
+   * nothing accumulates: a step that falls off the end of the stack, or is
+   * discarded with the redo pile, takes its blobs with it.
+   */
+  function dropBlobs(step) {
+    if (!step || !step.blobs || !step.blobs.length) return;
+    const gone = step.blobs.splice(0);
+    if (window.TrackerBlobs && window.TrackerBlobs.purge) window.TrackerBlobs.purge(gone);
+  }
+
+  /**
+   * Hold an attachment's bytes against the step being written this tick.
+   *
+   * Called instead of deleting, by whatever is removing the record that names
+   * them. With no step open the bytes are dropped at once, which is the right
+   * answer for a delete that is not part of an undoable change.
+   */
+  function holdBlobs(ids) {
+    const list = [...ids].filter(Boolean);
+    if (!list.length) return;
+    if (pending) { pending.blobs.push(...list); return; }
+    const last = undoStack[undoStack.length - 1];
+    if (last) last.blobs.push(...list);
+    else if (window.TrackerBlobs && window.TrackerBlobs.purge) window.TrackerBlobs.purge(list);
+  }
+
+  /** Put a step's remembered values back, returning the state it replaced. */
+  function apply(step) {
+    const inverse = { before: new Map(), blobs: step.blobs };
+    replaying = true;
+    try {
+      for (const [k, before] of step.before) {
+        inverse.before.set(k, snap(k));
+        if (before === null) { try { localStorage.removeItem(k); } catch { /* ignore */ } }
+        else { try { localStorage.setItem(k, before); } catch { /* ignore */ } }
+      }
+    } finally { replaying = false; }
+    return inverse;
+  }
+
+  const canUndo = () => undoStack.length > 0;
+  const canRedo = () => redoStack.length > 0;
+  const undoDepth = () => undoStack.length;
+  const redoDepth = () => redoStack.length;
+
+  function undo() {
+    if (!undoStack.length) return false;
+    redoStack.push(apply(undoStack.pop()));
+    while (redoStack.length > DEPTH) redoStack.shift();
+    after();
+    return true;
+  }
+
+  function redo() {
+    if (!redoStack.length) return false;
+    undoStack.push(apply(redoStack.pop()));
+    while (undoStack.length > DEPTH) undoStack.shift();
+    after();
+    return true;
+  }
+
+  function after() {
+    paint();
+    if (window.TrackerRender) window.TrackerRender();
+  }
+
+  /** The two buttons, told what they can do. Painted by app.js. */
+  function paint() {
+    if (window.TrackerPaintHistory) window.TrackerPaintHistory();
+  }
+
+  /**
+   * A backup restore is not one edit, so it is not one undo.
+   *
+   * It replaces all twelve keys at once, and a single click silently
+   * reverting an entire imported file is not something a button should be
+   * able to do by accident. The history is cleared instead, which is honest:
+   * what came before the restore is in the file you restored over.
+   */
+  function clearHistory() {
+    undoStack.splice(0).forEach(dropBlobs);
+    redoStack.splice(0).forEach(dropBlobs);
+    pending = null;
+    paint();
+  }
 
   /** Everything the backup carries: the data keys that actually hold something. */
   function exportData() {
@@ -775,8 +941,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       if (typeof v !== "string") throw new Error("The backup is damaged and was not loaded.");
       JSON.parse(v);                        // throws before anything is written
     }
-    for (const k of KEYS.data) remove(k);    // replace, not merge
-    for (const [k, v] of entries) setText(k, v);
+    replaying = true;                        // a restore is not an undo step
+    try {
+      for (const k of KEYS.data) remove(k);  // replace, not merge
+      for (const [k, v] of entries) setText(k, v);
+    } finally { replaying = false; }
+    clearHistory();
     return entries.length;
   }
 
@@ -857,7 +1027,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   });
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
-                          exportData, importData, saveToFile, restoreFromFile, openBackupDialog };
+                          exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
+                          undo, redo, canUndo, canRedo, undoDepth, redoDepth,
+                          holdBlobs, clearHistory, DEPTH };
 })();
 
 </script>
@@ -892,6 +1064,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   /**
    * The instruction, written as asked for.
    *
+   * It used to end its first paragraph with "if you think there is something
+   * lacking or a gap in the message, fill that gap", and that licence is
+   * deliberately gone. Standardize is asked to tidy what you wrote, and an
+   * instruction to fill perceived gaps invites the model to add a sentence
+   * you never wrote into a work note that goes out under your name. The
+   * remaining rules are the ones that keep it to a rewrite: retain the
+   * message, do not make it longer than it needs to be, and invent no
+   * specifics.
+   *
    * The last line is not decoration. A model told to improve text will often
    * hand back "Here is the improved version:" and a rewrite in quotes, and
    * that whole string would land in the field. The dash rule is repeated in
@@ -900,8 +1081,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    */
   const SYSTEM = [
     "Improve the tone of the text the user gives you. Fix the grammar, retain",
-    "the message, and make it clear and easy to understand. If you think there",
-    "is something lacking or a gap in the message, fill that gap.",
+    "the message, and make it clear and easy to understand.",
     "",
     "Never use an em dash or an en dash. Write plainly, in the register of a",
     "work note written by the person who typed it. Do not make it longer than",
@@ -1940,6 +2120,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     // dated entries, and at 14px the dial reads as time rather than as a
     // circle.
     update: '<path d="M3.5 12a8.5 8.5 0 1 1 2.6 6.1"/><path d="M3 19v-5h5"/><path d="M12 7.5V12l3 2"/>',
+    // An arrow curving back on itself, anticlockwise: the conventional undo
+    // mark. Redo is its mirror, so the pair reads as one control at a glance
+    // rather than as two unrelated buttons.
+    undo: '<path d="M4 9h10a5 5 0 0 1 0 10H9"/><path d="M8 5L4 9l4 4"/>',
+    redo: '<path d="M20 9H10a5 5 0 0 0 0 10h5"/><path d="M16 5l4 4-4 4"/>',
     // A wand with a spark: the conventional "let the machine have a go at
     // this" mark, and distinct at 14px from the pencil that means "edit".
     wand: '<path d="M4 20L15 9"/><path d="M14.5 5.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/><path d="M19 15l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
@@ -2231,6 +2416,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       rq.onerror = () => reject(rq.error);
     });
   };
+  /**
+   * Bytes the store has finished holding, deleted for real.
+   *
+   * The store keeps a deleted attachment's id against the undo step that
+   * removed it, and calls this only once that step can no longer be undone.
+   * So the bytes outlive the record exactly as long as the record can come
+   * back, and no longer.
+   */
+  window.TrackerBlobs = {
+    purge: (ids) => { for (const id of ids) dropBlob(id).catch(() => {}); },
+  };
+
   const dropBlob = async (id) => {
     const db = await idb();
     return new Promise((resolve) => {
@@ -2340,9 +2537,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     });
 
     const kept = (target.attachments || []).filter((a) => values.files.keep.includes(a.id));
-    for (const gone of (target.attachments || []).filter((a) => !kept.includes(a) && a.kind !== "link")) {
-      await dropBlob(gone.id);
-    }
+    const dropped = (target.attachments || [])
+      .filter((a) => !kept.includes(a) && a.kind !== "link").map((a) => a.id);
     for (const file of values.files.added) {
       const aid = "a-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
@@ -2353,6 +2549,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!cur) list.push(target);
     save(list);
     syncLog(target);
+    // After the write, so the ids attach to the step this edit just made.
+    window.TrackerStore.holdBlobs(dropped);
     window.TrackerRender();
   }
 
@@ -2448,8 +2646,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       confirmLabel: "Remove task",
     });
     if (!yes) return;
-    for (const a of t.attachments || []) if (a.kind !== "link") await dropBlob(a.id);
+    // Held, not dropped. Undoing this delete brings the task back, and a task
+    // whose screenshots went with it is not the task you deleted. The store
+    // deletes them for real once the step falls out of the undo history.
     save(list.filter((x) => x.id !== id));
+    window.TrackerStore.holdBlobs(
+      (t.attachments || []).filter((a) => a.kind !== "link").map((a) => a.id));
+    // Every update the task carried goes too, so its images are held as well.
+    window.TrackerStore.holdBlobs(
+      (t.updates || []).flatMap((u) => (u.images || []).map((a) => a.id)));
     window.TrackerRender();
   }
 
@@ -2805,9 +3010,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!entry) return window.TrackerRender();
 
     const kept = (entry.images || []).filter((a) => values.images.keep.includes(a.id));
-    for (const gone of (entry.images || []).filter((a) => !kept.includes(a))) {
-      await dropBlob(gone.id);
-    }
+    const droppedImages = (entry.images || []).filter((a) => !kept.includes(a)).map((a) => a.id);
     for (const file of values.images.added) {
       const aid = "u-img-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
       await putBlob(aid, file);
@@ -2818,6 +3021,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     entry.images = kept;
     if (!cur) target.updates.push(entry);
     save(list);
+    window.TrackerStore.holdBlobs(droppedImages);
     paneTab = "updates";
     window.TrackerRender();
   }
@@ -2835,12 +3039,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       confirmLabel: "Remove update",
     });
     if (!yes) return;
-    for (const a of u.images || []) await dropBlob(a.id);
     const list = load();
     const target = list.find((x) => x.id === taskId);
     if (!target) return window.TrackerRender();
     target.updates = (target.updates || []).filter((x) => x.id !== updateId);
     save(list);
+    window.TrackerStore.holdBlobs((u.images || []).map((a) => a.id));
     window.TrackerRender();
   }
 
@@ -3796,6 +4000,17 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         </select>` : ""}
       </th>`;
 
+    // A table with nothing left after the search is not a result, so it is not
+    // shown. Searching "uat" used to print MAIN (0) and "Nothing in this table
+    // yet" above the two tables that actually matched, which is the opposite
+    // of what a search is for - the more tables a project has, the more empty
+    // headings you scroll past to reach the answer.
+    //
+    // Only while a search is running. With the box empty an empty table is a
+    // real thing you own and can add to, and hiding it would leave no way to
+    // reach it. The account filter counts as searching for the same reason.
+    if ((q || chosen) && !rows.length) return "";
+
     return `<section class="linksection">
         <div class="sectionhead">
           <div class="sectionleft">
@@ -3844,7 +4059,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                   "Search every table for a site or description…")}
             </div>
           </div>
-          ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")}
+          ${tablesFor(g.name).map((t) => linkTable(g.name, t)).join("")
+            || `<div class="empty">Nothing matches your search.</div>`}
           ${listFoot("", `<button class="btn primary"
              data-newtable="${esc(g.name)}">Create Table</button>`)}
         </div>` : ""}`;
@@ -4325,7 +4541,17 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         ${window.TrackerProjects.view(p)}
         <h2 class="page sub">Reference</h2>
         <div class="pagetools">${window.TrackerLinks.searchBox(key, "Search this project…")}</div>`;
+      // The same rule the artifact tables follow: while a search is running, a
+      // section with nothing left in it is not a result and is not shown. A
+      // project with six sections used to print six headings and five copies
+      // of "Nothing matches your search" around the one that matched.
+      let shown = 0;
       for (const sec of p.sections) {
+        const secItems = sec.type === "phases"
+          ? sec.items.flatMap((ph) => ph.steps).filter((s) => matches(s, q))
+          : (sec.items || []).filter((i) => matches(i, q));
+        if (q && !secItems.length) continue;
+        shown++;
         html += `<h3 class="sec">${esc(sec.title)}</h3>`;
         if (sec.type === "links") {
           const items = sec.items.filter((i) => matches(i, q));
@@ -4368,6 +4594,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           if (sec.note) html += `<div class="note">${esc(sec.note)}</div>`;
         }
       }
+      // Every section hidden means the search found nothing at all, which has
+      // to say so rather than leave the page looking broken below the box.
+      if (q && !shown) html += `<div class="empty">Nothing matches your search.</div>`;
       return html;
     },
 
@@ -4485,8 +4714,38 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     ).join("");
   }
 
+  /**
+   * The undo and redo buttons, told what they can currently do.
+   *
+   * The depth is in the accessible name rather than on the face of the
+   * button, so hovering says how far back you can go without putting two
+   * numbers in a sidebar that has counts down its whole length already.
+   * Painted from here and also called by the store the moment the history
+   * changes, so the buttons are never a render behind the truth.
+   */
+  function paintHistory() {
+    const box = $("#history");
+    if (!box || !window.TrackerStore.canUndo) return;
+    const S = window.TrackerStore;
+    const un = S.undoDepth(), re = S.redoDepth();
+    box.innerHTML =
+      window.TrackerUI.iconButton("undo",
+        un ? `Undo (${un} of ${S.DEPTH})` : "Nothing to undo",
+        `id="doUndo"${S.canUndo() ? "" : " disabled"}`) +
+      window.TrackerUI.iconButton("redo",
+        re ? `Redo (${re} of ${S.DEPTH})` : "Nothing to redo",
+        `id="doRedo"${S.canRedo() ? "" : " disabled"}`);
+  }
+  window.TrackerPaintHistory = paintHistory;
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#doUndo")) return window.TrackerStore.undo();
+    if (e.target.closest("#doRedo")) return window.TrackerStore.redo();
+  });
+
   function render() {
     renderNav();
+    paintHistory();
     let html;
     if (state.route.startsWith("p:")) {
       const p = state.data.projects.find((x) => x.id === state.route.slice(2));
