@@ -520,6 +520,13 @@ td.stampcell{white-space:nowrap}
    empty contenteditable has no text node to style, so this hangs off :empty
    and off the lone <br> the browser leaves behind. */
 .richbox:empty::before{content:attr(data-placeholder);color:var(--dim)}
+/* A picture inside a cell must not push the column wide: it fits the space
+   the cell has, and the row grows instead. */
+.richbox img,.clamptext.rich img{max-width:100%;height:auto;border-radius:4px;
+  display:inline-block;vertical-align:top;margin:2px 0}
+.richbox td img,.richbox th img,.clamptext.rich td img,.clamptext.rich th img{max-width:220px}
+/* An image whose bytes are missing shows its alt rather than a broken icon. */
+.richbox img:not([src]),.clamptext.rich img:not([src]){min-height:18px;opacity:.5}
 .tabletools{display:inline-flex;gap:2px;align-items:center}
 .tabletools[hidden]{display:none}
 /* The grid picker, the shape Word and Outlook both use. */
