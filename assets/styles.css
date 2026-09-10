@@ -9,6 +9,11 @@
   --accent:#ef4444; --accent-2:#991b1b;
   --ok:#16a34a; --warn:#d97706; --info:#0284c7;
   --radius:14px; --shadow:0 8px 24px rgba(0,0,0,.08);
+  /* The text-colour palette. Each name is a token rather than a value in the
+     document, so the SAME stored word reads correctly on either background:
+     these are the darker mixes, for the light theme. */
+  --c-red:#b91c1c; --c-amber:#b45309; --c-green:#15803d; --c-teal:#0f766e;
+  --c-blue:#1d4ed8; --c-purple:#6d28d9; --c-pink:#be185d; --c-grey:#52525b;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -17,6 +22,10 @@
   --text:#f4f4f5; --muted:#a1a1aa; --dim:#71717a;
   --shadow:0 10px 30px rgba(0,0,0,.45);
     --ok:#22c55e; --warn:#f59e0b; --info:#38bdf8;
+  /* The same eight names, lifted for a dark background. A colour chosen in one
+     theme therefore stays legible in the other, which a stored hex could not. */
+  --c-red:#f87171; --c-amber:#fbbf24; --c-green:#4ade80; --c-teal:#2dd4bf;
+  --c-blue:#60a5fa; --c-purple:#c084fc; --c-pink:#f472b6; --c-grey:#a1a1aa;
   }
 }
 :root[data-theme="dark"]{
@@ -25,6 +34,10 @@
   --text:#f4f4f5; --muted:#a1a1aa; --dim:#71717a;
   --shadow:0 10px 30px rgba(0,0,0,.45);
   --ok:#22c55e; --warn:#f59e0b; --info:#38bdf8;
+  /* The same eight names, lifted for a dark background. A colour chosen in one
+     theme therefore stays legible in the other, which a stored hex could not. */
+  --c-red:#f87171; --c-amber:#fbbf24; --c-green:#4ade80; --c-teal:#2dd4bf;
+  --c-blue:#60a5fa; --c-purple:#c084fc; --c-pink:#f472b6; --c-grey:#a1a1aa;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -545,6 +558,40 @@ td.stampcell{white-space:nowrap}
 .richbox td,.richbox th,.clamptext.rich td,.clamptext.rich th{
   border:1px solid var(--line);padding:4px 8px;vertical-align:top;min-width:40px}
 .richbox th,.clamptext.rich th{background:var(--panel);font-weight:600;text-align:left}
+/* A column edge you can grab. The cursor is set by script only when the
+   pointer is actually within the grip, so the rest of the cell still shows a
+   text caret and stays a normal place to click and type. */
+.richbox td,.richbox th{position:relative}
+/* A sized table lays out fixed, which is what makes a dragged width hold; a
+   table with no widths keeps automatic sizing and is unchanged by all of this.
+   The rule is stated by script on the element, not here, because only the
+   script knows whether a width was set. */
+.richbox table[style*="table-layout"] td,.richbox table[style*="table-layout"] th,
+.clamptext.rich table[style*="table-layout"] td,.clamptext.rich table[style*="table-layout"] th{
+  overflow-wrap:anywhere}
+/* Text colour. Eight names, both themes, and nothing else can be stored. */
+.richbox span[data-colour],.clamptext.rich span[data-colour],
+.dialogbody span[data-colour]{color:var(--c-grey)}
+.richbox span[data-colour="red"],.clamptext.rich span[data-colour="red"],.dialogbody span[data-colour="red"]{color:var(--c-red)}
+.richbox span[data-colour="amber"],.clamptext.rich span[data-colour="amber"],.dialogbody span[data-colour="amber"]{color:var(--c-amber)}
+.richbox span[data-colour="green"],.clamptext.rich span[data-colour="green"],.dialogbody span[data-colour="green"]{color:var(--c-green)}
+.richbox span[data-colour="teal"],.clamptext.rich span[data-colour="teal"],.dialogbody span[data-colour="teal"]{color:var(--c-teal)}
+.richbox span[data-colour="blue"],.clamptext.rich span[data-colour="blue"],.dialogbody span[data-colour="blue"]{color:var(--c-blue)}
+.richbox span[data-colour="purple"],.clamptext.rich span[data-colour="purple"],.dialogbody span[data-colour="purple"]{color:var(--c-purple)}
+.richbox span[data-colour="pink"],.clamptext.rich span[data-colour="pink"],.dialogbody span[data-colour="pink"]{color:var(--c-pink)}
+/* The colour palette, opened from the toolbar. */
+.colourpicker{display:flex;flex-wrap:wrap;gap:4px;padding:6px;margin-top:4px;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.colourpicker[hidden]{display:none}
+.swatch{width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:5px;
+  cursor:pointer}
+.swatch:hover{outline:2px solid var(--accent);outline-offset:1px}
+/* "No colour" reads as an empty swatch rather than another colour. */
+.swatch.none{background:linear-gradient(135deg,transparent 45%,var(--dim) 45%,var(--dim) 55%,transparent 55%)}
+/* The zoom control. Above a table in a reading view, inline in the toolbar
+   while editing. */
+.tablezoom{display:flex;gap:2px;align-items:center;margin:4px 0 2px}
+.tablezoom.inline{display:inline-flex;margin:0}
 .richbox ul,.richbox ol,.clamptext.rich ul,.clamptext.rich ol{margin:4px 0;padding-left:22px}
 .richbox li,.clamptext.rich li{margin:2px 0}
 .richbox p,.clamptext.rich p{margin:4px 0}

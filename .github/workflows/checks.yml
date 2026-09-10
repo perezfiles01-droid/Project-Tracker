@@ -113,3 +113,5 @@ jobs:
         run: node checks/check_cachebust.mjs
       - name: A panel closes on Cancel, never on a click beside it
         run: node checks/check_modal_dismissal.mjs
+      - name: Table columns stretch, tables zoom, and text takes a palette colour
+        run: node checks/check_table_size.mjs

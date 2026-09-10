@@ -894,6 +894,9 @@
   function paint() {
     paintShots();
     window.TrackerUI.paintClamps();
+    // Widths and zoom, for the same reason paintClamps runs here: neither can
+    // be applied to a table that does not exist yet.
+    window.TrackerUI.paintTables();
     // Pictures embedded in a description or an update resolve their src the
     // same way the attachment thumbnails do: from IndexedDB, after render.
     window.TrackerUI.paintImages();

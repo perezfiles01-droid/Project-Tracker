@@ -30,12 +30,31 @@
   const ALLOWED = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "STRIKE",
                            "UL", "OL", "LI",
                            "TABLE", "THEAD", "TBODY", "TR", "TH", "TD",
-                           "IMG"]);
-  /* Every attribute is dropped except these two, on cells only, and only when
+                           "IMG", "SPAN"]);
+  /* Every attribute is dropped except these, on cells only, and only when
      they are small positive integers. colspan="1e9" is a denial of service
      rendered as a table. */
   const SPAN_ATTRS = new Set(["colspan", "rowspan"]);
   const spanOk = (v) => /^[0-9]{1,2}$/.test(String(v)) && Number(v) >= 1;
+
+  /* A column width, carried as a PLAIN INTEGER and nothing else.
+     `style` stays banned outright - see the attribute loop in cleanHtml - so
+     no CSS value from stored text can ever reach the page. paintTables() turns
+     this number into a real width at render time, which is code this file
+     controls rather than a string a document supplied. */
+  const COL_MIN = 40, COL_MAX = 1200;
+  const widthOk = (v) => /^[0-9]{2,4}$/.test(String(v)) &&
+                         Number(v) >= COL_MIN && Number(v) <= COL_MAX;
+
+  /* Text colour, from a fixed palette and never a free-form value. The stored
+     form is the NAME of a swatch, not a colour: "amber", never "#ffbf00" and
+     never "red;background:url(x)". An unknown name is dropped, so the set
+     below is the complete list of what any stored document can ask for, and
+     each one is a CSS variable this app's own stylesheet defines for both
+     themes. */
+  const TEXT_COLOURS = ["red", "amber", "green", "teal", "blue",
+                        "purple", "pink", "grey"];
+  const colourOk = (v) => TEXT_COLOURS.includes(String(v));
 
   /* An image is stored by REFERENCE, never by value.
    *
@@ -92,9 +111,12 @@
         }
         for (const attr of [...child.attributes]) {
           const name = attr.name.toLowerCase();
+          const cell = tag === "TD" || tag === "TH";
           const keep = tag === "IMG"
             ? (IMG_ATTRS.has(name) && (name !== "data-blob" || blobRefOk(attr.value)))
-            : (SPAN_ATTRS.has(name) && (tag === "TD" || tag === "TH") && spanOk(attr.value));
+            : name === "data-w" ? (cell && widthOk(attr.value))
+            : name === "data-colour" ? (tag === "SPAN" && colourOk(attr.value))
+            : (SPAN_ATTRS.has(name) && cell && spanOk(attr.value));
           if (!keep) child.removeAttribute(attr.name);
         }
         // An image with no bytes behind it is not an image. Dropped rather
@@ -103,6 +125,15 @@
         // been stripped, because this app opens from one file with no network
         // and cannot fetch it later.
         if (tag === "IMG" && !child.getAttribute("data-blob")) child.remove();
+        // A span exists here only to carry a colour. One that lost its colour
+        // to the checks above is not markup any more, so the text comes out
+        // and the tag goes - otherwise every stripped span survives forever as
+        // an invisible wrapper around its own contents.
+        if (tag === "SPAN" && !child.getAttribute("data-colour")) {
+          const parent = child.parentNode;
+          while (child.firstChild) parent.insertBefore(child.firstChild, child);
+          child.remove();
+        }
       }
     };
     walk(doc.body);
@@ -655,6 +686,19 @@
                      title="${esc(label)}" aria-label="${esc(label)}"
                      tabindex="-1">${face}</button>`).join("")}
         </span>
+        <span class="richsep"></span>
+        <span class="tablezoom inline">${zoomButtons()}</span>
+        <span class="richsep"></span>
+        <button type="button" class="richbtn" data-colouropen="${id}"
+                title="Text colour" aria-label="Text colour" tabindex="-1">A</button>
+        <div class="colourpicker" data-colours="${id}" hidden>
+          ${TEXT_COLOURS.map((c) =>
+            `<button type="button" class="swatch" data-colour-set="${c}" data-for="${id}"
+                     title="${esc(c)}" aria-label="${esc(c)}" tabindex="-1"
+                     style="background:var(--c-${c})"></button>`).join("")}
+          <button type="button" class="swatch none" data-colour-set="" data-for="${id}"
+                  title="No colour" aria-label="No colour" tabindex="-1"></button>
+        </div>
       </div>
       <div class="tablepicker" data-picker="${id}" hidden></div>`;
   }
@@ -1187,6 +1231,7 @@
         </div>
       </div>`;
     box.hidden = false;
+    paintTables(box);
     wireCapitals(box);
     wireLinks(box);
     wireRich(box);
@@ -1292,6 +1337,7 @@
         </div>
       </div>`;
     box.hidden = false;
+    paintTables(box);
     return new Promise((resolve) => {
       const close = () => {
         box.hidden = true;
@@ -1585,6 +1631,255 @@
    * Called on the tick after a render, the same way paintShots is, because
    * scrollHeight is meaningless until the DOM exists.
    */
+  /* ---------- table width, and table zoom ----------
+
+     Two different kinds of thing, deliberately stored in two different places.
+
+     A COLUMN WIDTH is part of the document. You set it because that column
+     needs the room, and everyone reading the update should see it, so it is
+     saved with the text - as the plain integer cleanHtml validates, never as
+     CSS.
+
+     A ZOOM LEVEL is not part of the document. It is how big you personally
+     want to see the table right now, on this screen. It lives in this
+     browser's own settings beside the theme, so it survives a reload and
+     follows you around the app, and nothing about it is written into anyone's
+     update.
+
+     Both are applied HERE, in code, rather than by markup a stored document
+     supplied - which is what lets the sanitizer keep refusing style outright. */
+
+  const ZOOM_KEY = "tracker.tableZoom";
+  const ZOOM_STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+  const zoomLevel = () => {
+    const v = Number(window.TrackerStore.getText(ZOOM_KEY));
+    return ZOOM_STEPS.includes(v) ? v : 1;
+  };
+  const setZoom = (v) => window.TrackerStore.setText(ZOOM_KEY, String(v));
+  /** Step along the ladder, stopping at each end rather than wrapping. */
+  function stepZoom(dir) {
+    const i = ZOOM_STEPS.indexOf(zoomLevel());
+    const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, i + dir))];
+    setZoom(next);
+    paintTables(document);
+  }
+
+  /* Where a table can be resized: the editor only. The reading views show the
+     widths but offer no handles, because there is nothing there to edit. */
+  const EDIT_HOST = ".richbox";
+  const READ_HOST = ".clamptext.rich, .dialogbody";
+  /* Built by joining, never by interpolating a comma-separated list next to
+     " table": `${READ_HOST} table` attaches the descendant part to the LAST
+     selector only, so it selected the wrapping div instead of the table inside
+     it - which read as widths that silently did not apply, and a zoom that
+     landed on the wrong element. */
+  const RICH_TABLES = [EDIT_HOST, ...READ_HOST.split(",")]
+    .map((h) => h.trim() + " table").join(",");
+  const GRIP = 6;                       // px either side of the boundary
+
+  /** The first row's cells: one per column, and where a width is recorded. */
+  const headCells = (table) => (table.rows && table.rows[0]) ? [...table.rows[0].cells] : [];
+
+  /**
+   * Turn the stored numbers into real widths.
+   *
+   * A table with no width recorded is left completely alone - no fixed layout,
+   * no inline width - so every table written before this existed goes on
+   * sizing itself from its content exactly as it did.
+   */
+  function applyWidths(table) {
+    const cells = headCells(table);
+    let any = false;
+    for (const cell of cells) {
+      const w = Number(cell.getAttribute("data-w"));
+      if (w >= COL_MIN && w <= COL_MAX) { cell.style.width = w + "px"; any = true; }
+      else { cell.style.width = ""; cell.removeAttribute("data-w"); }
+    }
+    // Automatic layout treats a width as a suggestion and overrides it when the
+    // content disagrees, which reads as a drag that did not take. Fixed layout
+    // is what makes the number mean what it says.
+    table.style.tableLayout = any ? "fixed" : "";
+  }
+
+  /**
+   * Apply widths and the current zoom to every rich table under `root`, and
+   * put a zoom control above the tables in a reading view.
+   *
+   * Runs after a render, alongside paintClamps, for the same reason: none of
+   * this can be measured or attached until the DOM exists.
+   */
+  function paintTables(root = document) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const z = zoomLevel();
+    for (const table of scope.querySelectorAll(RICH_TABLES)) {
+      applyWidths(table);
+      // zoom, not transform: a transform leaves the browser's idea of where
+      // the text and the caret are at the old size, which makes a scaled
+      // contenteditable table impossible to type in.
+      table.style.zoom = z === 1 ? "" : String(z);
+    }
+    for (const host of scope.querySelectorAll(READ_HOST)) {
+      if (host.querySelector("table")) ensureZoomBar(host);
+    }
+    if (scope !== document && scope.matches && scope.matches(READ_HOST) &&
+        scope.querySelector("table")) ensureZoomBar(scope);
+  }
+
+  /** One zoom control per reading block, inserted once and reused after that. */
+  function ensureZoomBar(host) {
+    const prev = host.previousElementSibling;
+    if (prev && prev.classList.contains("tablezoom")) return prev;
+    const bar = host.ownerDocument.createElement("div");
+    bar.className = "tablezoom";
+    // Sits OUTSIDE the clamped text on purpose: paintClamps measures that
+    // element's height to decide whether to offer "Show more", and a control
+    // added inside it would be measured as part of the prose.
+    bar.innerHTML = zoomButtons();
+    host.parentNode.insertBefore(bar, host);
+    return bar;
+  }
+
+  const zoomButtons = () => `
+      <button type="button" class="richbtn" data-zoom="out" tabindex="-1"
+              title="Zoom out" aria-label="Zoom out">\u2212</button>
+      <button type="button" class="richbtn" data-zoom="reset" tabindex="-1"
+              title="Reset zoom to 100%" aria-label="Reset zoom">\u25a3</button>
+      <button type="button" class="richbtn" data-zoom="in" tabindex="-1"
+              title="Zoom in" aria-label="Zoom in">+</button>`;
+
+  /* ---------- text colour ----------
+
+     The stored form is the NAME of a swatch, never a colour value: cleanHtml
+     accepts "amber" and nothing else, and the stylesheet turns that name into
+     a colour that is legible on BOTH the dark and the light background. A
+     colour picked here therefore cannot become invisible when the theme is
+     switched, which is exactly what a free-form hex value would do.
+
+     execCommand("foreColor") is deliberately not used: it writes inline style
+     or a <font> tag, both of which the sanitizer strips, so the colour would
+     vanish on save. The span is built here instead. */
+  function applyColour(box, name) {
+    const doc = box.ownerDocument;
+    const sel = doc.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!box.contains(range.commonAncestorContainer)) return;
+    if (range.collapsed) return;                 // nothing selected, nothing to colour
+
+    // Clear first, always: colouring a run that already carries a colour must
+    // replace it rather than nest a second span inside the first.
+    const contents = range.extractContents();
+    for (const span of [...contents.querySelectorAll("span[data-colour]")]) {
+      const parent = span.parentNode;
+      while (span.firstChild) parent.insertBefore(span.firstChild, span);
+      span.remove();
+    }
+    if (name) {
+      const span = doc.createElement("span");
+      span.setAttribute("data-colour", name);
+      span.appendChild(contents);
+      range.insertNode(span);
+      range.selectNodeContents(span);
+    } else {
+      range.insertNode(contents);
+    }
+    sel.removeAllRanges();
+    sel.addRange(range);
+    box.focus();
+  }
+
+  document.addEventListener("click", (e) => {
+    const open = e.target.closest && e.target.closest("[data-colouropen]");
+    if (open) {
+      e.preventDefault();
+      const picker = document.querySelector(
+        `[data-colours="${cssEsc(open.dataset.colouropen)}"]`);
+      if (picker) picker.hidden = !picker.hidden;
+      return;
+    }
+    const pick = e.target.closest && e.target.closest("[data-colour-set]");
+    if (!pick) return;
+    e.preventDefault();
+    const box = document.getElementById(pick.dataset.for);
+    // An unknown name would be stripped on save, so it is refused here too
+    // rather than looking as though it worked until the panel is reopened.
+    const name = pick.dataset.colourSet;
+    if (box && (name === "" || colourOk(name))) applyColour(box, name);
+    const picker = pick.closest(".colourpicker");
+    if (picker) picker.hidden = true;
+  });
+
+  /* ---------- dragging a column edge ----------
+     Pointer events rather than mouse events, so a stylus and a touch drag work
+     the same way, and one capture rather than a listener added and removed per
+     drag. */
+  let colDrag = null;
+
+  /** The column boundary under this event, if the pointer is on one. */
+  function gripAt(e) {
+    if (!e.target || !e.target.closest) return null;
+    const box = e.target.closest(EDIT_HOST);
+    if (!box) return null;
+    const cell = e.target.closest("td,th");
+    if (!cell) return null;
+    const r = cell.getBoundingClientRect();
+    if (e.clientX < r.right - GRIP) return null;
+    const table = cell.closest("table");
+    const head = headCells(table)[cell.cellIndex];
+    return head ? { box, table, head } : null;
+  }
+
+  document.addEventListener("pointermove", (e) => {
+    if (colDrag) {
+      // The delta is in SCREEN pixels and the stored width is in CSS pixels,
+      // which are not the same thing while the table is zoomed. Dividing by
+      // the level is what stops a drag at 200% moving the edge twice as far
+      // as the pointer.
+      const moved = (e.clientX - colDrag.startX) / (zoomLevel() || 1);
+      const w = Math.round(Math.min(COL_MAX, Math.max(COL_MIN, colDrag.startW + moved)));
+      colDrag.head.setAttribute("data-w", String(w));
+      applyWidths(colDrag.table);
+      e.preventDefault();
+      return;
+    }
+    // Not dragging: say whether an edge is grabbable before it is grabbed.
+    const box = e.target && e.target.closest && e.target.closest(EDIT_HOST);
+    if (box) box.style.cursor = gripAt(e) ? "col-resize" : "";
+  });
+
+  document.addEventListener("pointerdown", (e) => {
+    const grip = gripAt(e);
+    if (!grip) return;
+    e.preventDefault();                 // never start a text selection instead
+    colDrag = {
+      table: grip.table, head: grip.head, startX: e.clientX,
+      startW: grip.head.getBoundingClientRect().width / (zoomLevel() || 1),
+    };
+    try { grip.box.setPointerCapture(e.pointerId); } catch { /* not fatal */ }
+  });
+
+  const endDrag = () => { colDrag = null; };
+  document.addEventListener("pointerup", endDrag);
+  document.addEventListener("pointercancel", endDrag);
+
+  // Double-clicking a boundary gives the column back to automatic sizing.
+  document.addEventListener("dblclick", (e) => {
+    const grip = gripAt(e);
+    if (!grip) return;
+    e.preventDefault();
+    grip.head.removeAttribute("data-w");
+    applyWidths(grip.table);
+  });
+
+  document.addEventListener("click", (e) => {
+    const z = e.target.closest && e.target.closest("[data-zoom]");
+    if (!z) return;
+    e.preventDefault();
+    const how = z.dataset.zoom;
+    if (how === "reset") { setZoom(1); paintTables(document); }
+    else stepZoom(how === "in" ? 1 : -1);
+  });
+
   function paintClamps(root = document) {
     for (const box of root.querySelectorAll("[data-clamp]")) {
       const text = box.querySelector(".clamptext");
@@ -1692,6 +1987,6 @@
   });
 
   window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, ATT_MAX,
-                       paintImages, imageRefs, storeImage, clampBlock, paintClamps, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
+                       paintImages, imageRefs, storeImage, clampBlock, paintClamps, paintTables, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
