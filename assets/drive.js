@@ -306,7 +306,9 @@
       renderAiSettings();
       $("#settingsModal").hidden = false;
     }
-    if (e.target.id === "settingsCancel" || e.target.id === "settingsModal") $("#settingsModal").hidden = true;
+    // Cancel only, never the backdrop: this dialog holds a Client ID, an API
+    // key and the AI setup, and a click beside it used to discard the lot.
+    if (e.target.id === "settingsCancel") $("#settingsModal").hidden = true;
     if (e.target.id === "settingsSave") {
       window.TrackerStore.setText("tracker.clientId", $("#clientId").value.trim());
       window.TrackerStore.setText("tracker.apiKey", $("#apiKey").value.trim());
