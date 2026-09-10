@@ -283,7 +283,7 @@ const restored = await site.evaluate(async () => {
   window.TrackerStore.setScope("uid-R");
   await window.TrackerSync.start({ id: "uid-R", name: "R", kind: "hosted" });
   saved.length = 0;
-  const n = window.TrackerStore.importData({
+  const n = await window.TrackerStore.importData({
     format: "project-tracker-backup", version: 1, savedAt: "2026-01-01T00:00:00Z",
     keys: { "tracker.tasks": JSON.stringify([{ name: "FROM-A-BACKUP" }]),
             "tracker.projects": JSON.stringify([{ id: "p1" }]) },

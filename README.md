@@ -131,9 +131,16 @@ account to any computer. Two things deliberately stay on the device:
   These describe the machine, not the content, exactly as the backup file
   already treats them.
 - **Task attachments.** Image and file bytes live in the browser's IndexedDB
-  and are not mirrored. Your tasks follow you; the pictures attached to them
-  do not. Carrying those needs Firebase Storage, which is a separate service
-  and has deliberately been left out.
+  and are not mirrored to Firestore. Your tasks follow you between computers
+  through the account; the pictures attached to them do not. Carrying those
+  through the account needs Firebase Storage, which is a separate service and
+  has deliberately been left out.
+
+  **The backup file does carry them.** Save as file → Restore from file moves
+  everything, pictures included, which is the way to move a tracker with its
+  images to another computer today. A backup saved before this existed holds
+  no pictures and says so when you restore it — take a fresh one on the
+  computer that still has them.
 
 ### The offline copy
 
