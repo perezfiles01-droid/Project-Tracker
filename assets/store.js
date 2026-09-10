@@ -461,6 +461,40 @@
   }
 
   /**
+   * What a backup would contain, without building one.
+   *
+   * Sizes are read from the blobs rather than encoded, because the dialog
+   * only needs a number and base64-encoding every picture to show one would
+   * make opening Backup slow in exactly the trackers that need it most.
+   * The counts come from the same collectBlobs rule the file uses, so what
+   * the dialog says and what the file holds cannot drift apart.
+   */
+  async function backupStats() {
+    const payload = exportData();
+    const text = JSON.stringify(payload).length;
+    const hay = JSON.stringify(payload.keys || {});
+    let ids = [];
+    try { ids = await listBlobs(); } catch { ids = []; }
+    let pictures = 0, bytes = 0;
+    for (const id of ids) {
+      if (!hay.includes(id)) continue;
+      try {
+        const blob = await getBlob(id);
+        if (!blob) continue;
+        pictures++; bytes += blob.size || 0;
+      } catch { /* counted as absent, exactly as the file would carry it */ }
+    }
+    // base64 costs four characters for every three bytes.
+    return { keys: Object.keys(payload.keys).length, pictures, bytes,
+             size: text + Math.ceil(bytes * 4 / 3) };
+  }
+
+  /** A size a person reads, not a number of bytes. */
+  const readableSize = (n) =>
+    n >= 1048576 ? `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`
+                 : `${Math.max(1, Math.round(n / 1024))} KB`;
+
+  /**
    * The whole backup: the data AND the bytes it refers to.
    *
    * Async because IndexedDB is. exportData below stays synchronous and
@@ -592,13 +626,18 @@
   }
 
   async function openBackupDialog() {
-    const n = Object.keys(exportData().keys).length;
+    const stat = await backupStats();
+    const n = stat.keys;
+    const pics = stat.pictures
+      ? `${stat.pictures} picture${stat.pictures === 1 ? "" : "s"} and attachment`
+        + `${stat.pictures === 1 ? "" : "s"} are included, so the file will be about `
+        + `${readableSize(stat.size)}.`
+      : `There are no pictures or attachments to carry.`;
     const answer = await window.TrackerUI.formDialog({
       title: "Backup",
       intro: `Everything you add lives in this browser only. Save it to a file to move `
            + `it to another computer or to keep a copy — ${n} item group${n === 1 ? "" : "s"} `
-           + `to save right now. Task attachments are named in the file but their contents `
-           + `are not included. Restoring REPLACES what is in this browser.`,
+           + `to save right now. ${pics} Restoring REPLACES what is in this browser.`,
       fields: [],
       choices: [
         { value: "save", label: "Save as file", primary: true },
@@ -627,7 +666,7 @@
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
                           setScope, getScope, getSession, setSession, quietSet,
-                          exportData, exportFile, importData, saveToFile, restoreFromFile, openBackupDialog,
+                          exportData, exportFile, backupStats, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };
 })();

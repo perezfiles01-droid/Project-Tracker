@@ -155,6 +155,34 @@ ok("every picture the data refers to has its bytes in the file",
 ok("a blob nothing refers to is not carried", !parsed.blobs[made.orphanId]);
 ok("the file says which version it is", parsed.version === 2, String(parsed.version));
 
+/* --- what the dialog promises must be what the file delivers ---
+   Both read from the app, never from a copy of the number here: the failure
+   this prevents is a dialog that keeps saying "attachments are not included"
+   long after they are, or a count that quietly stops matching. */
+const said = await page.evaluate(() => window.TrackerStore.backupStats());
+ok("the dialog counts the same pictures the file carries",
+   said.pictures === Object.keys(parsed.blobs).length,
+   `dialog ${said.pictures}, file ${Object.keys(parsed.blobs).length}`);
+ok("the dialog counts the same item groups the file carries",
+   said.keys === Object.keys(parsed.keys).length,
+   `dialog ${said.keys}, file ${said.keys}`);
+ok("the size it quotes is in the region of the real file",
+   said.size >= file.length * 0.8 && said.size <= file.length * 1.25,
+   `quoted ${said.size}, actual ${file.length}`);
+
+const intro = await page.evaluate(async () => {
+  // The words themselves, taken from the dialog rather than from the source.
+  let text = "";
+  const real = window.TrackerUI.formDialog;
+  window.TrackerUI.formDialog = (opts) => { text = opts.intro || ""; return Promise.resolve(null); };
+  try { await window.TrackerStore.openBackupDialog(); } finally { window.TrackerUI.formDialog = real; }
+  return text;
+});
+ok("the dialog no longer claims attachments are left out",
+   !/are not included|not included/i.test(intro), intro.slice(0, 160));
+ok("the dialog says the pictures are carried, and how big that makes the file",
+   /picture/i.test(intro) && /\d+(\.\d+)?\s*(KB|MB)/.test(intro), intro.slice(0, 200));
+
 /* --- the other computer --- */
 const other = await browser.newContext();
 const p2 = await other.newPage();
