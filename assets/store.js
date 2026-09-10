@@ -64,7 +64,8 @@
    * millisecond cannot collide.
    */
   const blobId = (prefix) =>
-    prefix + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    (scope ? scope + "-" : "") + prefix + "-" + Date.now() + "-" +
+    Math.random().toString(36).slice(2, 7);
 
   /**
    * The bytes store, for every module.
@@ -130,9 +131,42 @@
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
 
+  /* ---------- account scope ----------
+     Every key above is a logical name. What actually reaches localStorage is
+     that name with the signed-in account's id appended, so two accounts on
+     one computer never read a byte of each other's tracker.
+
+     This is deliberately the ONLY place the mapping happens. Four functions -
+     raw, set, setText, remove - are the whole door to storage for five
+     modules and twenty-one keys, and check_storage.mjs fails the build if a
+     module reaches past them. So one mapper here scopes every key the app has
+     and every key anyone adds later, without another file being touched.
+
+     With no scope set the key is unchanged. That is not a loophole, it is the
+     offline standalone file and the moment before sign-in, where there is no
+     account to scope to and nothing is rendered anyway. */
+  let scope = "";
+  const scoped = (key) => (scope ? key + "::" + scope : key);
+  const getScope = () => scope;
+
+  /**
+   * Point the store at an account, or at nothing on sign-out.
+   *
+   * The history is cleared on every change, and that is not tidiness: a step
+   * remembers a key's previous bytes, so an undo left on the stack across a
+   * sign-in would write one account's content into another account's key.
+   */
+  function setScope(id) {
+    const next = id ? String(id) : "";
+    if (next === scope) return scope;
+    scope = next;
+    clearHistory();
+    return scope;
+  }
+
   /** Raw string read. Returns null when absent, like localStorage itself. */
   const raw = (key) => {
-    try { return localStorage.getItem(key); } catch { return null; }
+    try { return localStorage.getItem(scoped(key)); } catch { return null; }
   };
 
   /**
@@ -150,7 +184,7 @@
 
   const set = (key, value) => {
     record(key);
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    try { localStorage.setItem(scoped(key), JSON.stringify(value)); return true; }
     catch { return false; }
   };
 
@@ -161,12 +195,12 @@
   };
   const setText = (key, value) => {
     record(key);
-    try { localStorage.setItem(key, value); return true; } catch { return false; }
+    try { localStorage.setItem(scoped(key), value); return true; } catch { return false; }
   };
 
   const remove = (key) => {
     record(key);
-    try { localStorage.removeItem(key); } catch { /* nothing to remove */ }
+    try { localStorage.removeItem(scoped(key)); } catch { /* nothing to remove */ }
   };
 
   /* ---------- undo and redo ----------
@@ -269,8 +303,8 @@
     try {
       for (const [k, before] of step.before) {
         inverse.before.set(k, snap(k));
-        if (before === null) { try { localStorage.removeItem(k); } catch { /* ignore */ } }
-        else { try { localStorage.setItem(k, before); } catch { /* ignore */ } }
+        if (before === null) { try { localStorage.removeItem(scoped(k)); } catch { /* ignore */ } }
+        else { try { localStorage.setItem(scoped(k), before); } catch { /* ignore */ } }
       }
     } finally { replaying = false; }
     return inverse;
@@ -436,6 +470,7 @@
   });
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
+                          setScope, getScope,
                           exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };
