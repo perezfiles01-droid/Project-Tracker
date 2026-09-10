@@ -273,6 +273,32 @@ ok("a pull is refused when the store is pointed at a different account",
    JSON.stringify(mismatch.tasks).indexOf("WRONG-ACCOUNT") === -1 && mismatch.state.uid === "",
    JSON.stringify(mismatch.state));
 
+/* A restore writes with the undo history suppressed, and the same flag
+   suppresses the sync notification. Without an explicit announcement the
+   restored file sits in this browser while the other computer keeps the old
+   copy and pushes it back over the top. */
+const restored = await site.evaluate(async () => {
+  const saved = [];
+  window.TrackerSync._use({ async load() { return {}; }, async save(uid, key, value) { saved.push(key); } });
+  window.TrackerStore.setScope("uid-R");
+  await window.TrackerSync.start({ id: "uid-R", name: "R", kind: "hosted" });
+  saved.length = 0;
+  const n = window.TrackerStore.importData({
+    format: "project-tracker-backup", version: 1, savedAt: "2026-01-01T00:00:00Z",
+    keys: { "tracker.tasks": JSON.stringify([{ name: "FROM-A-BACKUP" }]),
+            "tracker.projects": JSON.stringify([{ id: "p1" }]) },
+  });
+  await window.TrackerSync.flush();
+  return { n, saved, undoable: window.TrackerStore.canUndo() };
+});
+ok("a restored backup is carried up to the account", restored.n === 2
+   && restored.saved.includes("tracker.tasks") && restored.saved.includes("tracker.projects"),
+   restored.saved.join(", "));
+ok("a restore announces every data key, so keys it cleared are cleared there too",
+   restored.saved.length === (await site.evaluate(() => window.TrackerStore.KEYS.data.length)),
+   `${restored.saved.length} announced`);
+ok("a restore is still not an undo step", restored.undoable === false);
+
 const stopped = await site.evaluate(async () => {
   window.TrackerSync.stop();
   window.TrackerStore.set("tracker.tasks", [{ name: "AFTER-SIGNOUT" }]);

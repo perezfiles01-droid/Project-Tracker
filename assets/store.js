@@ -446,6 +446,13 @@
       for (const [k, v] of entries) setText(k, v);
     } finally { replaying = false; }
     clearHistory();
+    /* A restore is the one write that would otherwise never reach the account.
+       It runs with replaying set - it is not an undo step - and that same flag
+       suppresses the sync notification, so the file you just loaded would sit
+       in this browser while your other computer kept the old copy and pushed
+       it back over the top. Every data key is announced once, here, after the
+       flag is down. */
+    for (const k of KEYS.data) notify(k);
     return entries.length;
   }
 
