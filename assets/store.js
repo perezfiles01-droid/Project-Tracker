@@ -412,6 +412,67 @@
     paint();
   }
 
+  /* ---------- pictures and files in the backup ----------
+     This app has two stores. What you type is in localStorage under the data
+     keys above; the BYTES of every picture and attachment are in IndexedDB.
+     The backup used to read only the first, so the file carried
+     <img data-blob="img-123"> - the reference - and never the bytes behind
+     it. Restored on another computer, paintImages asked for those bytes, got
+     nothing, and left the <img> with no src at all: a missing picture, no
+     error, nothing in the console.
+
+     Which blobs go in the file is decided by ENUMERATING THE BLOB STORE and
+     keeping every id that appears anywhere in the exported data. Not by
+     walking the six places a picture can currently be referenced from -
+     attachments, a task description, an update's images, an update's text,
+     the activity log, a project's rich text - because that list is stale the
+     moment someone adds a seventh field, and the seventh is exactly the one
+     that would go missing silently, which is this bug again. */
+
+  const b64 = (blob) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(r.error || new Error("unreadable"));
+    r.readAsDataURL(blob);
+  });
+
+  const unb64 = (data, type) => {
+    const bin = atob(data);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: type || "" });
+  };
+
+  /** Every stored blob the exported data actually refers to. */
+  async function collectBlobs(payload) {
+    const hay = JSON.stringify(payload.keys || {});
+    let ids = [];
+    try { ids = await listBlobs(); } catch { return {}; }
+    const out = {};
+    for (const id of ids) {
+      if (!hay.includes(id)) continue;          // referenced by nothing exported
+      try {
+        const blob = await getBlob(id);
+        if (!blob) continue;
+        out[id] = { type: blob.type || "", data: await b64(blob) };
+      } catch { /* one unreadable picture must not lose the whole backup */ }
+    }
+    return out;
+  }
+
+  /**
+   * The whole backup: the data AND the bytes it refers to.
+   *
+   * Async because IndexedDB is. exportData below stays synchronous and
+   * byte-free - it is what the dialog counts with, and what a caller wanting
+   * just the text still gets.
+   */
+  async function exportFile() {
+    const payload = exportData();
+    const blobs = await collectBlobs(payload);
+    return { ...payload, version: 2, blobs };
+  }
+
   /** Everything the backup carries: the data keys that actually hold something. */
   function exportData() {
     const out = {};
@@ -428,7 +489,7 @@
    * readable reason - a bad file must never leave storage half-written, so
    * the whole payload is validated before anything is set.
    */
-  function importData(payload) {
+  async function importData(payload) {
     if (!payload || typeof payload !== "object" || payload.format !== "project-tracker-backup") {
       throw new Error("That is not a Project Tracker backup file.");
     }
@@ -440,6 +501,32 @@
       if (typeof v !== "string") throw new Error("The backup is damaged and was not loaded.");
       JSON.parse(v);                        // throws before anything is written
     }
+
+    /* Pictures, when the file has any. A version 1 file has none and restores
+       exactly as it always did - your existing backups keep working, they
+       simply never held the bytes.
+
+       Decoded in full BEFORE anything is written, and written BEFORE the
+       keys, so the two ways this can go wrong both leave storage as it was:
+       a damaged picture throws while nothing has changed, and a failure
+       putting the bytes down happens while the text is still the old text. */
+    const blobs = payload.blobs;
+    const decoded = [];
+    if (blobs !== undefined && blobs !== null) {
+      if (typeof blobs !== "object") throw new Error("The backup is damaged and was not loaded.");
+      for (const [id, rec] of Object.entries(blobs)) {
+        if (!rec || typeof rec !== "object" || typeof rec.data !== "string") {
+          throw new Error("The pictures in that backup are damaged, so nothing was loaded.");
+        }
+        try { decoded.push([id, unb64(rec.data, rec.type)]); }
+        catch { throw new Error("The pictures in that backup are damaged, so nothing was loaded."); }
+      }
+    }
+    for (const [id, blob] of decoded) {
+      try { await putBlob(id, blob); }
+      catch { throw new Error("There was no room to store the pictures, so nothing was loaded."); }
+    }
+
     replaying = true;                        // a restore is not an undo step
     try {
       for (const k of KEYS.data) remove(k);  // replace, not merge
@@ -458,8 +545,8 @@
 
   /* ---------- Save as file / Restore from file ---------- */
 
-  function saveToFile() {
-    const payload = exportData();
+  async function saveToFile() {
+    const payload = await exportFile();
     const blob = new Blob([JSON.stringify(payload, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -468,7 +555,8 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(a.href);
-    return Object.keys(payload.keys).length;
+    return { keys: Object.keys(payload.keys).length,
+             blobs: Object.keys(payload.blobs || {}).length };
   }
 
   /** Read one chosen file and load it. Resolves with a message to show. */
@@ -481,10 +569,15 @@
         const file = input.files && input.files[0];
         if (!file) return resolve(null);
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           try {
-            const n = importData(JSON.parse(String(reader.result)));
-            resolve({ ok: true, message: `Restored ${n} item group${n === 1 ? "" : "s"}.` });
+            const parsed = JSON.parse(String(reader.result));
+            const n = await importData(parsed);
+            const pics = Object.keys(parsed.blobs || {}).length;
+            resolve({ ok: true, message: `Restored ${n} item group${n === 1 ? "" : "s"}`
+              + (pics ? `, with ${pics} picture${pics === 1 ? "" : "s"}.`
+                      : `. This file carried no pictures — it was saved by an older version, `
+                        + `so take a fresh backup on the computer that still has them.`) });
           } catch (e) {
             // Nothing was written: importData validates the whole payload
             // before it touches storage, so a bad file cannot half-load.
@@ -514,7 +607,7 @@
     });
     if (!answer) return;
     if (answer.choice === "save") {
-      saveToFile();
+      await saveToFile();
       return;
     }
     const res = await restoreFromFile();
@@ -534,7 +627,7 @@
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
                           setScope, getScope, getSession, setSession, quietSet,
-                          exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
+                          exportData, exportFile, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };
 })();
