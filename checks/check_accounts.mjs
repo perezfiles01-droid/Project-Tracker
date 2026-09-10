@@ -14,6 +14,8 @@
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -86,14 +88,25 @@ const shape = await page.evaluate(() => {
   return {
     a: all.filter((k) => k.endsWith("::account-A")).length,
     b: all.filter((k) => k.endsWith("::account-B")).length,
-    bare: all.filter((k) => !k.includes("::")).length,
+    bare: all.filter((k) => !k.includes("::") && k !== "tracker.session"),
   };
 });
 ok("each account has its own set of real storage keys",
    shape.a === keys.length && shape.b === keys.length,
    `A ${shape.a}, B ${shape.b}, of ${keys.length}`);
-ok("nothing was written to an unscoped key while signed in",
-   shape.bare === 0, `${shape.bare} unscoped`);
+// tracker.session is the ONE deliberately unscoped key: it is the pointer that
+// selects the scope, so it cannot itself be behind the scope. Anything else
+// unscoped is a key that escaped the mapper.
+ok("nothing but the session pointer was written to an unscoped key",
+   shape.bare.length === 0, shape.bare.join(", ") || "0 unscoped");
+
+const session = await page.evaluate(() => {
+  window.TrackerStore.setSession({ id: "u1", name: "N", email: "e@x", kind: "hosted",
+                                   password: "hunter2", token: "secret-token" });
+  return localStorage.getItem("tracker.session");
+});
+ok("the session pointer carries no credential",
+   !/hunter2|secret-token|password|token/i.test(session || ""), session);
 
 /* --- undo must not be able to replay one account's bytes into another --- */
 const history = await page.evaluate(() => {
@@ -116,6 +129,102 @@ const exported = await page.evaluate(() => {
 });
 ok("a backup carries the signed-in account's data",
    exported !== null && !String(exported).includes("A's task"), String(exported).slice(0, 40));
+
+/* ---------- the gate ----------
+   Served over http, because the offline file has no origin a sign-in could
+   work against and deliberately runs as one device account. The assertion
+   that matters is that the tracker is not merely hidden while signed out -
+   it was never rendered, so there is nothing in the page to read. */
+const server = createServer((req, res) => {
+  const rel = decodeURIComponent((req.url || "/").split("?")[0]);
+  const file = join(root, rel === "/" ? "index.html" : rel.replace(/^\/+/, ""));
+  if (!file.startsWith(root)) { res.writeHead(403).end(); return; }
+  try {
+    const type = file.endsWith(".js") ? "text/javascript"
+      : file.endsWith(".css") ? "text/css"
+      : file.endsWith(".json") ? "application/json"
+      : file.endsWith(".svg") ? "image/svg+xml" : "text/html";
+    res.writeHead(200, { "content-type": type }).end(readFileSync(file));
+  } catch { res.writeHead(404).end("no"); }
+});
+await new Promise((r) => server.listen(0, "127.0.0.1", r));
+const origin = `http://127.0.0.1:${server.address().port}`;
+
+const site = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+const siteErrors = [];
+site.on("pageerror", (e) => siteErrors.push(String(e)));
+await site.goto(origin + "/index.html", { waitUntil: "load" });
+await site.waitForTimeout(600);
+
+const SECRET = /SECRETTASK|SECRETLINK/;
+
+ok("the hosted page shows a sign-in screen, not the tracker",
+   await site.evaluate(() => !!document.querySelector(".acct-gate")));
+ok("the sidebar navigation is empty while signed out",
+   await site.evaluate(() => document.querySelector("#nav").innerHTML.trim() === ""));
+ok("the page marks itself signed out, so its chrome can be hidden",
+   await site.evaluate(() => document.body.dataset.signedIn === "no"));
+
+/* --- sign in, and put real content on the screen ---
+   Seeded into the account that is actually signed in and then RENDERED, so
+   the absence assertion after the sign-out has something to be the absence
+   OF. Seeding an account nobody is signed into would make it pass whatever
+   the gate did, which is a check that cannot fail. */
+await site.click("#acctDevice");
+await site.waitForTimeout(400);
+ok("signing in draws the tracker",
+   await site.evaluate(() => !document.querySelector(".acct-gate")
+     && document.body.dataset.signedIn === "yes"));
+ok("the sidebar says who is signed in, and offers a way out",
+   await site.evaluate(() => !!document.querySelector("#acctOut")
+     && document.querySelector("#acct").textContent.trim().length > 0));
+
+await site.evaluate(() => {
+  window.TrackerStore.set("tracker.tasks",
+    [{ id: "t1", name: "SECRETTASK", status: "Open", created: new Date().toISOString() }]);
+  window.TrackerStore.set("tracker.userLinks",
+    [{ name: "SECRETLINK", url: "https://example.com", project: "Ad hoc" }]);
+  window.TrackerGo("todo");
+});
+await site.waitForTimeout(300);
+const bodyIn = await site.evaluate(() => document.body.innerHTML);
+ok("the signed-in account's own content really is on the screen",
+   SECRET.test(bodyIn), "so its absence below means something");
+
+/* --- and signing out takes it away --- */
+await site.click("#acctOut");
+await site.waitForTimeout(400);
+const bodyAfter = await site.evaluate(() => document.body.innerHTML);
+ok("signing out returns to the screen and empties the view",
+   await site.evaluate(() => !!document.querySelector(".acct-gate")));
+ok("nothing of the signed-out account survives in the page",
+   !SECRET.test(bodyAfter));
+
+ok("the store is pointed at no account after signing out",
+   await site.evaluate(() => window.TrackerStore.getScope() === ""));
+
+/* --- and the next account in sees none of it --- */
+await site.evaluate(() => {
+  window.TrackerStore.setSession(null);
+  window.TrackerAccount.init();
+});
+await site.click("#acctDevice");
+await site.waitForTimeout(300);
+await site.evaluate(() => { window.TrackerStore.setScope("a-different-person"); window.TrackerRender(); });
+await site.waitForTimeout(300);
+ok("a different account signing in sees none of the first account's content",
+   !SECRET.test(await site.evaluate(() => document.body.innerHTML)));
+/* --- a hosted account must never be restorable from the pointer alone --- */
+const forged = await site.evaluate(async () => {
+  window.TrackerStore.setSession({ id: "someone-else", name: "Someone", kind: "hosted" });
+  await window.TrackerAccount.init();
+  return { user: window.TrackerAccount.current(), scope: window.TrackerStore.getScope() };
+});
+ok("editing the session pointer cannot sign you in as a hosted account",
+   forged.user === null && forged.scope === "", JSON.stringify(forged));
+
+ok("no page errors on the hosted page", siteErrors.length === 0, siteErrors.join(" | "));
+server.close();
 
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

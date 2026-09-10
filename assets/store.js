@@ -164,6 +164,29 @@
     return scope;
   }
 
+  /* ---------- who is signed in ----------
+     Deliberately NOT one of the keys above, and deliberately NOT scoped: it
+     is the pointer that SELECTS the scope, so scoping it would make it
+     unreadable until you were already signed in, which is a circle.
+
+     It holds an id and a display name and nothing else. No password, no
+     token, no key - a credential in localStorage would be readable by
+     anything that can read the tracker it is supposed to protect.
+
+     It lives here rather than in account.js because this file is the only
+     one allowed to touch localStorage, and check_storage.mjs fails the build
+     if that stops being true. */
+  const SESSION = "tracker.session";
+  const getSession = () => {
+    try { return JSON.parse(localStorage.getItem(SESSION) || "null"); } catch { return null; }
+  };
+  const setSession = (who) => {
+    try {
+      if (who) localStorage.setItem(SESSION, JSON.stringify({ id: who.id, name: who.name || "", email: who.email || "", kind: who.kind || "" }));
+      else localStorage.removeItem(SESSION);
+    } catch { /* storage blocked; the session simply does not survive a reload */ }
+  };
+
   /** Raw string read. Returns null when absent, like localStorage itself. */
   const raw = (key) => {
     try { return localStorage.getItem(scoped(key)); } catch { return null; }
@@ -470,7 +493,7 @@
   });
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
-                          setScope, getScope,
+                          setScope, getScope, getSession, setSession,
                           exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };

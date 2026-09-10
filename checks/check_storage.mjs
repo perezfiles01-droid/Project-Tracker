@@ -44,6 +44,22 @@ for (const f of files) {
   ok(`${f}: goes through TrackerStore, not localStorage`, hits.length === 0, hits.join(" | "));
 }
 
+/* The scoping that makes this app account-based is one mapper inside
+   store.js. It stays a one-file change only while no other module builds a
+   scoped key itself - a module appending its own "::" + id would be storage
+   this file no longer owns, and the isolation would be true in one place and
+   assumed in another. */
+for (const f of files) {
+  if (f === "store.js") continue;
+  // Strings KEPT here: the thing being searched for IS a string literal, and
+  // the default stripper removes those - which made the first version of this
+  // assertion unable to fail at all. Comments still go, so a "::" in prose is
+  // never a hit.
+  const exec = code(readFileSync(join(assets, f), "utf8"), true);
+  const hits = [...exec.matchAll(/["'`]::["'`]/g)].map((m) => m[0]);
+  ok(`${f}: does not build a scoped key itself`, hits.length === 0, hits.join(" | "));
+}
+
 // Every key any module names must be declared, or the backup misses it.
 const store = readFileSync(join(assets, "store.js"), "utf8");
 const declared = new Set([...store.matchAll(/"(tracker\.[A-Za-z]+)"/g)].map((m) => m[1]));

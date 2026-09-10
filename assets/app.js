@@ -458,6 +458,28 @@
   });
 
   function render() {
+    /* The gate. Drawn BEFORE anything reads state.data, because "signing out
+       shows nothing of the other account" is only true if the content was
+       never rendered in the first place - a view built and then hidden is
+       still in the page for anyone who looks.
+
+       Fails closed on purpose: no account module means no tracker, rather
+       than a tracker with everybody's data in it. */
+    const acct = window.TrackerAccount;
+    document.body.dataset.signedIn = acct && acct.current() ? "yes" : "no";
+    if (!acct) {
+      $("#nav").innerHTML = "";
+      $("#view").innerHTML = `<div class="empty">Sign-in did not load, so the tracker
+        is not being shown. Reload the page.</div>`;
+      return;
+    }
+    $("#acct").innerHTML = acct.sidebar();
+    if (!acct.current()) {
+      $("#nav").innerHTML = "";
+      $("#view").innerHTML = acct.view();
+      return;
+    }
+    if (!state.data) { $("#view").innerHTML = `<div class="empty">Loading…</div>`; return; }
     renderNav();
     paintHistory();
     let html;
@@ -563,6 +585,10 @@
   });
 
   /* ---------- boot ---------- */
+  // The account is settled first: render() will not draw the tracker until it
+  // knows whose it is, and init() calls render itself once it does.
+  if (window.TrackerAccount) window.TrackerAccount.init();
+  else render();
   fetch("data/tracker.json")
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((d) => {

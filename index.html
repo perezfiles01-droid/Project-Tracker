@@ -18,6 +18,9 @@
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
+      <!-- Who you are signed in as, and the way out. Filled by account.js;
+           empty, and hidden by CSS, until an account is known. -->
+      <div class="acct" id="acct"></div>
       <!-- Undo and redo sit above the links because they act on what you were
            just doing, not on a page you are going to. Disabled rather than
            hidden, so they do not move as you work. -->
@@ -112,6 +115,7 @@
 
 <script src="config.js"></script>
 <script src="assets/store.js"></script>
+<script src="assets/account.js"></script>
 <script src="assets/ai.js"></script>
 <script src="assets/ui.js"></script>
 <script src="assets/tasks.js"></script>
