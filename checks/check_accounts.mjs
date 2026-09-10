@@ -223,8 +223,101 @@ const forged = await site.evaluate(async () => {
 ok("editing the session pointer cannot sign you in as a hosted account",
    forged.user === null && forged.scope === "", JSON.stringify(forged));
 
+/* ---------- the mirror ----------
+   Exercised through the sync layer's test seam rather than a real Firebase
+   project, so the part that is actually ours - which account a value is
+   filed under, and whether a value arriving from elsewhere lands in the undo
+   history - is asserted rather than assumed. */
+await site.evaluate(() => window.TrackerAccount.signOut());
+await site.waitForTimeout(200);
+
+const sync = await site.evaluate(async () => {
+  const saved = [];
+  window.TrackerSync._use({
+    async load(uid) { return uid === "uid-A" ? { "tracker.tasks": JSON.stringify([{ name: "FROM-THE-CLOUD" }]) } : {}; },
+    async save(uid, key, value) { saved.push({ uid, key, value }); },
+  });
+  window.TrackerStore.setScope("uid-A");
+  await window.TrackerSync.start({ id: "uid-A", name: "A", kind: "hosted" });
+  const pulled = window.TrackerStore.get("tracker.tasks", null);
+  const undoable = window.TrackerStore.canUndo();
+  // A local edit, flushed at once rather than waited out.
+  window.TrackerStore.set("tracker.activity", [{ date: "2026-01-01" }]);
+  window.TrackerStore.setText("tracker.theme", "dark");   // a setting, not data
+  await window.TrackerSync.flush();
+  return { pulled, undoable, saved, scope: window.TrackerStore.getScope() };
+});
+
+ok("a hosted account's tracker is pulled down into that account",
+   JSON.stringify(sync.pulled) === JSON.stringify([{ name: "FROM-THE-CLOUD" }]), JSON.stringify(sync.pulled));
+ok("the pulled tracker is stored under that account's scope",
+   sync.scope === "uid-A", sync.scope);
+ok("what arrived from elsewhere is not in this browser's undo history",
+   sync.undoable === false, "canUndo " + sync.undoable);
+ok("a local edit is filed under the signed-in account",
+   sync.saved.some((w) => w.uid === "uid-A" && w.key === "tracker.activity"),
+   JSON.stringify(sync.saved.map((w) => w.uid + "/" + w.key)));
+ok("a machine-local setting is never sent to the account's database",
+   !sync.saved.some((w) => w.key === "tracker.theme"),
+   sync.saved.map((w) => w.key).join(", "));
+
+const mismatch = await site.evaluate(async () => {
+  const saved = [];
+  window.TrackerSync._use({ async load() { return { "tracker.tasks": JSON.stringify([{ name: "WRONG-ACCOUNT" }]) }; },
+                            async save(uid, key, value) { saved.push({ uid, key, value }); } });
+  window.TrackerStore.setScope("uid-B");
+  await window.TrackerSync.start({ id: "uid-A", name: "A", kind: "hosted" });
+  return { tasks: window.TrackerStore.get("tracker.tasks", null), saved, state: window.TrackerSync._state() };
+});
+ok("a pull is refused when the store is pointed at a different account",
+   JSON.stringify(mismatch.tasks).indexOf("WRONG-ACCOUNT") === -1 && mismatch.state.uid === "",
+   JSON.stringify(mismatch.state));
+
+const stopped = await site.evaluate(async () => {
+  window.TrackerSync.stop();
+  window.TrackerStore.set("tracker.tasks", [{ name: "AFTER-SIGNOUT" }]);
+  await window.TrackerSync.flush();
+  return window.TrackerSync._state();
+});
+ok("nothing is written to an account after it signs out",
+   stopped.uid === "" && stopped.queued.length === 0, JSON.stringify(stopped));
+
 ok("no page errors on the hosted page", siteErrors.length === 0, siteErrors.join(" | "));
 server.close();
+
+/* ---------- the boundary ----------
+   The scoping in the browser is a convenience. What actually stops one
+   account reading another is the server applying these rules, so they are
+   asserted as committed - a rule file that says the right thing only in the
+   Firebase console is a rule file nobody can review. */
+const rules = readFileSync(join(root, "firestore.rules"), "utf8");
+ok("the rules are committed alongside the code they protect", rules.length > 0);
+/* EVERY grant, not "the rules mention a uid somewhere". The first version of
+   this assertion searched the whole file, so loosening one rule to "any
+   signed-in person" still passed on the strength of the rule beside it -
+   which is a check that reads exactly like protection and is not. */
+const grants = [...rules.matchAll(/allow\s+([a-z,\s]+):\s*if\s+([^;]+);/g)]
+  .map((m) => ({ what: m[1].trim(), cond: m[2].replace(/\s+/g, " ").trim() }));
+ok("the rules actually grant something", grants.length > 0, `${grants.length} grants`);
+const loose = grants.filter((g) =>
+  !/^false$/.test(g.cond) && !/request\.auth\.uid\s*==\s*uid/.test(g.cond));
+ok("every grant is tied to the signed-in account's own uid",
+   loose.length === 0, loose.map((g) => `${g.what}: ${g.cond}`).join(" | ") || `${grants.length} checked`);
+ok("no grant forgets to require a signed-in account at all",
+   grants.every((g) => /^false$/.test(g.cond) || /request\.auth\s*!=\s*null/.test(g.cond)));
+const paths = [...rules.matchAll(/match\s+(\S+)\s*\{/g)].map((m) => m[1]);
+const stray = paths.filter((x) =>
+  !/^\/databases\/\{database\}\/documents$/.test(x)
+  && !/^\/accounts\/\{uid\}$/.test(x)
+  && !/^\/keys\/\{key\}$/.test(x)
+  && !/^\/\{document=\*\*\}$/.test(x));
+ok("nothing outside an account's own subtree is granted", stray.length === 0,
+   stray.join(", ") || paths.join(" | "));
+ok("everything not named is refused", /match\s+\/\{document=\*\*\}[\s\S]*?allow read, write:\s*if\s+false/.test(rules));
+
+/* --- and with no Firebase project configured the site must still work --- */
+ok("with no sign-in configured the app still offers a working tracker",
+   await site.evaluate(() => window.TrackerAuth.available() === false));
 
 ok("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

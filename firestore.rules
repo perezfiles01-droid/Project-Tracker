@@ -1,0 +1,39 @@
+/* What one account may reach in the database.
+
+   The scoping in assets/store.js keeps two accounts apart in the browser.
+   That is a convenience, not a boundary: anything running in the page can
+   ask for whatever it likes. THIS is the boundary, because the server
+   applies it and nothing in the browser can talk it out of it.
+
+   The rule is one sentence: you may read and write your own account and
+   nothing else. Not another account's keys, not a list of who else exists,
+   not the profile of anyone but you.
+
+   Paste this into the Firebase console -> Firestore Database -> Rules, and
+   press Publish. Until you do, Firestore is in its default mode and either
+   refuses everything or, if you chose test mode, allows everything for
+   thirty days - and test mode means any signed-in person can read every
+   account. Publish these before you put anything real in it. */
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Your own account record: your email, your name, when you last signed in.
+    match /accounts/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Your tracker itself - one document per stored key.
+      match /keys/{key} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Anything not named above is refused. Stated rather than left implicit,
+    // so a collection added later is closed until someone decides otherwise
+    // rather than open because nobody thought about it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

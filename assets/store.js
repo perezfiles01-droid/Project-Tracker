@@ -205,10 +205,40 @@
     try { return JSON.parse(v); } catch { return fallback; }
   };
 
+  /* ---------- the sync layer, when there is one ----------
+     store.js does not know what TrackerSync is or where it writes. It only
+     says which key changed. That keeps this file the owner of storage
+     whether or not the app is signed in to anything, and it means a key
+     added later is synced without this file being edited.
+
+     Only the data keys go. A setting is a fact about this device - the
+     theme, the table zoom, the Google client id pasted into this browser -
+     and belongs in the machine it was set on, exactly as the backup already
+     decides.
+
+     quietSet is the way back in. A value that arrived from your other
+     computer is not something you did on this one, so it must not land in
+     the undo history: undoing it would "restore" a state this browser was
+     never in. */
+  const notify = (key) => {
+    if (replaying || !KEYS.data.includes(key)) return;
+    try { window.TrackerSync && window.TrackerSync.changed(key); }
+    catch { /* a sync failure must never take a local write down with it */ }
+  };
+  const quietSet = (key, value) => {
+    replaying = true;
+    try {
+      if (value === null || value === undefined) remove(key);
+      else setText(key, value);
+    } finally { replaying = false; }
+  };
+
   const set = (key, value) => {
     record(key);
-    try { localStorage.setItem(scoped(key), JSON.stringify(value)); return true; }
+    try { localStorage.setItem(scoped(key), JSON.stringify(value)); }
     catch { return false; }
+    notify(key);
+    return true;
   };
 
   /** For the two plain strings (client id, api key) that are not JSON. */
@@ -218,12 +248,15 @@
   };
   const setText = (key, value) => {
     record(key);
-    try { localStorage.setItem(scoped(key), value); return true; } catch { return false; }
+    try { localStorage.setItem(scoped(key), value); } catch { return false; }
+    notify(key);
+    return true;
   };
 
   const remove = (key) => {
     record(key);
     try { localStorage.removeItem(scoped(key)); } catch { /* nothing to remove */ }
+    notify(key);
   };
 
   /* ---------- undo and redo ----------
@@ -493,7 +526,7 @@
   });
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
-                          setScope, getScope, getSession, setSession,
+                          setScope, getScope, getSession, setSession, quietSet,
                           exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };

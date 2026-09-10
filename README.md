@@ -71,6 +71,76 @@ because the workbook itself lives in SharePoint. The build script re-roots those
 Those are flagged with an amber **check link** badge — open each one once and, if it
 is wrong, fix the hyperlink in the workbook and rebuild.
 
+## Turning on accounts
+
+The tracker is account-based. Everything you write — tasks, activity log,
+artifacts, timeline, links, projects, pins — is stored under the id of the
+account that wrote it, so signing out and signing in as someone else gives a
+completely empty tracker with nothing carried over from the first one.
+
+Until the steps below are done the site runs as **one tracker for this
+browser**, which is what it has always been, and nothing you have already
+written is affected. Filling in `config.js` is what adds Google sign-in, an
+email/password register and login, and a tracker that follows you to another
+computer.
+
+### The steps
+
+1. Go to <https://console.firebase.google.com> and **Add project**. Any name.
+   Google Analytics is not needed — turn it off.
+2. In the project, **Build → Authentication → Get started**, then on the
+   **Sign-in method** tab enable both:
+   - **Google** (pick a support email when it asks)
+   - **Email/Password** (the top switch only; "Email link" is not used)
+3. **Build → Firestore Database → Create database**. Pick a location near you.
+   Choose **production mode** — the rules are replaced in step 4 anyway, and
+   test mode lets any signed-in person read every account for thirty days.
+4. Open the **Rules** tab, replace everything in the box with the contents of
+   [`firestore.rules`](firestore.rules) in this repository, and press
+   **Publish**. This is the part that actually keeps one account out of
+   another: the browser cannot be trusted to do it, the server can.
+5. **Authentication → Settings → Authorised domains → Add domain**, and add
+   `perezfiles01-droid.github.io`. Without this, Google sign-in refuses with
+   "unauthorised domain".
+6. **Project settings** (the gear, top left) → scroll to **Your apps** → the
+   web icon `</>` → register the app with any nickname. Copy the
+   `firebaseConfig` object it shows you.
+7. Paste the four values into `firebase` in [`config.js`](config.js) —
+   `apiKey`, `authDomain`, `projectId`, `appId` — and commit. The site picks
+   them up on the next deploy.
+
+That config block is **not a secret** and belongs in git. A Firebase web
+config identifies the project; it grants nothing. The rules from step 4 are
+what enforce the boundary.
+
+### Where the accounts are
+
+**Firestore Database → Data** in the console:
+
+- `accounts/{uid}` — one document per account: email, name, how they signed
+  in, when they last did.
+- `accounts/{uid}/keys/{key}` — that account's tracker, one document per
+  stored key.
+
+### What does and does not follow the account
+
+Tasks, activity log, artifacts, timeline, links, projects and pins follow the
+account to any computer. Two things deliberately stay on the device:
+
+- **Settings** — theme, table zoom, your Google Drive client id and API key.
+  These describe the machine, not the content, exactly as the backup file
+  already treats them.
+- **Task attachments.** Image and file bytes live in the browser's IndexedDB
+  and are not mirrored. Your tasks follow you; the pictures attached to them
+  do not. Carrying those needs Firebase Storage, which is a separate service
+  and has deliberately been left out.
+
+### The offline copy
+
+`Tracker-standalone.html` opened straight from disk has no web address for a
+sign-in to work against, so it keeps a single tracker for that computer and
+says so on screen. Use the hosted site if you want separate accounts.
+
 ## Connecting Google Drive
 
 The site is static, so there is no server to hold a secret. It uses Google

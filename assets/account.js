@@ -60,6 +60,14 @@
     window.TrackerStore.setScope(user ? user.id : "");
     window.TrackerStore.setSession(user);
     if (window.TrackerRender) window.TrackerRender();
+    /* The mirror is pointed at the account only after the scope is, and only
+       after the render: your tracker is on screen from local storage
+       immediately, and anything newer arrives when it arrives. Nothing waits
+       on the network. */
+    if (window.TrackerSync) {
+      if (user) window.TrackerSync.start(user);
+      else window.TrackerSync.stop();
+    }
   }
 
   async function signOut() {
@@ -175,6 +183,12 @@
    * back to your own tracker instead of to this screen.
    */
   async function init() {
+    // Ask the provider to load before deciding anything: available() is what
+    // the screen reads, and it must not say "no sign-in here" merely because
+    // it was asked a moment too early.
+    if (window.TrackerAuth && window.TrackerAuth.ready) {
+      try { await window.TrackerAuth.ready(); } catch { /* falls back below */ }
+    }
     if (!hosted()) {
       adopt({ id: DEVICE_ID, name: "This computer", email: "", kind: "device" });
       return;
