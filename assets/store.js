@@ -121,6 +121,11 @@
       // "all" when the picker is showing every engine at once. The engine that
       // runs is always a real id in tracker.aiEngine; this is only the view.
       "tracker.aiEngineMode",
+      // How big you want a rich-text table drawn, on this screen. A setting
+      // and not data, so it stays out of the backup with the theme: the size
+      // you read a table at is a fact about this device, not about the update,
+      // and nothing about it is written into anyone's saved text.
+      "tracker.tableZoom",
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
