@@ -1256,7 +1256,12 @@
         }
       };
       const onClick = (e) => {
-        if (e.target === box || e.target.closest('[data-fd="cancel"]')) return close(null);
+        // Deliberately NOT `e.target === box`. The host covers the whole
+        // screen, so a click anywhere beside the panel used to cancel it -
+        // and this dialog holds typed text, rich-text updates and staged
+        // attachments, all of which went with it. Only Cancel, a choice or
+        // Save ends the dialog now; Escape still works, from onKey.
+        if (e.target.closest('[data-fd="cancel"]')) return close(null);
         const choice = e.target.closest('[data-fd="choice"]');
         if (choice) return close({ choice: choice.dataset.value });
         if (e.target.closest('[data-fd="save"]')) return close(collect());
@@ -1297,7 +1302,10 @@
       };
       const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
       const onClick = (e) => {
-        if (e.target === box || e.target.closest('[data-fd="cancel"]')) close();
+        // Same rule as formDialog: the backdrop is not a close button. This
+        // one loses nothing when it closes, but two dialogs that dismiss
+        // differently teach the reader to trust neither.
+        if (e.target.closest('[data-fd="cancel"]')) close();
       };
       document.addEventListener("keydown", onKey);
       box.addEventListener("click", onClick);
