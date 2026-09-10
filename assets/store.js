@@ -64,7 +64,8 @@
    * millisecond cannot collide.
    */
   const blobId = (prefix) =>
-    prefix + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    (scope ? scope + "-" : "") + prefix + "-" + Date.now() + "-" +
+    Math.random().toString(36).slice(2, 7);
 
   /**
    * The bytes store, for every module.
@@ -130,9 +131,65 @@
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
 
+  /* ---------- account scope ----------
+     Every key above is a logical name. What actually reaches localStorage is
+     that name with the signed-in account's id appended, so two accounts on
+     one computer never read a byte of each other's tracker.
+
+     This is deliberately the ONLY place the mapping happens. Four functions -
+     raw, set, setText, remove - are the whole door to storage for five
+     modules and twenty-one keys, and check_storage.mjs fails the build if a
+     module reaches past them. So one mapper here scopes every key the app has
+     and every key anyone adds later, without another file being touched.
+
+     With no scope set the key is unchanged. That is not a loophole, it is the
+     offline standalone file and the moment before sign-in, where there is no
+     account to scope to and nothing is rendered anyway. */
+  let scope = "";
+  const scoped = (key) => (scope ? key + "::" + scope : key);
+  const getScope = () => scope;
+
+  /**
+   * Point the store at an account, or at nothing on sign-out.
+   *
+   * The history is cleared on every change, and that is not tidiness: a step
+   * remembers a key's previous bytes, so an undo left on the stack across a
+   * sign-in would write one account's content into another account's key.
+   */
+  function setScope(id) {
+    const next = id ? String(id) : "";
+    if (next === scope) return scope;
+    scope = next;
+    clearHistory();
+    return scope;
+  }
+
+  /* ---------- who is signed in ----------
+     Deliberately NOT one of the keys above, and deliberately NOT scoped: it
+     is the pointer that SELECTS the scope, so scoping it would make it
+     unreadable until you were already signed in, which is a circle.
+
+     It holds an id and a display name and nothing else. No password, no
+     token, no key - a credential in localStorage would be readable by
+     anything that can read the tracker it is supposed to protect.
+
+     It lives here rather than in account.js because this file is the only
+     one allowed to touch localStorage, and check_storage.mjs fails the build
+     if that stops being true. */
+  const SESSION = "tracker.session";
+  const getSession = () => {
+    try { return JSON.parse(localStorage.getItem(SESSION) || "null"); } catch { return null; }
+  };
+  const setSession = (who) => {
+    try {
+      if (who) localStorage.setItem(SESSION, JSON.stringify({ id: who.id, name: who.name || "", email: who.email || "", kind: who.kind || "" }));
+      else localStorage.removeItem(SESSION);
+    } catch { /* storage blocked; the session simply does not survive a reload */ }
+  };
+
   /** Raw string read. Returns null when absent, like localStorage itself. */
   const raw = (key) => {
-    try { return localStorage.getItem(key); } catch { return null; }
+    try { return localStorage.getItem(scoped(key)); } catch { return null; }
   };
 
   /**
@@ -148,10 +205,40 @@
     try { return JSON.parse(v); } catch { return fallback; }
   };
 
+  /* ---------- the sync layer, when there is one ----------
+     store.js does not know what TrackerSync is or where it writes. It only
+     says which key changed. That keeps this file the owner of storage
+     whether or not the app is signed in to anything, and it means a key
+     added later is synced without this file being edited.
+
+     Only the data keys go. A setting is a fact about this device - the
+     theme, the table zoom, the Google client id pasted into this browser -
+     and belongs in the machine it was set on, exactly as the backup already
+     decides.
+
+     quietSet is the way back in. A value that arrived from your other
+     computer is not something you did on this one, so it must not land in
+     the undo history: undoing it would "restore" a state this browser was
+     never in. */
+  const notify = (key) => {
+    if (replaying || !KEYS.data.includes(key)) return;
+    try { window.TrackerSync && window.TrackerSync.changed(key); }
+    catch { /* a sync failure must never take a local write down with it */ }
+  };
+  const quietSet = (key, value) => {
+    replaying = true;
+    try {
+      if (value === null || value === undefined) remove(key);
+      else setText(key, value);
+    } finally { replaying = false; }
+  };
+
   const set = (key, value) => {
     record(key);
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    try { localStorage.setItem(scoped(key), JSON.stringify(value)); }
     catch { return false; }
+    notify(key);
+    return true;
   };
 
   /** For the two plain strings (client id, api key) that are not JSON. */
@@ -161,12 +248,15 @@
   };
   const setText = (key, value) => {
     record(key);
-    try { localStorage.setItem(key, value); return true; } catch { return false; }
+    try { localStorage.setItem(scoped(key), value); } catch { return false; }
+    notify(key);
+    return true;
   };
 
   const remove = (key) => {
     record(key);
-    try { localStorage.removeItem(key); } catch { /* nothing to remove */ }
+    try { localStorage.removeItem(scoped(key)); } catch { /* nothing to remove */ }
+    notify(key);
   };
 
   /* ---------- undo and redo ----------
@@ -269,8 +359,8 @@
     try {
       for (const [k, before] of step.before) {
         inverse.before.set(k, snap(k));
-        if (before === null) { try { localStorage.removeItem(k); } catch { /* ignore */ } }
-        else { try { localStorage.setItem(k, before); } catch { /* ignore */ } }
+        if (before === null) { try { localStorage.removeItem(scoped(k)); } catch { /* ignore */ } }
+        else { try { localStorage.setItem(scoped(k), before); } catch { /* ignore */ } }
       }
     } finally { replaying = false; }
     return inverse;
@@ -356,6 +446,13 @@
       for (const [k, v] of entries) setText(k, v);
     } finally { replaying = false; }
     clearHistory();
+    /* A restore is the one write that would otherwise never reach the account.
+       It runs with replaying set - it is not an undo step - and that same flag
+       suppresses the sync notification, so the file you just loaded would sit
+       in this browser while your other computer kept the old copy and pushed
+       it back over the top. Every data key is announced once, here, after the
+       flag is down. */
+    for (const k of KEYS.data) notify(k);
     return entries.length;
   }
 
@@ -436,6 +533,7 @@
   });
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
+                          setScope, getScope, getSession, setSession, quietSet,
                           exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };

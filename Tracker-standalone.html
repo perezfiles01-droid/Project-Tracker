@@ -663,6 +663,39 @@ th.filterhead .colpick:focus{border-color:var(--accent)}
   border:1px solid var(--line);border-radius:6px;padding:2px 6px}
 .statuspick:focus{border-color:var(--accent)}
 
+/* ---------- the sign-in gate ----------
+   Nothing of the tracker is on the page while this is showing, so the panel
+   owns the whole view rather than sitting over it. The sidebar is emptied by
+   render() and its chrome hidden here, so signing out cannot leave a project
+   name or a task count readable beside the screen that is meant to hide them. */
+body[data-signed-in="no"] .side-foot,
+body[data-signed-in="no"] .nav,
+body[data-signed-in="no"] .topbar{display:none}
+.acct-gate{display:grid;place-items:center;min-height:70vh;padding:10px}
+.acct-box{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:24px 22px}
+.acct-box .brand{margin-bottom:18px}
+.acct-box .field{margin:12px 0}
+.acct-box .btn.wide,.acct-box #acctGoogle{width:100%;justify-content:center}
+.acct-or{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--dim);font-size:12px}
+.acct-or::before,.acct-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.acct-actions{display:flex;gap:8px;margin-top:14px}
+.acct-actions .btn{flex:1;justify-content:center}
+.acct-notice{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:9px;padding:9px 11px;margin-bottom:14px;font-size:13px;color:var(--text)}
+.acct-foot{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.acct-foot .btn{width:100%;justify-content:center}
+.acct-foot small{display:block;margin-top:8px;color:var(--dim);font-size:11.5px;line-height:1.5}
+/* The identity in the sidebar. The name can be long and must not push the
+   Sign out button out of the column, so it truncates rather than wraps. */
+.acct{margin-bottom:10px}
+.acct:empty{display:none}
+.acct-who{margin-bottom:4px}
+.acct-name{color:var(--text);font-size:12.5px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-sub{color:var(--dim);font-size:11px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 </style>
 </head>
 <body>
@@ -674,6 +707,9 @@ th.filterhead .colpick:focus{border-color:var(--accent)}
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="side-foot">
+      <!-- Who you are signed in as, and the way out. Filled by account.js;
+           empty, and hidden by CSS, until an account is known. -->
+      <div class="acct" id="acct"></div>
       <!-- Undo and redo sit above the links because they act on what you were
            just doing, not on a page you are going to. Disabled rather than
            hidden, so they do not move as you work. -->
@@ -773,7 +809,27 @@ window.TRACKER_CONFIG = {
   googleClientId: "",   // e.g. "1234567890-abc.apps.googleusercontent.com"
   googleApiKey: "",     // e.g. "AIzaSy..."
   // Drive folder to open by default in the picker ("" = My Drive root).
-  driveFolderId: ""
+  driveFolderId: "",
+
+  /* Accounts. Paste the web config from your Firebase project here and the
+     site gains Google sign-in, an email/password register and login, and a
+     tracker that follows the account to another computer. Leave it blank and
+     the site keeps working as one tracker for this browser.
+
+     This block is NOT a secret and belongs in git: a Firebase web config
+     identifies the project and grants nothing. What stops one account
+     reading another is firestore.rules, which the server enforces.
+
+     It lives here rather than in Settings because it is needed BEFORE anyone
+     is signed in, and Settings is stored per account.
+
+     Steps: README.md -> "Turning on accounts". */
+  firebase: {
+    apiKey: "",
+    authDomain: "",        // e.g. "your-project.firebaseapp.com"
+    projectId: "",
+    appId: ""
+  }
 };
 
 window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Master_Tracker.xlsx", "projects": [{"id": "glass", "name": "GLASS", "full": "GRA GLASS (AvePoint internal)", "blurb": "Change requests, UAT cases and reference files for the GLASS engagement.", "sections": [{"title": "Reference links", "type": "links", "items": [{"name": "GLASS master reference document", "url": "https://avepointcrm.sharepoint.com/sites/Jim'sSite/_layouts/15/doc.aspx?sourcedoc=%7bf49f8f5f-f004-424f-a712-2547442fdf2e%7d&action=edit", "group": "Key document", "verified": true}, {"name": "Test System", "url": "https://avepointcrm.sharepoint.com/:x:/s/Prj_GRAGLASS_Internal/IQDFjRA5c8WNQ7ci2-mkEkI0AdnBRhA8dhu5PfZg4an4E6A?e=l7mbcK&isSPOFile=1&xsdata=MDV8MDJ8fDRkYzRkZGE1ZjlmNjQ3YzRkMDMwMDhkZWIwYTU5MzMyfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDI0MjIzMTg4NjIzODR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EWTBOVFF6TURjNU53PT18OWM5ODQ5MzYyY2UwNGNlZTNlMDYwOGRlYjBhNTkzMzJ8ODhmZjc2MWY4M2ZlNDk0OWFjOTU0OTNmN2FiY2FlZDE%3D&sdata=VkhHYlUzWjVGNWxNUEFrTTNwR0dtYXExcnk5eURHeE9EclZQS0FoV2xHST0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "Personnel & Environment.xlsx"}, {"name": "Change Request (CR)", "url": "https://avepointcrm.sharepoint.com/:b:/s/Prj_GRAGLASS_Internal/IQBQPJ8qFuu5TLhu8ap1h90NAfSPLnhlnQbkN2f_gVbss6c?e=ZD1sny&isSPOFile=1&xsdata=MDV8MDJ8fDdmY2I4MzU4MjBlNzQ1ZWU4NjlhMDhkZWFmYzE1MmNmfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDE0NDE5ODYwNzAxNzB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EVTBOek01TnpneE1RPT18ZDkxZDk1MjdmYjgxNDM3YWVmOWUwOGRlYWZjMTUyY2V8MjEyZTc1ZTAyZGRjNDU4Zjg5NzZlZDY1ZTg3ZWY2ZWM%3D&sdata=NFNRNmYrR1pEV0IvRTZSYWJzUzdYMEtyV3dPcWNCVUJiT25NZis1OVNtcz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "GLASS AI FS_v1.1_final.pdf"}, {"name": "User Guide", "url": "https://avepointcrm.sharepoint.com/:f:/s/Prj_GRAGLASS_Internal/IgAXrPls7asTRKzpsO7GK66jAaVvqzKRP32nJmnIYW8XxbQ?e=OIQgVj&xsdata=MDV8MDJ8fDBhYTAwMjFlNjI2OTQzZmE2YzIwMDhkZWFmYzEwYTU1fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkxNDE0NDA3NzAxMDg0NDh8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pobE1UWTBNR013TFRJeFpUSXRORGMwWWkxaU5tUmxMV0UyTlRJME5tRTJZV1pqTWw5bU5UbG1NVGd4WWkxaU5EZ3pMVFF6T1dRdE9EWmtZUzB4WlRJMlpESTFZelJoWlRCQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM09EVTBOekkzTmpNMU1BPT18MWI5Mjk0YzRjYmM1NGVlNGNmM2YwOGRlYWZjMTBhNTR8OGNhNWUxMTkwOWNhNGZmODg4MjQyMzdjMjA4Y2NlZDQ%3D&sdata=YndoNit3YitHakVzaGgzUytOYS9vRFFXT1VISUhER0JlNWhxTEw1OWEyQT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "group": "Reference file", "note": "User Guide"}, {"name": "Master Data", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Jim'sSite/_layouts/15/Doc.aspx?sourcedoc=%7BF49F8F5F-F004-424F-A712-2547442FDF2E%7D&file=Glass.xlsx&action=default&mobileredirect=true&or=EXCEL-WEB.BODY.NT&ct=1779326050110", "verified": true, "group": "Reference file", "note": null}, {"name": "CR01 UAT Case", "url": "https://avepointcrm.sharepoint.com/sites/Prj_GRAGLASS_Internal/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FPrj%5FGRAGLASS%5FInternal%2FShared%20Documents%2F08%20QA%20Documents%2FCR01%2FCR01%20UAT%20Case&viewid=89979c23%2D400e%2D4421%2Db153%2D5b8f1df3a9b7&csf=1&CID=907a8291%2D61e3%2D4320%2D9440%2D42df156b3093&FolderCTID=0x012000E555ACCF94075D428B0810A5578D03E2&TeamsCID=36fa310f%2Db2b4%2D42d0%2D8597%2De17b62f53d11&OR=Teams%2DHL&CT=1782385484718", "verified": true, "group": "Reference file", "note": null}, {"name": "CR02 ppt assessment file", "url": "https://avepointcrm.sharepoint.com/:p:/s/Prj_GRAGLASS_Internal/IQAFpODllq5lS4oB27LyhQD8Adn1TfYXVJlcvdp-mICDh8o?wdExp=TEAMS-TREATMENT&web=1&TeamsCID=2200f586-e2a4-4726-8388-30720882e702", "verified": true, "group": "Reference file", "note": null}, {"name": "CR02 dev effort list", "url": "https://avepointcrm.sharepoint.com/:x:/s/Prj_GRAGLASS_Internal/IQCTVjUYAytAQJDAQJUM2I2BASjrBwDgbThjn3xBf5DeTno?e=E0uvRb&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&TeamsCID=cb655636-dac4-4781-b701-ee09ffedb1de&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA3MDIxNTcxMSJ9&linkOpenTime=1785134656165", "verified": true, "group": "Reference file", "note": null}]}]}, {"id": "edrms", "name": "EDRMS ADB", "full": "Asian Development Bank \u2014 EDRMS / DRM implementation", "blurb": "Sites, backlogs, test environments and release artefacts for the ADB EDRMS programme.", "sections": [{"title": "Sites & source links", "type": "sites", "items": [{"sn": "1", "name": "ADB SharePoint Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "2", "name": "UAT Test Sites(Traditional)", "label": "link (demo)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_demo/SitePages/Home.aspx?xsdata=MDV8MDJ8fDZhZjlkMWI4ZjRjYjRhYTljODkwMDhkZTU3YmZmOWE0fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2NzkxNzE4ODUyMDB8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hNVEUyTmpJenw3MzAyYjU4MDg2NjU0YzVmMGNlMTA4ZGU1N2JmZjlhNHw1Zjg4MzM3NTViYjc0NmY2YWQwOWNlYmM5NWVkN2E4YQ%3D%3D&sdata=ejV4NFNnY0I1Y1Z4ODRaRFRtN2p0eURrbWttcWtvWnVBL1pDTkxma241bz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "2", "name": "UAT Test Sites(Traditional) (link (people))", "label": "link (people)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_people?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1Njk1MTN8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=RjV4UjJKN1oybnpsUndtWDczWGlIbkJhQXk2ZFlCSHMvMjVsRVd3M0VxND0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "2", "name": "UAT Test Sites(Traditional) (link (admin))", "label": "link (admin)", "url": "https://asiandevbank.sharepoint.com/sites/org_edrms_uat_admin?&xsdata=MDV8MDJ8fGE3NzM5Y2IyMzQ3NTRjMjVkNzI3MDhkZTU3YzEzMTNjfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQ2ODQzOTk1ODI4Mzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pjelptTTNaREE0Wm1Zd05EUTFZelk1TkdRM05EQmtaRGsxT0dVNU4yTTRRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9EY3hOak01TURJenxkNDQxY2ZhYWRlMzA0MWZmNDliMDA4ZGU1N2MxMzEzY3w5YzQyMDc3ZWQ3NWQ0NzVkYWIzMjRmZjc5NjM4NzVjNQ%3D%3D&sdata=bXg5ZlJGT3pvU2k0eFRDYlRrMWtXb2ZqSW4zVWxNb0thNTRoK2lvQzV0WT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "3", "name": "Internal Environment Site (Trad)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/org_csd_1.4testsite/AnnualMeet/Forms/All%20Files.aspx?id=%2Fsites%2Forg%5Fcsd%5F1%2E4testsite%2FAnnualMeet%2FADB%C2%A0EDRMS%C2%A0R2026%2E1%20%E2%80%8B%2D%E2%80%8B%C2%A0UAT%C2%A0Test%C2%A0Cases%C2%A0%E2%80%8C%E2%80%91%E2%80%8C%C2%A0Records%C2%A0Declaration%20%285%29&viewid=a9f94689%2D5713%2D4ae7%2Dbddd%2Daf18c8b01c3d&CT=1768817656351&OR=OWA%2DNT%2DMail&CID=23a30351%2D69b4%2Df998%2D1c9d%2D04c482e715af&xsdata=MDV8MDJ8fDVhOWNjZTIyOGNjYjQ3ZDg3YWQwMDhkZTU3NDNiOTAzfGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNDQxNDU1MTE2Mjc0NzJ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpZNE9ERTNOelV3T0RjeHw5OWNmYjYyZmJjYjk0Mjg5ZGRlMTA4ZGU1NzQzYjkwMnxhMDg0N2E4MjQxNTk0ZjM5OTFlM2YxNWYxOTk2OTYyNA%3D%3D&sdata=cTFNNFMxMXZhaE0xTlpCd0p5Um9kZ1dxL3NzMFFpREMyNE5HV3VXcGZHWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jimtest@7rkd12.onmicrosoft.com"}, {"sn": "3.1", "name": "Internal Environment Site (Proj)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite01/SitePages/Home.aspx?xsdata=MDV8MDJ8fGQ5YTJmYTI3OWY0ZDRkYTMyMzg5MDhkZTc5ZDE0NTRifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODIxMzY4NTA4NzA5MDR8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pBMVpEQmhNamMyTFdFeE5EZ3RORFJsT1MxaU56STJMVGRpWm1FMllUTTBNV1ZqTlY4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qWXhOamc0TkRRMU5BPT18MjYyZmMxY2QwZDkxNGE2NDk1YjUwOGRlNzlkMTQ1NGF8N2RkMDM4ZGM4MTdkNDM2OGE5YTY1ZTg0YzdiNzcyMWE%3D&sdata=UzcwYnd2SHdDaVpQN2t4bFBOYklsNjhKM2d2czBJOWRUdFJHZ2VKZTZvaz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jimtest@7rkd12.onmicrosoft.com"}, {"sn": "4", "name": "Sanity Test Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "5", "name": "Product Backlog", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FProduct%20Backlog&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "6", "name": "uat Retention Label Mapping", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data_uat/Lists/Retention%20Label%20Mapping/AllItems.aspx", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "7", "name": "ADO Site", "label": "link", "url": "https://dev.azure.com/asiandevbank/itd-itop-drm/_workitems/recentlyupdated/", "verified": true, "account": "No Access (borrow)"}, {"sn": "8", "name": "ADB EDRMS Task", "label": "link", "url": "https://to-do.office.com/tasks/AAMkADY5MmQ2ZGFiLTZhNWYtNGU0Yi1iYzM1LTQwYTRhMTFjZWRjZAAuAAAAAACKet_wR4ydQLB_GtDzqNibAQC_lAXdlzSxQafFCX5gDemAAACquu0yAAA=", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "9", "name": "Man-days Consumption", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true&DefaultItemOpen=1", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "10", "name": "Centralized - Project Site 1(no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite01?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MDU4OTV8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=ZDNLTUZmYVpFZllYeHc1MzRjb2RJNzVkUU5Tak5YWkM5aXlXVkNkaFBNUT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "11", "name": "Centralized - Project Site 2 (no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite02?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4MzAwNzd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=SjhZS0R0V0kyWVFoVC9vUzcvK3M4d1pmVUVpVUlKZGNLZGVOeHZUT2todz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "12", "name": "Centralized - Project Site 3 (no permission yet)", "label": "link", "url": "https://7rkd12.sharepoint.com/sites/projectsite03?xsdata=MDV8MDJ8fGU0OGY2YjI3MDgyYTQ0NmYxMTRjMDhkZTY0ODA3YzE5fGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwNTg3MDAxMzM4NTAxNjZ8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pVeVpHRmhORFpsWm1GbFlqUmpOR0k1T0RSbE9HRTNObVF4T1RobE9EUXlRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4Tnpjd01qY3pNRE01TnpjMXwwNzhhOTFjMzdkYjM0ZmE4OTI2ODA4ZGU2NDgwN2MxOHw2ZDlhZjVjMjAyN2M0OTE2YjA3ODcyMTExMTcyMzU1MA%3D%3D&sdata=UGN5dlJCTHo0OWxjSHNSOU1pN3FUSEVvV1BBNE41NEtGMVZEOFR5S3pkOD0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "13", "name": "Database Design", "label": "link", "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B50C34E07-CFDA-4C29-991F-2EB421A2FDC5%7D&file=Database%20Design%2012.03.xlsx&action=default&mobileredirect=true", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "14", "name": "Internal Action List", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BCDAC895B-37B4-4F63-AE68-A0A475FA0D57%7D&file=Internal%20Action%20List.xlsx&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&action=default&mobileredirect=true", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "15", "name": "DRM Workflow", "label": "link", "url": "https://avepointcrm.sharepoint.com/:u:/r/sites/Gen_ADB_DRM_Internal/Shared%20Documents/General/04.%20Requirement%20Materials/To-Be/To-Be%20DRM%20Workflows.vsdx?d=wbd33d559870e48c2af833f5c2d79fdf0&csf=1&web=1&e=c9Zhdw", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "16", "name": "Microsoft To Do", "label": "link", "url": "https://to-do.office.com/tasks/sharing?InvitationToken=vmhSCzlTBi3G_ehDOb3K_QRCCeYnCf_rWHcReG2YDPW0H2IdOC3D3ahIdc6LmWo7A", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "17", "name": "High Level Solution Design (R2026.2)", "label": "link", "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B96FC56F0-8E43-42AE-8C7A-A28DE752E61D%7D&file=EDRMS%20R2026.1%20High-Level%20Solution%20Design%20(HLSD).docx&action=default&mobileredirect=true", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "18", "name": "Test Outline (R2026.2)", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BDF3F8A12-1909-4AD3-B45C-06F5AA52AAF0%7D&file=Test%20Case%20Outline.xlsx&action=default&mobileredirect=true", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "19", "name": "Centralized Project Sites - UAT", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-uat", "verified": true, "account": null}, {"sn": "20", "name": "Centralized Project Sites - dev", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-dev", "verified": true, "account": null}, {"sn": "21", "name": "Centralized Project Sites - sanity", "label": "link", "url": null, "verified": true, "account": null}, {"sn": "22", "name": "UAT Checklist", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BA8741029-B763-47D5-BA26-A0FED0B3CAD7%7D&file=EDRMS%20UAT%20Checklist.xlsx&action=default&mobileredirect=true&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjAyMTIxNTExNiIsIkhhc0ZlZGVyYXRlZFVzZXIiOmZhbHNlfQ%3D%3D", "verified": true, "account": "jimwyl.perez@avepoint.com"}, {"sn": "23", "name": "UAT Test Case Outline", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7B08ECF062-3D96-4EC6-BDB6-AF8641F2102C%7D&file=ADB%20EDRMS%20R2026.2%20UAT%20Test%20Cases%20-%20Centralized%20Records%20Declaration.xlsx&action=default&mobileredirect=true&isSPOFile=1&xsdata=MDV8MDJ8fDc5ZjQxYmE5OWE2MjRmNjVjZmNmMDhkZTc5OTZkODJifGZlM2FmMmMxZTc2MjRiNjJhZDNiZTNmMWVkNWRkMGEwfDB8MHw2MzkwODE4ODU5MTE5OTQzMTl8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T2pSaVlqVm1NRFE1TFRNeFpUVXROREk1TnkwNFlqQTNMV1JoWTJVeU56RTJOR016Wmw4NFpURTJOREJqTUMweU1XVXlMVFEzTkdJdFlqWmtaUzFoTmpVeU5EWmhObUZtWXpKQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjM01qVTVNVGM1TURReE5nPT18NDg5OWQ4NjI1NTcxNDRlODIzNWYwOGRlNzk5NmQ4MmJ8NmZlYTk3ZTY4Njk4NDQ3NmI2Nzg3OTJkZjMwNzM0NzM%3D&sdata=UlNFamYwRWFWSFZvaE9FS0dmY1ViRzNNUmpxYnB0cExScnJRNFNEaEFNWT0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": null}, {"sn": "24", "name": "Internal Avepoint Site", "label": "link", "url": "https://avepointcrm.sharepoint.com/sites/Gen_ADB_DRM_Internal/Shared%20Documents/Forms/AllItems.aspx", "verified": true, "account": null}, {"sn": "25", "name": "Internal Bugs and Issues", "label": "link", "url": "https://avepointcrm.sharepoint.com/sites/Gen_ADB_DRM_Internal/_layouts/15/doc.aspx?sourcedoc=%7b8baa3a21-fc23-415c-af9b-d882674a6f21%7d&action=edit", "verified": true, "account": null}, {"sn": "26", "name": "Sanity Project Site", "label": "link", "url": "https://asiandevbank.sharepoint.com/teams/prj_edrms-sanity?xsdata=MDV8MDJ8fGE2NDk2MzkwMjkxYjQyYzIxMWE3MDhkZThiZjkyYjUyfDk0OTVkNmJiNDFjMjRjNTg4NDhmOTJlNTJjZjNkNjQwfDB8MHw2MzkxMDIwOTk0MjMxMDU0NDd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T21ZNU9ERmhObVV3TW1Vd056Um1ZekJoTnpsak5tRXdNakZpWTJZM016YzFRSFJvY21WaFpDNTJNaTl0WlhOellXZGxjeTh4TnpjME5qRXpNVFF4TXprNHwyZTE4OTBiNDdmNTQ0OTJiNzRhOTA4ZGU4YmY5MmI1MXwzYjMxMDJkOTRkM2E0M2EyYTZkNzUyZmUyMzc2MjNkOQ%3D%3D&sdata=bmw4YnhYQytxbkw4aUhVOHJoNmlWaHppdFQxdW9zamtCdWJYaVRLT01Ddz0%3D&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com", "verified": true, "account": null}, {"sn": "27", "name": "Prod Retention Label Mapping", "label": "link", "url": "https://asiandevbank.sharepoint.com/sites/app_edrms_data/SitePages/Home.aspx", "verified": true, "account": "jperez@contractor.adb.org"}, {"sn": "28", "name": "ADB DRM Leave tracker", "label": "link", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/Doc.aspx?sourcedoc=%7BEEEB0698-4851-4300-87B8-777159DB19E6%7D&file=DRM%20-%20Leave%20Roster%20in%20Dec%20and%20Jan.xlsx&action=default&mobileredirect=true&isSPOFile=1&ovuser=fe3af2c1-e762-4b62-ad3b-e3f1ed5dd0a0%2Cjimwyl.perez%40avepoint.com&wdExp=TEAMS-TREATMENT&web=1&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNjA0MDQwMTcxOCJ9&linkOpenTime=1777362706008", "verified": true, "account": "jimwyl.perez@avepoint.com"}]}, {"title": "Release 2026.2 \u2014 issues & concerns", "type": "concerns", "items": [{"sn": "1", "concern": "Attached File Naming", "description": "The current attachment file naming convention is:\nSuccess_JobID_SiteName_LibraryName or Failed_JobID_SiteName_LibraryName.\n\nClarification is required on whether LibraryName should be replaced with the Folder Name.", "source": "Product Backlog > Email Templates Sheet > Remarks", "reason": "Given that, under centralized records management, all file records are stored in the Final Documents library, using the library name may not be meaningful. It is recommended to replace LibraryName with the destination folder path within the Final Documents library.", "status": "In Progress"}]}, {"title": "EDRMS release phases", "type": "phases", "items": [{"title": "Phase 1: Workshop Requirements Gathering Activities", "steps": [{"sn": "1", "name": "Workshop deck", "description": "The workshop deck is used to guide the workshop sessions and present the key topics, processes, and ideas needed for discussion. It helps ensure the workshop stays focused and that all required areas are covered in a clear and structured way.", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F02%20%2D%20Requirements%20Gathering%2FRelease%202026%2E2&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=89865c2d%2De332%2D4953%2Dac3e%2D662133f4d597&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&ovuser=fe3af2c1%2De762%2D4b62%2Dad3b%2De3f1ed5dd0a0%2Cjimwyl%2Eperez%40avepoint%2Ecom&OR=Teams%2DHL&CT=1763598525769&clickparams=eyJBcHBOYW1lIjoiVGVhbXMtRGVza3RvcCIsIkFwcFZlcnNpb24iOiI0OS8yNTExMDIwMjMxMiIsIkhhc0ZlZGVyYXRlZFVzZXIiOnRydWV9", "verified": true}, {"sn": "2", "name": "Workshop Requirements Confirmation", "description": "The workshop requirements confirmation is done after the workshop sessions to reconfirm and finalize the captured requirements. This step ensures that all discussed items are correctly understood and agreed upon, and it formally signals the start of product backlog creation.", "url": "https://avepointcrm.sharepoint.com/:b:/r/sites/Jim%27sSite/Shared%20Documents/ADB%20Project/workshop%20email%20confirmation.pdf?csf=1&web=1&e=xSNP1w", "verified": true}]}, {"title": "Phase 2: Product Backlog Creation Activities", "steps": [{"sn": "1", "name": "Product Backlog", "description": "Creation of the product backlog based on the confirmed requirements, detailing features, user stories, and scope items to be delivered.", "url": "https://asiandevbank.sharepoint.com/:x:/r/teams/prj_3yrc_drm_implem/_layouts/15/Doc.aspx?sourcedoc=%7B3899D5DC-E0F9-4033-BFD2-381A710C7FC9%7D&file=EDRMS%20Product%20Backlog%20-%20V2.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "2", "name": "Product Backlog Email Confirmation", "description": "Formal confirmation via email to validate and approve the created product backlog.", "url": null, "verified": true}, {"sn": "3", "name": "Dev/QA Effort Estimates", "description": "Estimation of development and testing effort required for each backlog item to support planning and scheduling.", "url": null, "verified": true}]}, {"title": "Phase 3: System Integration Testing (SIT) Activities", "steps": [{"sn": "1", "name": "Internal QA/AP Testing", "description": "Internal testing to verify system functionality and integration before external testing.", "url": null, "verified": true}, {"sn": "2", "name": "Endorsement Email for SIT", "description": "Formal endorsement to confirm readiness to proceed with SIT.", "url": null, "verified": true}, {"sn": "3", "name": "TCS QA Testing", "description": "Execution of formal system integration testing by the QA team.", "url": null, "verified": true}, {"sn": "4", "name": "Signed Off Email for SIT", "description": "Formal sign-off confirming SIT completion and approval to proceed to UAT.", "url": null, "verified": true}]}, {"title": "Phase 4: User Acceptance Testing (UAT) Activities", "steps": [{"sn": "1", "name": "Endorsement Email for UAT", "description": "Formal endorsement confirming readiness to start UAT.", "url": null, "verified": true}, {"sn": "2", "name": "Prepare Defect Log and other UAT Pre-artifacts", "description": "Preparation of defect tracking and supporting materials required for UAT.", "url": "https://asiandevbank.sharepoint.com/teams/prj_3yrc_drm_implem/Docs/Forms/AllItems.aspx?id=%2Fteams%2Fprj%5F3yrc%5Fdrm%5Fimplem%2FDocs%2F08%20%2D%20UAT&viewid=d4ea26ba%2De1c2%2D4eb4%2Dae0b%2D0dc6e179dd5f&csf=1&CID=3896aa97%2D64ad%2D455f%2D8b87%2Db36d998ac04b&FolderCTID=0x0120005771315846EFCD42A007E7D0942D555F&pageCorrelationId=0268efa1%2D30c6%2D5000%2D852f%2Dc546546a3623&timeStamp=1769073098023", "verified": true}, {"sn": "3", "name": "UAT Briefing and Demonstration", "description": "Walkthrough and demonstration of the system to guide users before testing.", "url": "https://asiandevbank.sharepoint.com/:p:/r/teams/prj_3yrc_drm_implem/Docs/08%20-%20UAT/Release%202026.1%20-%20Multiple%20Records%20Declaration/EDRMS%20R2026.1%20UAT%20Briefing.pptx?d=w6fb502ef21474b75b07eb5a8f4390302&csf=1&web=1&e=fXp5Sw", "verified": true}, {"sn": "4", "name": "UAT Completion Report", "description": "Documentation summarizing UAT results, findings, and final acceptance.", "url": "https://asiandevbank.sharepoint.com/:w:/r/teams/prj_3yrc_drm_implem/Docs/08%20-%20UAT/Release%202026.1%20-%20Multiple%20Records%20Declaration/03%20UAT%20Sign%20Off/EDRMS%20R2026.1%20UAT%20Completion%20Report.docx?d=wdc3f0f7445e047da84f0973eeec67d2b&csf=1&web=1&e=NEfJs4", "verified": true}]}, {"title": "Phase 5: Deployment and Sanity Testing Activities", "steps": [{"sn": "1", "name": "Sanity Testing", "description": "High-level verification performed after deployment to confirm that critical functionalities are working as expected.", "url": "https://asiandevbank.sharepoint.com/sites/org_csd_edrmssanitytest/Performance/Forms/AllItems1.aspx", "verified": true}]}]}]}, {"id": "lhub", "name": "LHUB", "active": false, "full": "LHUB \u2014 Vitae for LXP (VITAELXP) Jira intake", "blurb": "BA role reference: how signed-off FSDs become Jira epics, stories and sub-tasks.", "sections": [{"title": "Links & references", "type": "links", "items": [{"name": "Sample Jira ticket (VITAELXP-22170)", "url": "https://jirapro.avepoint.net/browse/VITAELXP-22170", "verified": true, "group": "Working link"}, {"name": "LHUB JIRA creation Teams group chat", "url": "https://teams.microsoft.com/l/chat/19:1b4ded8973f543009fe7954a5abb52c5@thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D", "verified": true, "group": "Working link"}, {"name": "FSD timeline (SharePoint)", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/ExtCst_MVPTLhubProject/_layouts/15/Doc.aspx?sourcedoc=%7B7BE2055C-50D7-4BB2-8D00-F0EB78E5B709%7D&file=UAT2%20dev%26qa%20timeline%20(2).xlsx&action=default&mobileredirect=true&wdOrigin=TEAMS-MAGLEV.null_ns.rwc&wdExp=TEAMS-TREATMENT&wdhostclicktime=1768281674824&web=1", "verified": true, "group": "Working link"}, {"name": "Jira Tracker", "url": "https://avepointcrm-my.sharepoint.com/:x:/r/personal/michael_gascon_avepoint_com/_layouts/15/doc2.aspx?sourcedoc=%7B0FB0DD6F-F87E-495D-8F1F-9C4B0769A1F6%7D&file=LHUB_JiraUpdateTracker_April2025.xlsx&action=default&mobileredirect=true", "verified": true, "group": "Reference"}, {"name": "Internal SharePoint Site where all FSDs uploaded", "url": "https://avepointcrm.sharepoint.com/MaivenPoint/Shared%20Documents/Forms/AllItems.aspx?viewid=ed6e7899%2D177a%2D46a0%2D9037%2D7651a5b4b40f&FolderCTID=0x012000C967E7A149636F4DA701355DA771B368", "verified": false, "group": "Reference"}]}, {"title": "Clarification checklist for the remote BA", "type": "list", "items": ["1. May I request the link to the reviewed FSD uploaded in the internal SharePoint site?", "2. May I request the link to the Hi-Fi design for this FSD?", "3. Which sections of the FSD have been fully signed off and are ready for development?", "4. Who is the assigned developer for this FSD?"], "note": "Note: When the Project Manager asks for the number of tasks created, this refers to the number of FSD sections that have been reviewed and converted into Jira tickets. To determine this, count the total number of tickets listed under \u201cIssues in Epic\u201d on the Jira web page. This total represents the number of Jira tasks created."}, {"title": "Jira ticket creation steps", "type": "list", "items": ["1. Connect to the AvePoint (SG) VPN.", "2. Open the Jira web application.", "3. Click Create.", "4. In the Create Issue screen, set the following for the Epic:\n- Project: Vitae for LXP (VITAELXP)\n- Issue Type: Epic\n- Priority: Normal / Major\n- Summary Format: [Pillar #] FSD Name\n(If no Pillar is specified, use the FSD name only \u2014 do not include brackets.)\n- Assignee: Assigned Developer for the FSD\nDescription Format:\nKindly refer to the following links:\n\nFSD: [FSD link]\nHi-Fi Design: [Hi-Fi Design link]", "5. Click Create to save the Epic.", "6. Once the Epic is created, click the \u201c+\u201d icon next to Issues in Epic to create tasks.", "7. For each Story under the Epic:\n- Issue Type: Story\n- Summary Format: [Pillar #] [FSD Name] FSD Section\n- Assignee: Assigned Developer\n- Description:\nUse the same format as the Epic description.", "8. If a Sub-task is required:\n- Open the relevant Story from the Issues in Epic list.\n- Click More (next to Assign).\n- Select Create Sub-task.", "9. For the Sub-task, use the following Summary Format:\n- [Pillar #] [FSD Name] [FSD Section] FSD sub-section\n- Assign the sub-task to the appropriate developer.\n- Follow the same description format used in the Epic and Story."]}]}], "daily": [], "communications": [{"sn": "1", "date": "2026-01-23", "platform": "WeCom", "sender": "Kiana", "summary": "Cross check and update the effor estimates", "area": "PBL for Centralized Records Declaration", "actionRequired": "Yes", "owner": "Myself", "due": "2026-01-23", "status": "Completed", "url": "https://avepointcrm.sharepoint.com/:x:/r/sites/Gen_ADB_DRM_Internal/_layouts/15/doc2.aspx?sourcedoc=%7B31BCA6B3-7A33-4805-AEF3-D06953F8D7E7%7D&file=Efforts%20Summary.xlsx&action=default&mobileredirect=true", "verified": true}, {"sn": "2", "date": "2026-01-27", "platform": "Personal", "sender": "Myself", "summary": "To check and confirm the CSV File naming for R2026.2 Multiple Centralized Records Declaration", "area": "PBL for Centralized Records Declaration", "actionRequired": "Yes", "owner": "Edfe/Willie", "due": null, "status": "Pending", "url": null, "verified": true}, {"sn": "3", "date": "2026-01-27", "platform": "Teams", "sender": "Myself", "summary": "To confirm that Move feature in centralized will follow the multiple records declaration workflow of validating it first before moving it to the final documents library", "area": "R2026.2 logic", "actionRequired": "No", "owner": "Mihal", "due": null, "status": "Completed", "url": null, "verified": true}, {"sn": "4", "date": "2026-01-28", "platform": "Teams", "sender": "ADB", "summary": "Change prompt of the successful declared email", "area": "R2026.4 logic", "actionRequired": "Yes", "owner": "Lorella", "due": "check ITD/Avepoint Tech team gc (1/28/2026)\n\nassigned to: Leah", "status": "Pending", "url": null, "verified": true}, {"sn": "5", "date": "2026-01-28", "platform": "Teams", "sender": "ADB", "summary": "To clarify that no folder creation and search function for Centralized final documents library", "area": "Deck for requirements and functional walkthrough", "actionRequired": "Yes", "owner": "Edfe/Ferds", "due": null, "status": "Completed", "url": null, "verified": true}, {"sn": "6", "date": "2026-02-19", "platform": "Teams", "sender": "ADB", "summary": "Physical Records - No RAC intervention for short term. To require report generation for monitoring purposes", "area": "Short Term Logic", "actionRequired": "Yes", "owner": "Kylee/RAC", "due": null, "status": null, "url": null, "verified": true}]};
@@ -845,7 +901,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * millisecond cannot collide.
    */
   const blobId = (prefix) =>
-    prefix + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    (scope ? scope + "-" : "") + prefix + "-" + Date.now() + "-" +
+    Math.random().toString(36).slice(2, 7);
 
   /**
    * The bytes store, for every module.
@@ -911,9 +968,65 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   };
   const ALL = [...KEYS.data, ...KEYS.settings];
 
+  /* ---------- account scope ----------
+     Every key above is a logical name. What actually reaches localStorage is
+     that name with the signed-in account's id appended, so two accounts on
+     one computer never read a byte of each other's tracker.
+
+     This is deliberately the ONLY place the mapping happens. Four functions -
+     raw, set, setText, remove - are the whole door to storage for five
+     modules and twenty-one keys, and check_storage.mjs fails the build if a
+     module reaches past them. So one mapper here scopes every key the app has
+     and every key anyone adds later, without another file being touched.
+
+     With no scope set the key is unchanged. That is not a loophole, it is the
+     offline standalone file and the moment before sign-in, where there is no
+     account to scope to and nothing is rendered anyway. */
+  let scope = "";
+  const scoped = (key) => (scope ? key + "::" + scope : key);
+  const getScope = () => scope;
+
+  /**
+   * Point the store at an account, or at nothing on sign-out.
+   *
+   * The history is cleared on every change, and that is not tidiness: a step
+   * remembers a key's previous bytes, so an undo left on the stack across a
+   * sign-in would write one account's content into another account's key.
+   */
+  function setScope(id) {
+    const next = id ? String(id) : "";
+    if (next === scope) return scope;
+    scope = next;
+    clearHistory();
+    return scope;
+  }
+
+  /* ---------- who is signed in ----------
+     Deliberately NOT one of the keys above, and deliberately NOT scoped: it
+     is the pointer that SELECTS the scope, so scoping it would make it
+     unreadable until you were already signed in, which is a circle.
+
+     It holds an id and a display name and nothing else. No password, no
+     token, no key - a credential in localStorage would be readable by
+     anything that can read the tracker it is supposed to protect.
+
+     It lives here rather than in account.js because this file is the only
+     one allowed to touch localStorage, and check_storage.mjs fails the build
+     if that stops being true. */
+  const SESSION = "tracker.session";
+  const getSession = () => {
+    try { return JSON.parse(localStorage.getItem(SESSION) || "null"); } catch { return null; }
+  };
+  const setSession = (who) => {
+    try {
+      if (who) localStorage.setItem(SESSION, JSON.stringify({ id: who.id, name: who.name || "", email: who.email || "", kind: who.kind || "" }));
+      else localStorage.removeItem(SESSION);
+    } catch { /* storage blocked; the session simply does not survive a reload */ }
+  };
+
   /** Raw string read. Returns null when absent, like localStorage itself. */
   const raw = (key) => {
-    try { return localStorage.getItem(key); } catch { return null; }
+    try { return localStorage.getItem(scoped(key)); } catch { return null; }
   };
 
   /**
@@ -929,10 +1042,40 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     try { return JSON.parse(v); } catch { return fallback; }
   };
 
+  /* ---------- the sync layer, when there is one ----------
+     store.js does not know what TrackerSync is or where it writes. It only
+     says which key changed. That keeps this file the owner of storage
+     whether or not the app is signed in to anything, and it means a key
+     added later is synced without this file being edited.
+
+     Only the data keys go. A setting is a fact about this device - the
+     theme, the table zoom, the Google client id pasted into this browser -
+     and belongs in the machine it was set on, exactly as the backup already
+     decides.
+
+     quietSet is the way back in. A value that arrived from your other
+     computer is not something you did on this one, so it must not land in
+     the undo history: undoing it would "restore" a state this browser was
+     never in. */
+  const notify = (key) => {
+    if (replaying || !KEYS.data.includes(key)) return;
+    try { window.TrackerSync && window.TrackerSync.changed(key); }
+    catch { /* a sync failure must never take a local write down with it */ }
+  };
+  const quietSet = (key, value) => {
+    replaying = true;
+    try {
+      if (value === null || value === undefined) remove(key);
+      else setText(key, value);
+    } finally { replaying = false; }
+  };
+
   const set = (key, value) => {
     record(key);
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    try { localStorage.setItem(scoped(key), JSON.stringify(value)); }
     catch { return false; }
+    notify(key);
+    return true;
   };
 
   /** For the two plain strings (client id, api key) that are not JSON. */
@@ -942,12 +1085,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   };
   const setText = (key, value) => {
     record(key);
-    try { localStorage.setItem(key, value); return true; } catch { return false; }
+    try { localStorage.setItem(scoped(key), value); } catch { return false; }
+    notify(key);
+    return true;
   };
 
   const remove = (key) => {
     record(key);
-    try { localStorage.removeItem(key); } catch { /* nothing to remove */ }
+    try { localStorage.removeItem(scoped(key)); } catch { /* nothing to remove */ }
+    notify(key);
   };
 
   /* ---------- undo and redo ----------
@@ -1050,8 +1196,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     try {
       for (const [k, before] of step.before) {
         inverse.before.set(k, snap(k));
-        if (before === null) { try { localStorage.removeItem(k); } catch { /* ignore */ } }
-        else { try { localStorage.setItem(k, before); } catch { /* ignore */ } }
+        if (before === null) { try { localStorage.removeItem(scoped(k)); } catch { /* ignore */ } }
+        else { try { localStorage.setItem(scoped(k), before); } catch { /* ignore */ } }
       }
     } finally { replaying = false; }
     return inverse;
@@ -1137,6 +1283,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       for (const [k, v] of entries) setText(k, v);
     } finally { replaying = false; }
     clearHistory();
+    /* A restore is the one write that would otherwise never reach the account.
+       It runs with replaying set - it is not an undo step - and that same flag
+       suppresses the sync notification, so the file you just loaded would sit
+       in this browser while your other computer kept the old copy and pushed
+       it back over the top. Every data key is announced once, here, after the
+       flag is down. */
+    for (const k of KEYS.data) notify(k);
     return entries.length;
   }
 
@@ -1217,9 +1370,489 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   });
 
   window.TrackerStore = { KEYS, ALL, get, set, getText, setText, remove,
+                          setScope, getScope, getSession, setSession, quietSet,
                           exportData, importData, saveToFile, restoreFromFile, openBackupDialog,
                           undo, redo, canUndo, canRedo, undoDepth, redoDepth,
                           holdBlobs, clearHistory, DEPTH };
+})();
+
+</script>
+<script>
+/* Firebase: who you are, and where your tracker is kept.
+
+   Two things live here, both talking to the same project:
+
+     TrackerAuth  - Google sign-in and an email/password register/login.
+                    The account's uid becomes the scope every stored key
+                    carries (assets/store.js), which is what makes one
+                    person's tracker invisible to another's.
+     TrackerSync  - the same content mirrored into Firestore under
+                    accounts/{uid}, so signing in on another computer brings
+                    your tracker with you, and so there is one place holding
+                    every account.
+
+   localStorage stays the working copy. Every module in this app reads it
+   synchronously and none of them know this file exists; Firestore is a
+   mirror, not a dependency of the render. So the tracker is instant, it
+   survives a dropped connection, and it keeps working with no Firebase
+   project configured at all - which is the state the site ships in until
+   config.js is filled in.
+
+   Nothing secret is in that config. A Firebase web config identifies the
+   project; it grants nothing. What stops one account reading another is the
+   Firestore rules in firestore.rules, enforced by the server. */
+(() => {
+  const SDK = "https://www.gstatic.com/firebasejs/10.12.5/";
+
+  const cfg = () => {
+    const c = window.TRACKER_CONFIG && window.TRACKER_CONFIG.firebase;
+    return c && c.apiKey && c.projectId && c.appId ? c : null;
+  };
+
+  let mods = null;       // the loaded SDK
+  let app = null, fbAuth = null, db = null;
+  let loaded = false;    // resolved: the SDK is here and the project is real
+  let tried = false;
+
+  /**
+   * Load Firebase, once.
+   *
+   * Returns false rather than throwing when there is no config or the CDN
+   * cannot be reached - offline, blocked, or simply not set up yet. The app
+   * falls back to the device account in that case, which is a working
+   * tracker rather than a broken page.
+   */
+  async function ready() {
+    if (tried) return loaded;
+    tried = true;
+    if (!cfg()) return false;
+    try {
+      const [core, auth, store] = await Promise.all([
+        import(SDK + "firebase-app.js"),
+        import(SDK + "firebase-auth.js"),
+        import(SDK + "firebase-firestore.js"),
+      ]);
+      mods = { core, auth, store };
+      app = core.initializeApp(cfg());
+      fbAuth = auth.getAuth(app);
+      db = store.getFirestore(app);
+      // Survives a reload and a closed tab, which is what makes "sign in
+      // once" true rather than "sign in on every visit".
+      await auth.setPersistence(fbAuth, auth.browserLocalPersistence);
+      loaded = true;
+    } catch {
+      loaded = false;
+    }
+    return loaded;
+  }
+
+  const available = () => loaded;
+
+  /** Firebase's own wording is for developers. This is for the person. */
+  function readable(e) {
+    const code = (e && e.code) || "";
+    if (code.includes("invalid-credential") || code.includes("wrong-password")
+        || code.includes("user-not-found")) return "That email and password do not match an account.";
+    if (code.includes("email-already-in-use")) return "There is already an account with that email. Sign in instead.";
+    if (code.includes("weak-password")) return "That password is too short. Use at least six characters.";
+    if (code.includes("invalid-email")) return "That does not look like an email address.";
+    if (code.includes("popup-closed") || code.includes("cancelled-popup")) return "The Google window closed before you finished.";
+    if (code.includes("popup-blocked")) return "Your browser blocked the Google window. Allow pop-ups for this site.";
+    if (code.includes("network")) return "No connection to the sign-in service. Check your network.";
+    if (code.includes("operation-not-allowed")) return "That way of signing in is not switched on in the Firebase project yet.";
+    if (code.includes("unauthorized-domain")) return "This address is not in the Firebase project's authorised domains.";
+    return (e && e.message) || "That did not work. Try again.";
+  }
+
+  const shape = (u) => (u ? {
+    id: u.uid,
+    name: u.displayName || (u.email || "").split("@")[0] || "Signed in",
+    email: u.email || "",
+    kind: "hosted",
+  } : null);
+
+  /**
+   * Record the account itself, so there is a list of them to look at.
+   *
+   * Written on every sign-in rather than only on registration: an account
+   * created before this existed, or through the Firebase console, still
+   * appears the first time its owner signs in.
+   */
+  async function profile(u) {
+    if (!db || !u) return;
+    const { doc, setDoc, serverTimestamp } = mods.store;
+    try {
+      await setDoc(doc(db, "accounts", u.uid), {
+        email: u.email || "", name: u.displayName || "",
+        provider: (u.providerData && u.providerData[0] && u.providerData[0].providerId) || "",
+        lastSignIn: serverTimestamp(),
+      }, { merge: true });
+    } catch { /* a profile that could not be written must not block a sign-in */ }
+  }
+
+  async function finish(cred) {
+    const who = shape(cred.user);
+    await profile(cred.user);
+    return who;
+  }
+
+  async function signInWithGoogle() {
+    if (!loaded) throw new Error("Sign-in is not available.");
+    const { GoogleAuthProvider, signInWithPopup } = mods.auth;
+    try { return await finish(await signInWithPopup(fbAuth, new GoogleAuthProvider())); }
+    catch (e) { throw new Error(readable(e)); }
+  }
+
+  async function signIn(email, password) {
+    if (!loaded) throw new Error("Sign-in is not available.");
+    try { return await finish(await mods.auth.signInWithEmailAndPassword(fbAuth, email, password)); }
+    catch (e) { throw new Error(readable(e)); }
+  }
+
+  async function register(email, password) {
+    if (!loaded) throw new Error("Sign-in is not available.");
+    try { return await finish(await mods.auth.createUserWithEmailAndPassword(fbAuth, email, password)); }
+    catch (e) { throw new Error(readable(e)); }
+  }
+
+  /** The session Firebase is already holding, if any. */
+  function restore() {
+    if (!loaded) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const stop = mods.auth.onAuthStateChanged(fbAuth, (u) => {
+        stop();
+        if (u) profile(u);
+        resolve(shape(u));
+      }, () => { stop(); resolve(null); });
+    });
+  }
+
+  async function signOut() {
+    if (loaded) { try { await mods.auth.signOut(fbAuth); } catch { /* local sign-out still stands */ } }
+  }
+
+  window.TrackerAuth = { ready, available, signInWithGoogle, signIn, register, restore, signOut };
+
+  /* ---------- the mirror ---------- */
+
+  /**
+   * The Firestore backend, behind an interface of two functions.
+   *
+   * Two functions and not a direct call, so a check can put a fake one in and
+   * assert what the sync layer does with what comes back - which is where the
+   * bugs are - without a Firebase project and a network.
+   */
+  const firestoreBackend = {
+    async load(uid) {
+      const { collection, getDocs } = mods.store;
+      const out = {};
+      const snap = await getDocs(collection(db, "accounts", uid, "keys"));
+      snap.forEach((d) => { const v = d.data(); if (typeof v.value === "string") out[d.id] = v.value; });
+      return out;
+    },
+    async save(uid, key, value) {
+      const { doc, setDoc, deleteDoc, serverTimestamp } = mods.store;
+      const ref = doc(db, "accounts", uid, "keys", key);
+      if (value === null) return deleteDoc(ref);
+      return setDoc(ref, { value, at: serverTimestamp() });
+    },
+  };
+
+  let backend = null;
+  let uid = "";
+  let queue = new Map();
+  let timer = null;
+  let last = "";
+
+  /**
+   * Pull an account's tracker down, and point the mirror at it.
+   *
+   * Written through quietSet, so nothing arriving from your other computer
+   * appears in this browser's undo history: undoing it would "restore" a
+   * state this browser was never in.
+   *
+   * An account with nothing stored yet keeps whatever is already on screen
+   * and pushes it up, which is what makes the first sign-in carry your work
+   * with you instead of throwing it away.
+   */
+  async function start(who) {
+    stop();
+    if (!who || who.kind !== "hosted") return;
+    backend = backend || (loaded ? firestoreBackend : null);
+    if (!backend) return;
+    /* The store must already be pointed at this account. If it is not,
+       every quietSet below would file this account's tracker under whichever
+       account is currently open - which is the exact cross-account write the
+       scoping exists to prevent, arriving through the back door. Refuse
+       rather than guess. */
+    if (window.TrackerStore.getScope() !== who.id) return;
+    uid = who.id;
+    let remote = {};
+    try { remote = await backend.load(uid); } catch { return; }
+    const keys = window.TrackerStore.KEYS.data;
+    const names = Object.keys(remote).filter((k) => keys.includes(k));
+    if (names.length) {
+      for (const k of keys) window.TrackerStore.quietSet(k, remote[k] ?? null);
+      if (window.TrackerStore.clearHistory) window.TrackerStore.clearHistory();
+      if (window.TrackerRender) window.TrackerRender();
+    } else {
+      for (const k of keys) changed(k);
+    }
+  }
+
+  function stop() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    queue = new Map(); uid = "";
+  }
+
+  /**
+   * A key changed locally. Debounced, because typing in a task description
+   * writes on every keystroke and a write per keystroke is a write per
+   * keystroke billed, sent and raced.
+   */
+  function changed(key) {
+    if (!backend || !uid) return;
+    queue.set(key, true);
+    if (timer) return;
+    timer = setTimeout(flush, 800);
+  }
+
+  async function flush() {
+    timer = null;
+    if (!backend || !uid) return;
+    const keys = [...queue.keys()];
+    queue.clear();
+    for (const k of keys) {
+      // Read at flush time, not at change time: the value that matters is the
+      // one it settled on, not the one it passed through.
+      const value = window.TrackerStore.getText(k, "") || null;
+      try { await backend.save(uid, k, value); last = k; } catch { /* try again on the next change */ }
+    }
+  }
+
+  window.TrackerSync = {
+    changed, start, stop, flush,
+    /* Test seam. The Firestore backend is the default in a real browser; a
+       check puts its own in so the pull-and-push logic is assertable without
+       a Firebase project. */
+    _use: (b) => { backend = b; },
+    _state: () => ({ uid, queued: [...queue.keys()], last }),
+  };
+})();
+
+</script>
+<script>
+/* Who is using this tracker.
+
+   Everything you author is stored under a key that carries your account id
+   (assets/store.js), so two accounts on one computer never see each other's
+   tasks, log, projects or links. This file decides what that id is, and
+   holds the page shut until it knows.
+
+   Two modes, decided by where the page is running:
+
+     hosted   - served over http(s). A sign-in screen, and nothing of the
+                tracker is drawn until it is passed.
+     offline  - the standalone file opened straight from disk. There is no
+                web origin there, so no hosted sign-in can work at all; it
+                runs as a single local account and says so rather than
+                locking you out of your own file.
+
+   The identity provider itself is deliberately not in here twice: signIn()
+   asks TrackerAuth, which account.js works without. With no provider wired
+   up the screen offers the device account alone, so the site keeps working
+   while its Firebase project is still being set up. */
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* The id used when there is no hosted identity: one account, this device.
+
+     It is deliberately the EMPTY id, which store.js maps to the unscoped
+     keys. Two reasons, and the second is the one that matters:
+
+       1. "this computer only" is exactly what the unscoped namespace already
+          means - one tracker per browser, which is what this app was before
+          accounts existed.
+       2. It makes the upgrade free. Everything anyone has already written is
+          in those unscoped keys, and giving the device account an id of its
+          own would have hidden every existing tracker behind a migration on
+          first load. Instead the tracker you had is simply the device
+          account, and signing in with Google starts the empty one. */
+  const DEVICE_ID = "";
+
+  const hosted = () => location.protocol.startsWith("http");
+
+  let user = null;      // { id, name, email, kind } or null
+  let notice = "";
+  let busy = false;
+
+  const current = () => user;
+
+  /** The provider, if one has been wired up. Absent is a supported state. */
+  const auth = () => (window.TrackerAuth && window.TrackerAuth.available() ? window.TrackerAuth : null);
+
+  /**
+   * Take an account and point the whole app at it.
+   *
+   * setScope is what actually isolates the data; the session pointer is only
+   * so a reload comes back to the same account rather than to the screen.
+   */
+  function adopt(who) {
+    user = who || null;
+    window.TrackerStore.setScope(user ? user.id : "");
+    window.TrackerStore.setSession(user);
+    if (window.TrackerRender) window.TrackerRender();
+    /* The mirror is pointed at the account only after the scope is, and only
+       after the render: your tracker is on screen from local storage
+       immediately, and anything newer arrives when it arrives. Nothing waits
+       on the network. */
+    if (window.TrackerSync) {
+      if (user) window.TrackerSync.start(user);
+      else window.TrackerSync.stop();
+    }
+  }
+
+  async function signOut() {
+    const a = auth();
+    if (a && user && user.kind !== "device") { try { await a.signOut(); } catch { /* local sign-out still stands */ } }
+    notice = "";
+    adopt(null);
+  }
+
+  /* ---------- the screen ---------- */
+
+  function view() {
+    const a = auth();
+    const rows = [];
+    if (a) {
+      rows.push(`<button class="btn primary wide" id="acctGoogle"${busy ? " disabled" : ""}>Continue with Google</button>
+        <div class="acct-or"><span>or</span></div>
+        <form id="acctForm" autocomplete="on">
+          <div class="field"><label for="acctEmail">Email</label>
+            <input id="acctEmail" type="email" required autocomplete="email" placeholder="you@example.com"></div>
+          <div class="field"><label for="acctPass">Password</label>
+            <input id="acctPass" type="password" required autocomplete="current-password"
+                   minlength="6" placeholder="At least 6 characters"></div>
+          <div class="acct-actions">
+            <button class="btn primary" type="submit" data-acct="signin"${busy ? " disabled" : ""}>Sign in</button>
+            <button class="btn" type="submit" data-acct="register"${busy ? " disabled" : ""}>Create account</button>
+          </div>
+        </form>`);
+    } else {
+      rows.push(`<p class="lede">Sign-in is not set up on this site yet, so the tracker
+        is running as a single account on this computer. Anyone using this browser
+        sees it. Setting up the Firebase project in <code>README.md</code> turns on
+        Google sign-in and accounts that follow you to another computer.</p>`);
+    }
+    if (!hosted()) {
+      rows.length = 0;
+      rows.push(`<p class="lede">This is the offline copy, opened straight from disk.
+        There is no web address here for a sign-in to work against, so it keeps one
+        tracker for this computer. Use the hosted site if you want separate accounts.</p>`);
+    }
+    return `<div class="acct-gate">
+      <div class="acct-box">
+        <div class="brand"><div class="dot">T</div>
+          <h1>Project Tracker<span>Sign in to see your own tracker</span></h1></div>
+        ${notice ? `<div class="acct-notice">${esc(notice)}</div>` : ""}
+        ${rows.join("")}
+        <div class="acct-foot">
+          <button class="btn" id="acctDevice"${busy ? " disabled" : ""}>Use this computer only</button>
+          <small>Keeps everything in this browser, with no account. It stays on this
+            computer and is not carried to another one.</small>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /** The signed-in identity, and the way out, for the sidebar. */
+  function sidebar() {
+    if (!user) return "";
+    const who = user.name || user.email || "This computer";
+    const sub = user.kind === "device" ? "this computer only" : (user.email || "signed in");
+    return `<div class="acct-who">
+        <div class="acct-name" title="${esc(user.email || who)}">${esc(who)}</div>
+        <div class="acct-sub">${esc(sub)}</div>
+      </div>
+      <button id="acctOut">Sign out</button>`;
+  }
+
+  /* ---------- events ---------- */
+
+  async function run(fn) {
+    busy = true; notice = ""; window.TrackerRender();
+    try {
+      const who = await fn();
+      if (who) return adopt(who);
+    } catch (e) {
+      notice = e && e.message ? e.message : "That did not work. Try again.";
+    } finally { busy = false; }
+    window.TrackerRender();
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#acctOut")) return signOut();
+    if (e.target.closest("#acctDevice")) {
+      return adopt({ id: DEVICE_ID, name: "This computer", email: "", kind: "device" });
+    }
+    if (e.target.closest("#acctGoogle")) {
+      const a = auth(); if (a) run(() => a.signInWithGoogle());
+      return;
+    }
+    const btn = e.target.closest("[data-acct]");
+    if (btn) btn.form && (btn.form.dataset.intent = btn.dataset.acct);
+  });
+
+  document.addEventListener("submit", (e) => {
+    const form = e.target.closest("#acctForm");
+    if (!form) return;
+    e.preventDefault();
+    const a = auth(); if (!a) return;
+    const email = $("#acctEmail").value.trim();
+    const pass = $("#acctPass").value;
+    const intent = form.dataset.intent === "register" ? "register" : "signin";
+    run(() => (intent === "register" ? a.register(email, pass) : a.signIn(email, pass)));
+  });
+
+  /* ---------- boot ---------- */
+
+  /**
+   * Decide who is signed in, before the first render.
+   *
+   * Offline goes straight to the device account. Hosted asks the provider
+   * first - it may already hold a session from last time - and falls back to
+   * the pointer left by a previous visit, which is what makes a reload come
+   * back to your own tracker instead of to this screen.
+   */
+  async function init() {
+    // Ask the provider to load before deciding anything: available() is what
+    // the screen reads, and it must not say "no sign-in here" merely because
+    // it was asked a moment too early.
+    if (window.TrackerAuth && window.TrackerAuth.ready) {
+      try { await window.TrackerAuth.ready(); } catch { /* falls back below */ }
+    }
+    if (!hosted()) {
+      adopt({ id: DEVICE_ID, name: "This computer", email: "", kind: "device" });
+      return;
+    }
+    const a = auth();
+    if (a) {
+      try {
+        const who = await a.restore();
+        if (who) return adopt(who);
+      } catch { /* fall through to the pointer, then to the screen */ }
+    }
+    const last = window.TrackerStore.getSession();
+    // Only a device account can be restored from the pointer alone. A hosted
+    // account must come back from the provider, or anyone could sign in as
+    // anyone by editing one line of storage.
+    if (last && last.kind === "device") return adopt(last);
+    adopt(null);
+  }
+
+  window.TrackerAccount = { current, view, sidebar, signOut, init, DEVICE_ID };
 })();
 
 </script>
@@ -6196,6 +6829,28 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   });
 
   function render() {
+    /* The gate. Drawn BEFORE anything reads state.data, because "signing out
+       shows nothing of the other account" is only true if the content was
+       never rendered in the first place - a view built and then hidden is
+       still in the page for anyone who looks.
+
+       Fails closed on purpose: no account module means no tracker, rather
+       than a tracker with everybody's data in it. */
+    const acct = window.TrackerAccount;
+    document.body.dataset.signedIn = acct && acct.current() ? "yes" : "no";
+    if (!acct) {
+      $("#nav").innerHTML = "";
+      $("#view").innerHTML = `<div class="empty">Sign-in did not load, so the tracker
+        is not being shown. Reload the page.</div>`;
+      return;
+    }
+    $("#acct").innerHTML = acct.sidebar();
+    if (!acct.current()) {
+      $("#nav").innerHTML = "";
+      $("#view").innerHTML = acct.view();
+      return;
+    }
+    if (!state.data) { $("#view").innerHTML = `<div class="empty">Loading…</div>`; return; }
     renderNav();
     paintHistory();
     let html;
@@ -6301,6 +6956,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   });
 
   /* ---------- boot ---------- */
+  // The account is settled first: render() will not draw the tracker until it
+  // knows whose it is, and init() calls render itself once it does.
+  if (window.TrackerAccount) window.TrackerAccount.init();
+  else render();
   Promise.resolve(window.TRACKER_DATA)
     .then((d) => {
       state.data = d;

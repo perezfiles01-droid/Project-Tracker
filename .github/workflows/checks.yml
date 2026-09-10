@@ -43,6 +43,11 @@ jobs:
         run: node checks/check_paging.mjs
       - name: Storage is owned by one module
         run: node checks/check_storage.mjs
+      # Enumerates the keys at runtime, so a key added later is covered without
+      # this workflow or the check being edited. The failure it exists to catch
+      # is silent: one key escaping the scope is one account reading another's.
+      - name: Each account has its own tracker
+        run: node checks/check_accounts.mjs
       - name: Backup saves and restores everything
         run: node checks/check_backup.mjs
       - name: The visible contract holds
