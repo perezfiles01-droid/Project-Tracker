@@ -40,6 +40,12 @@ site.
 - **Daily activity** — the daily log, filterable by project and sortable by any column.
 - **Communications** — Teams/WeCom updates with owner, due date and status.
 - **Google Drive** — see below.
+- **Image Generator** — describe a picture and get one, with its own settings
+  inside the section listing only models that can draw. Runs on Pollinations,
+  which needs no key at all, or on Gemini with the same free AI Studio key the
+  Standardize button uses. Export saves any picture as a real file, and you can
+  upload an image for the generator to work from. The gallery is deliberately
+  browser-local and stays out of the backup file.
 
 Press <kbd>/</kbd> anywhere to jump to the search box. Search covers every page.
 

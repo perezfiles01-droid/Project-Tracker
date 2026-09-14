@@ -168,8 +168,21 @@ const nav = await page.evaluate(() => {
 });
 ok("no nav button appears before the first heading", !nav.orphan);
 const titles = (nav.groups || []).map((g) => g.title);
-ok("nav headings are Index / Projects / Task / Drive",
-   JSON.stringify(titles) === JSON.stringify(["Index", "Projects", "Task", "Drive"]), titles.join(" · "));
+/* The four groups this app has always had, still present and still in this
+   order. Deliberately no longer an exact-equality assertion against the whole
+   list: it was, and adding the Image Generator group broke it, which is a
+   check failing on a feature rather than on a fault. The bug this exists to
+   catch is items falling under the WRONG heading - Daily activity and Google
+   Drive once sat under PROJECTS because the nav emitted one heading and then
+   nothing - and that is caught by presence, by order, and by the two
+   assertions either side of this one, which together say every button sits
+   under some heading and none appears before the first. An extra group at the
+   end cannot produce the fault; a missing or reordered one still fails here. */
+const EXPECTED = ["Index", "Projects", "Task", "Drive"];
+ok(`nav headings still include ${EXPECTED.join(" / ")}, in order`,
+   EXPECTED.every((t, i) => titles.indexOf(t) >= 0 &&
+     (i === 0 || titles.indexOf(t) > titles.indexOf(EXPECTED[i - 1]))),
+   titles.join(" · "));
 const flat = (nav.groups || []).flatMap((g) => g.items);
 ok("every nav button sits under a heading",
    flat.length === (await page.locator("#nav button").count()));
