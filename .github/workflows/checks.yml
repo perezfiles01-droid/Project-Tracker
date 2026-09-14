@@ -131,3 +131,9 @@ jobs:
       # like a broken model rather than a wrong list.
       - name: Every image engine draws what it says it can
         run: node checks/check_imagegen.mjs
+      # The faults here were silent and compounding: a line break deleted on
+      # save welded two lines into one word, and a dialog's listeners piled up
+      # on the shared host so one toolbar click ran its command once per
+      # dialog ever opened.
+      - name: The rich field keeps what you typed, and steps back one edit
+        run: node checks/check_rich_edit.mjs

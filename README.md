@@ -51,6 +51,12 @@ site.
   from an image you upload. The gallery is deliberately browser-local and stays
   out of the backup file.
 
+Every rich text box carries its own undo and redo, at the left of its
+formatting bar, in the same pair of icons the sidebar uses. Ctrl+Z and
+Ctrl+Shift+Z drive the same history. It steps back one edit at a time and is
+separate from the sidebar's undo on purpose: the toolbar pair undoes what you
+are typing, the sidebar pair undoes what you have saved.
+
 Press <kbd>/</kbd> anywhere to jump to the search box. Search covers every page.
 
 ## Running it locally
