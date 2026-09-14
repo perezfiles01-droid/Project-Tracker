@@ -33,6 +33,10 @@ site.
   source links.
 - **LHUB** — working links, the clarification checklist for the remote BA, and
   the numbered Jira epic/story/sub-task creation steps.
+- **To Do List** — the tasks still in progress, with an **Export** button that
+  saves a `.txt` report of whichever tasks and date range you pick. The facts in
+  it come from your tasks; AI writes the summary that explains them, and the
+  report still saves in full if there is no AI key or the request fails.
 - **Daily activity** — the daily log, filterable by project and sortable by any column.
 - **Communications** — Teams/WeCom updates with owner, due date and status.
 - **Google Drive** — see below.

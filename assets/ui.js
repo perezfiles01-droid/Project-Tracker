@@ -1201,6 +1201,66 @@
     }
   }
 
+  /* ---------- handing a file to the browser ----------
+
+     Every save in this app goes through here: the backup file, a task
+     attachment, an embedded image opened in a tab, and the exported report.
+     They were four copies of the same six lines.
+
+     Two things are different from the copies they replace, and it is worth
+     being exact about which of them was measured.
+
+     MEASURED: nothing. Hammering saveText - forty downloads back to back with
+     no gap at all - loses roughly one in twelve, and it loses the same one in
+     twelve both before and after this function existed. A 400ms pause between
+     them, or a fresh browser context, loses none. That is the browser
+     declining to start downloads fired faster than it can process them, not
+     anything this code does, and no person clicking Export can produce it. It
+     is written down because it cost a wrong diagnosis: the regular spacing of
+     the misses read convincingly as a bug here, and it was not one.
+
+     REASONED, not measured: store.js called URL.revokeObjectURL on the line
+     after a.click(), and the anchor was detached on the line before that. A
+     click on a download anchor schedules the transfer rather than performing
+     it, so revoking its URL immediately is a race over the bytes of the one
+     file in this app that cannot be rebuilt. It has not been seen to fail and
+     it is not claimed to have been. Holding the anchor for a second and the
+     URL for a minute - which is what three of the four copies already did -
+     costs nothing and removes the question.
+
+     The real reason this is one function is the fifth thing that saves a file.
+     It inherits whatever is right here rather than a sixth copy of the idiom. */
+  function saveBlob(blob, name) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name || "download";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 1000);
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    return a.href;
+  }
+
+  /**
+   * The same, but opening in a tab rather than saving.
+   *
+   * A synthetic anchor with target="_blank" is an ordinary navigation. It is
+   * deliberately NOT window.open(url, "_blank", "noopener"): passing a third
+   * windowFeatures argument makes browsers open a stripped-down popup window
+   * instead of a tab in the window you are already in.
+   */
+  function openBlob(blob) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 1000);
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    return a.href;
+  }
+
   /**
    * Open a form. Resolves with an object keyed by field name, or null if the
    * dialog was cancelled — so a caller can always tell "saved nothing" from
@@ -1986,7 +2046,7 @@
     }
   });
 
-  window.TrackerUI = { formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, ATT_MAX,
+  window.TrackerUI = { saveBlob, openBlob, formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, ATT_MAX,
                        paintImages, imageRefs, storeImage, clampBlock, paintClamps, paintTables, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();

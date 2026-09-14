@@ -23,31 +23,23 @@ const ok = (name, cond, detail = "") => {
 
 /** Strip comments and quoted strings so a mention in prose is not a hit. */
 
-/** Comments out, strings and templates kept — attributes live inside those. */
-function stripComments(src) {
-  let out = "", i = 0, quote = null, tpl = 0, line = false, block = false;
-  while (i < src.length) {
-    const c = src[i], n = src[i + 1];
-    if (line) { if (c === "\n") { line = false; out += c; } i++; continue; }
-    if (block) { if (c === "*" && n === "/") { block = false; i += 2; } else i++; continue; }
-    if (quote) {
-      if (c === "\\") { out += src.slice(i, i + 2); i += 2; continue; }
-      if (c === quote) quote = null;
-      out += c; i++; continue;
-    }
-    if (tpl) {
-      if (c === "\\") { out += src.slice(i, i + 2); i += 2; continue; }
-      if (c === "`") tpl--;
-      out += c; i++; continue;
-    }
-    if (c === "/" && n === "/") { line = true; i += 2; continue; }
-    if (c === "/" && n === "*") { block = true; i += 2; continue; }
-    if (c === "'" || c === '"') { quote = c; out += c; i++; continue; }
-    if (c === "`") { tpl++; out += c; i++; continue; }
-    out += c; i++;
-  }
-  return out;
-}
+/**
+ * Comments out, strings and templates kept - attributes live inside those.
+ *
+ * This was a second, hand-rolled state machine that did not know what a regex
+ * literal is, and lib/code.mjs exists because of exactly that bug: esc() in
+ * five of these modules is /[&<>"']/g, whose " opens a string that never
+ * closes, and everything after line 12 of ui.js was mis-stripped. It went
+ * unnoticed for as long as ui.js happened to contain no target="_blank" to
+ * miscount - the first one added was counted out of a DOC COMMENT, and this
+ * check failed on prose, which is the very failure the comment above its own
+ * self-test says it was already fixed once for.
+ *
+ * So there is no second copy any more. The shared one is regex-aware, is
+ * self-tested against the real files, and cannot drift from the version the
+ * popup check on the line above already uses.
+ */
+const stripComments = (src) => code(src, true);
 
 const files = readdirSync(assets).filter((f) => f.endsWith(".js"));
 ok("found the asset files to check", files.length > 0, files.join(", "));

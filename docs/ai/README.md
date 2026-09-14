@@ -16,6 +16,24 @@ removed once a free path worked. See [`free-engine.md`](free-engine.md) to set i
 `assets/ai.js` for the code. The rest of this folder is kept because the
 reasoning still applies to the next AI request.
 
+**Second use, 14 September 2026: the exported task report.** The To Do List's
+Export button saves a `.txt` report, and the AI writes its summary. It is a
+second *instruction* in `assets/ai.js`, not a second engine and not a second
+request path: both providers already route through one `prompt()`, so the
+report reaches Gemini and OpenRouter alike and a third engine would inherit it.
+
+Two things about it are worth carrying into the next AI request here:
+
+- **The model writes prose, never a fact.** Every field in the report is
+  printed verbatim out of storage, and the AI's paragraphs sit beside them.
+  A model that misreads or invents cannot make the file state something your
+  data does not. That is a property of the layout, not of the prompt, and it
+  is the reason the feature was safe to ship at all.
+- **The AI never decides whether you get a file.** No key, a refused key, a
+  rate limit, a dead network: the report still saves, with one line saying
+  why the summary is missing. `checks/check_export.mjs` forces each of those
+  failures and asserts a complete file comes out.
+
 One finding is worth carrying forward above all: **Harper was researched
 first and cannot do this job.** Its entire API is lint, span, suggestion,
 applySuggestion. It corrects; it does not rewrite, improve tone, or fill a
