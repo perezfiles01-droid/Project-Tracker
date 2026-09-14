@@ -3246,6 +3246,43 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const DROP_WHOLE = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "IFRAME",
                               "OBJECT", "EMBED", "SVG", "MATH", "HEAD", "LINK", "META"]);
 
+  /* Elements that are a LINE BREAK as much as they are a wrapper.
+     This set exists because of a bug that silently ate people's text. An
+     unwrapped element used to lose its boundary along with its tag: the walk
+     below spliced the children in and deleted the tag with nothing in its
+     place. DIV is not in ALLOWED, and DIV is exactly what a contenteditable
+     writes when you press Enter, so typing
+         Monday⏎Ada to check the record
+     was saved as "MondayAda to check the record" - the break deleted and the
+     two words welded together. A blank line between paragraphs,
+     <div><br></div>, collapsed the same way, which is why paragraph spacing
+     "did not save".
+     Unwrapping one of these now leaves a <br> where the boundary was, so the
+     shape of what you typed survives even though the tag does not. It also
+     fixes pasted content from Word and from web pages, which is mostly
+     nested divs. */
+  const BLOCKISH = new Set(["DIV", "SECTION", "ARTICLE", "HEADER", "FOOTER", "MAIN",
+                            "ASIDE", "NAV", "BLOCKQUOTE", "PRE", "ADDRESS", "FIGURE",
+                            "FIGCAPTION", "DL", "DT", "DD", "FORM", "FIELDSET",
+                            "H1", "H2", "H3", "H4", "H5", "H6"]);
+
+  /**
+   * Is a break needed in front of this node, or is one already there?
+   *
+   * Whitespace-only text between block elements is not content - the parser
+   * leaves it behind wherever the source HTML was indented - so it is skipped
+   * when looking backwards. A node with nothing before it needs no boundary
+   * either: a break at the very start of a field is a blank first line
+   * nobody typed.
+   */
+  function needsBreakBefore(node) {
+    let prev = node.previousSibling;
+    while (prev && prev.nodeType === 3 && !prev.textContent.trim()) prev = prev.previousSibling;
+    if (!prev) return false;
+    if (prev.nodeType === 1 && prev.tagName.toUpperCase() === "BR") return false;
+    return true;
+  }
+
   function cleanHtml(dirty) {
     const src = String(dirty ?? "");
     if (!src) return "";
@@ -3265,9 +3302,30 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         if (DROP_WHOLE.has(tag)) { child.remove(); continue; }
         walk(child);
         if (!ALLOWED.has(tag)) {
-          // Unwrap: keep what the person wrote, lose the tag around it.
+          // Unwrap: keep what the person wrote, lose the tag around it - and
+          // for a block element, keep the LINE BREAK it stood for. Without
+          // the <br> the boundary vanished with the tag and welded the two
+          // lines into one word.
           const parent = child.parentNode;
+          const block = BLOCKISH.has(tag);
+          const empty = !child.firstChild;
+          // Only where a break is not already standing.
+          //
+          // A blank line arrives as <div><br></div>, and that <br> IS the
+          // boundary - adding another in front of it produced three breaks
+          // where two were typed, so one blank line came back as two. Caught
+          // by driving the real field, not by reading. So the boundary is
+          // added only when what precedes this block is not already a break,
+          // and the block's own leading break counts as one.
+          if (block && !empty && needsBreakBefore(child)) {
+            parent.insertBefore(doc.createElement("br"), child);
+          }
           while (child.firstChild) parent.insertBefore(child.firstChild, child);
+          // An empty block is a blank line with nothing inside it to stand in
+          // for the boundary, so it leaves one behind.
+          if (block && empty && needsBreakBefore(child)) {
+            parent.insertBefore(doc.createElement("br"), child);
+          }
           child.remove();
           continue;
         }
@@ -3448,9 +3506,30 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     } catch { return src; }
   }
 
-  /** Does this value carry markup, or is it the plain text an older save left? */
-  const isHtml = (v) => /<(p|br|b|strong|i|em|u|s|strike|ul|ol|li|table|tr|td|th)\b/i
-    .test(String(v ?? ""));
+  /**
+   * Does this value carry markup, or is it the plain text an older save left?
+   *
+   * The question this really answers is "would running esc() over it corrupt
+   * it?", and the old fixed tag list got that wrong in a way people could
+   * see. It tested for p, br, b, table and friends - so a saved value whose
+   * only markup was an ENTITY, with no tag left in it at all, was judged
+   * plain. It then went through esc() on the way back into the field, which
+   * escaped the ampersand, and "Monday&nbsp;Ada" was displayed as the literal
+   * characters "Monday&nbsp;Ada". That is the mystery text that appeared in
+   * people's updates, and it appeared once per save because each round trip
+   * escaped the previous round's ampersand again.
+   *
+   * So an entity counts as markup too. Anything genuinely plain - no angle
+   * bracket, no entity - still takes the plain path and still gets its
+   * newlines turned into breaks, which is what an older save needs.
+   */
+  const isHtml = (v) => {
+    const s = String(v ?? "");
+    // A tag: "<" followed by a letter or a closing slash. "a < b" is not one.
+    return /<\/?[a-z][a-z0-9]*(\s|\/?>)/i.test(s) ||
+           // A character reference: &nbsp; &amp; &#160; &#x27;
+           /&(?:[a-z][a-z0-9]{1,9}|#[0-9]{1,7}|#x[0-9a-f]{1,6});/i.test(s);
+  };
 
   let host = null;
   const ensureHost = () => {
@@ -3825,12 +3904,135 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     doc.execCommand("insertHTML", false, html);
   }
 
+  /* ---------- the edit history behind a rich field ----------
+
+     Why this is our own stack and not the browser's undo.
+
+     execCommand("undo") works and queryCommandEnabled reports honestly, so
+     the obvious version is two lines. It was measured in the real field
+     before being rejected: typing three sentences in bursts 700ms apart and
+     pressing undo once cleared the ENTIRE field, and redo brought all of it
+     back. A discrete command like bold does get its own entry, but typing
+     coalesces into a single transaction, so a button labelled Undo would
+     have deleted everything somebody wrote in one click. That is a
+     data-loss trap wearing the name of a safety feature.
+
+     So the field keeps snapshots of its own, in the same shape as the undo
+     history in store.js: a bounded stack, a redo stack that a fresh edit
+     clears, and a depth read FROM the store rather than declared again here
+     so the two can never drift apart. The behaviour is then identical in
+     every browser instead of depending on each engine's idea of when one
+     edit ends and the next begins.
+
+     The stacks are keyed by field element and thrown away with the dialog. A
+     half-typed update is not something to restore on the next open. */
+  const richHist = new WeakMap();
+  const RICH_QUIET = 500;        // ms of no typing that ends one step
+
+  const histOf = (el) => {
+    let h = richHist.get(el);
+    if (!h) { h = { undo: [], redo: [], timer: 0, last: el.innerHTML }; richHist.set(el, h); }
+    return h;
+  };
+  const richDepth = () =>
+    (window.TrackerStore && window.TrackerStore.DEPTH) || 7;
+
+  /**
+   * Remember where this field is, so undo can come back to it.
+   *
+   * `now` skips the debounce, for a toolbar command: bold is one deliberate
+   * act and belongs in the history immediately, where a run of keystrokes
+   * should settle first or every character would be its own step.
+   */
+  function richSnapshot(el, { now = false } = {}) {
+    const h = histOf(el);
+    const take = () => {
+      const cur = el.innerHTML;
+      if (cur === h.last) return;               // nothing actually changed
+      h.undo.push(h.last);
+      while (h.undo.length > richDepth()) h.undo.shift();
+      // A fresh edit ends the old future, exactly as store.js does.
+      h.redo.length = 0;
+      h.last = cur;
+      paintRichHistory(el);
+    };
+    clearTimeout(h.timer);
+    if (now) return take();
+    h.timer = setTimeout(take, RICH_QUIET);
+  }
+
+  /** Step back one snapshot. Returns whether anything moved. */
+  function richUndo(el) {
+    const h = histOf(el);
+    // A step still settling is committed first, or the last thing typed
+    // would be skipped over and undo would feel one edit behind.
+    clearTimeout(h.timer);
+    if (el.innerHTML !== h.last) { h.undo.push(h.last); h.last = el.innerHTML; h.redo.length = 0; }
+    if (!h.undo.length) return false;
+    h.redo.push(h.last);
+    while (h.redo.length > richDepth()) h.redo.shift();
+    h.last = h.undo.pop();
+    el.innerHTML = h.last;
+    paintRichHistory(el);
+    return true;
+  }
+
+  /** Step forward again. */
+  function richRedo(el) {
+    const h = histOf(el);
+    clearTimeout(h.timer);
+    if (!h.redo.length) return false;
+    h.undo.push(h.last);
+    while (h.undo.length > richDepth()) h.undo.shift();
+    h.last = h.redo.pop();
+    el.innerHTML = h.last;
+    paintRichHistory(el);
+    return true;
+  }
+
+  /**
+   * The two buttons, told what they can currently do.
+   *
+   * Deliberately the same shape as paintHistory() in app.js: the depth lives
+   * in the accessible name rather than on the face of the button, and a
+   * button with nothing to do is disabled rather than hidden so the toolbar
+   * does not reflow as you type.
+   */
+  function paintRichHistory(el) {
+    const doc = el.ownerDocument;
+    const bar = doc.querySelector(`[data-richbar="${cssEsc(el.id)}"]`);
+    if (!bar) return;
+    const h = histOf(el);
+    const set = (sel, n, word) => {
+      const b = bar.querySelector(sel);
+      if (!b) return;
+      const label = n ? `${word} (${n} of ${richDepth()})` : `Nothing to ${word.toLowerCase()}`;
+      b.disabled = !n;
+      b.title = label;
+      b.setAttribute("aria-label", label);
+    };
+    set(`[data-richundo]`, h.undo.length, "Undo");
+    set(`[data-richredo]`, h.redo.length, "Redo");
+  }
+
   function richToolbar(id) {
     const btn = ([cmd, face, label]) =>
       `<button type="button" class="richbtn" data-cmd="${cmd}" data-for="${id}"
                title="${esc(label)}" aria-label="${esc(label)}" aria-pressed="false"
                tabindex="-1">${face}</button>`;
+    // Undo and redo lead the bar, in the same two glyphs the sidebar pair
+    // uses (ICONS.undo / ICONS.redo), so they read as the same control rather
+    // than as two unrelated buttons. tabindex -1 like every other rich
+    // button: clicking one must never take focus off the text.
+    const hist = (which, word) =>
+      `<button type="button" class="richbtn" data-rich${which}="${id}" data-for="${id}"
+               title="Nothing to ${word}" aria-label="Nothing to ${word}"
+               tabindex="-1" disabled>
+         <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[which] || ""}</svg>
+       </button>`;
     return `<div class="richbar" data-richbar="${id}">
+        ${hist("undo", "undo")}${hist("redo", "redo")}
+        <span class="richsep"></span>
         ${RICH_COMMANDS.slice(0, 4).map(btn).join("")}
         <span class="richsep"></span>
         ${RICH_COMMANDS.slice(4).map(btn).join("")}
@@ -4098,9 +4300,36 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * Everything a rich field needs, bound to the dialog rather than the document
    * so it dies with it.
    */
+  /**
+   * Wire the rich fields in a dialog, and hand back a way to unwire them.
+   *
+   * The teardown is the whole point of the return value. ensureHost() gives
+   * every dialog the SAME host element, and this function used to add its
+   * listeners to that host and to document and never remove them. They
+   * accumulated one set per dialog opened, and the effect was silent and
+   * bizarre: after five dialogs, ONE click on the bold button ran
+   * execCommand five times, so a toggle applied an odd or an even number of
+   * times depending on how many dialogs you had opened that session. Bold
+   * appearing to do nothing is what that looks like from the outside.
+   *
+   * Measured on the unmodified build before this was changed: five dialogs
+   * opened, then one click on the list button, and execCommand was called
+   * five times. formDialog now calls the teardown in close(), beside the
+   * attachment URLs it already revokes there, so nothing is left behind.
+   */
   function wireRich(box) {
     const boxes = [...box.querySelectorAll("[data-rich]")];
-    if (!boxes.length) return;
+    const bound = [];
+    /** addEventListener that remembers, so off() can undo all of it. */
+    const on = (target, type, fn, opts) => {
+      target.addEventListener(type, fn, opts);
+      bound.push([target, type, fn, opts]);
+    };
+    const off = () => {
+      for (const [t, type, fn, opts] of bound) t.removeEventListener(type, fn, opts);
+      bound.length = 0;
+    };
+    if (!boxes.length) return { off };
 
     const say = (id, msg, kind = "warn") => setNote(id, msg ? esc(msg) : "", msg ? kind : "");
 
@@ -4121,16 +4350,70 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         if (tools) tools.hidden = !(active && cellAt(el));
       }
     }
-    box.addEventListener("keyup", paintState);
-    box.addEventListener("mouseup", paintState);
-    document.addEventListener("selectionchange", paintState);
+    on(box, "keyup", paintState);
+    on(box, "mouseup", paintState);
+    on(document, "selectionchange", paintState);
+
+    /* Every listener below is bound to the FIELD, never to the dialog host.
+       That is not a style choice, it is a bug this cost.
+
+       ensureHost() returns ONE element reused by every dialog, and
+       formDialog's close() removes only its own two listeners. A handler
+       added to the host therefore survives the dialog that added it and
+       accumulates: by the sixth dialog of a session there were six copies,
+       so one click on undo ran it six times and emptied the field in a
+       single press. Caught by driving six dialogs in a row - a single
+       dialog looks perfect, which is why the first test of this passed.
+
+       The fields and their toolbars are rebuilt for every dialog, so a
+       listener on one of those dies with it and cannot pile up. */
+    for (const el of boxes) {
+      // The starting state is the baseline, so the buttons begin correctly
+      // disabled rather than offering to undo a field nobody has touched.
+      histOf(el).last = el.innerHTML;
+      paintRichHistory(el);
+
+      /* `input` rather than keyup, so a paste, a drag and a dictated phrase
+         are remembered too - keyup misses every edit not typed. */
+      on(el, "input", () => richSnapshot(el));
+
+      /* Ctrl+Z and Ctrl+Shift+Z drive the SAME history as the buttons.
+         Without this the keyboard runs the browser's stack and the buttons
+         run ours, and the field jumps between two different pasts - a worse
+         fault than the one this feature fixes. */
+      on(el, "keydown", (e) => {
+        if (!(e.metaKey || e.ctrlKey)) return;
+        const k = String(e.key || "").toLowerCase();
+        if (k !== "z" && k !== "y") return;
+        e.preventDefault();
+        // Ctrl+Y is redo on Windows; Ctrl+Shift+Z is redo everywhere else.
+        if (k === "y" || e.shiftKey) richRedo(el); else richUndo(el);
+        paintState();
+      });
+
+      /* Undo and redo from the toolbar, on the bar itself. Deliberately NOT
+         routed through the data-cmd handler below: that calls execCommand,
+         which is the browser's own history, and the two stacks would
+         disagree about what the past is. */
+      const bar = box.querySelector(`[data-richbar="${cssEsc(el.id)}"]`);
+      if (!bar) continue;
+      on(bar, "click", (e) => {
+        const u = e.target.closest("[data-richundo]");
+        const r = u ? null : e.target.closest("[data-richredo]");
+        if (!u && !r) return;
+        e.preventDefault();
+        if (u) richUndo(el); else richRedo(el);
+        el.focus();
+        paintState();
+      });
+    }
 
     /* A paste is sanitized BEFORE it reaches the document, never after.
        Letting the browser insert Word's markup and cleaning up afterwards
        means the dangerous markup is briefly live in the page - which is
        exactly when an onerror handler fires. */
     for (const el of boxes) {
-      el.addEventListener("paste", (e) => {
+      on(el, "paste", (e) => {
         const cd = e.clipboardData;
         if (!cd) return;
         const files = [...(cd.files || [])].filter((f) => /^image\//.test(f.type || ""));
@@ -4164,7 +4447,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         });
       });
       // Enter inside a table cell must not split the table into two.
-      el.addEventListener("keydown", (e) => {
+      on(el, "keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey && cellAt(el)) {
           e.preventDefault();
           el.ownerDocument.execCommand("insertLineBreak");
@@ -4172,20 +4455,25 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       });
     }
 
-    box.addEventListener("mousedown", (e) => {
+    on(box, "mousedown", (e) => {
       // Keep the caret where it is: focusing a toolbar button would collapse
       // the selection the command is about to act on.
       if (e.target.closest(".richbtn, .pickcell")) e.preventDefault();
     });
 
-    box.addEventListener("click", (e) => {
+    on(box, "click", (e) => {
       const cmd = e.target.closest("[data-cmd]");
       if (cmd) {
         e.preventDefault();
         const el = box.querySelector("#" + cssEsc(cmd.dataset.for));
         if (!el) return;
         el.focus();
+        // Snapshotted before the command, immediately rather than on the
+        // debounce: bold is one deliberate act and undo should step over
+        // exactly it, not over it plus whatever was typed just before.
+        richSnapshot(el, { now: true });
         try { el.ownerDocument.execCommand(cmd.dataset.cmd, false, null); } catch { /* ignore */ }
+        richSnapshot(el, { now: true });
         paintState();
         return;
       }
@@ -4283,7 +4571,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
 
     // Hovering the picker shows the size it would insert, the way Word does.
-    box.addEventListener("mouseover", (e) => {
+    on(box, "mouseover", (e) => {
       const cell = e.target.closest("[data-pick]");
       if (!cell) return;
       const [id, r, c] = cell.dataset.pick.split(":");
@@ -4296,6 +4584,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       }
     });
     paintState();
+
+    // Handed to formDialog, which calls it in close(). See the note above:
+    // without this, every listener here survives its dialog and piles up.
+    return { off };
   }
 
   /**
@@ -4456,7 +4748,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     paintTables(box);
     wireCapitals(box);
     wireLinks(box);
-    wireRich(box);
+    const rich = wireRich(box);
     const atts = wireAttachments(box, fields);
     const first = box.querySelector("input,textarea,select");
     if (first) first.focus();
@@ -4464,6 +4756,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return new Promise((resolve) => {
       const close = (value) => {
         atts.revoke();
+        // Every listener the rich fields registered goes with the dialog.
+        // Left behind they accumulate on the shared host, and one click on a
+        // toolbar button then runs its command once per dialog ever opened.
+        rich.off();
         box.hidden = true;
         box.innerHTML = "";
         document.removeEventListener("keydown", onKey);
@@ -5208,7 +5504,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   });
 
-  window.TrackerUI = { saveBlob, openBlob, formDialog, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, ATT_MAX,
+  window.TrackerUI = { saveBlob, openBlob, formDialog, richUndo, richRedo, richSnapshot, confirmDialog, htmlDialog, cleanHtml, htmlText, isHtml, ATT_MAX,
                        paintImages, imageRefs, storeImage, clampBlock, paintClamps, paintTables, tidyDashes, pager, pageIndex, goToPage, sortHeader, sortRows, actionId, filterHeader, colFilter,
                        iconButton, ICONS };
 })();
