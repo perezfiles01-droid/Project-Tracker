@@ -134,6 +134,9 @@
       "tracker.imageEngine",
       "tracker.geminiImageModel",
       "tracker.pollinationsModel",
+      "tracker.openrouterImageModel",
+      "tracker.hfKey",
+      "tracker.hfModel",
     ],
     /**
      * Authored data that deliberately stays in THIS browser.

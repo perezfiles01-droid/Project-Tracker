@@ -41,11 +41,15 @@ site.
 - **Communications** — Teams/WeCom updates with owner, due date and status.
 - **Google Drive** — see below.
 - **Image Generator** — describe a picture and get one, with its own settings
-  inside the section listing only models that can draw. Runs on Pollinations,
-  which needs no key at all, or on Gemini with the same free AI Studio key the
-  Standardize button uses. Export saves any picture as a real file, and you can
-  upload an image for the generator to work from. The gallery is deliberately
-  browser-local and stays out of the backup file.
+  inside the section listing only models that can draw. Four engines:
+  **Pollinations** (no key at all), **Gemini** (the same free AI Studio key the
+  Standardize button uses), **Hugging Face** (open-weight FLUX.1-schnell and
+  Stable Diffusion on a free token) and **OpenRouter** (the key it already uses
+  for text). **Auto** tries each one until a picture comes back, keyed engines
+  first and the keyless one as the floor, so a refusal is never a dead end.
+  Export saves any picture as a real file, and Gemini or OpenRouter can work
+  from an image you upload. The gallery is deliberately browser-local and stays
+  out of the backup file.
 
 Press <kbd>/</kbd> anywhere to jump to the search box. Search covers every page.
 

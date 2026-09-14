@@ -54,7 +54,30 @@
 
   /* ------------------------------------------------------------- the engine */
   const engines = () => AI().imageEngines();
-  const current = () => AI().imageEngine();
+  /** The saved choice, which may be the Auto pseudo-engine rather than an id. */
+  const chosenId = () => getText("tracker.imageEngine") || AI().DEFAULT_IMAGE_ENGINE;
+  const isAuto = () => chosenId() === AI().AUTO;
+  /** The engine object, or null when Auto is chosen (Auto is not an engine). */
+  const current = () => (isAuto() ? null : AI().imageEngine());
+  /** What the page calls the current choice, Auto included. */
+  const choiceLabel = () => isAuto()
+    ? "Auto (tries each engine until one draws)"
+    : (current() ? current().label : "no engine");
+  /** Under Auto, anything usable will do; otherwise the chosen one must be. */
+  const anyReady = () => isAuto()
+    ? engines().some((p) => AI().imageReady(p))
+    : !!current() && AI().imageReady(current());
+  /**
+   * The tier the app GUESSES for a model, never a fact read from the account.
+   *
+   * Said out loud in the panel because assuming it is what produced the bug
+   * this was written after: the app called a model free, the service refused
+   * it on allowance, and nothing on screen had ever claimed otherwise.
+   */
+  const tierOf = (p, m) => {
+    try { return (p.classify ? p.classify(m) : AI().classify(m)).tier; }
+    catch { return ""; }
+  };
   /** Model names offered for the chosen engine, asked of the engine itself. */
   let modelCache = {};
 
@@ -83,15 +106,16 @@
     if (busy) return;
     const text = String(prompt || "").trim();
     if (!text) { notice = "Type what you want a picture of first."; return window.TrackerRender(); }
-    const p = current();
-    if (!p) { notice = "No image engine is available."; return window.TrackerRender(); }
+    if (!isAuto() && !current()) {
+      notice = "No image engine is available."; return window.TrackerRender();
+    }
 
     busy = true;
-    notice = `Drawing with ${p.label}…`;
+    notice = `Drawing with ${choiceLabel()}…`;
     window.TrackerRender();
 
     try {
-      const blob = await AI().image(text, { basis, engineId: p.id });
+      const blob = await AI().image(text, { basis, engineId: chosenId() });
       // The id comes from the store, which scopes it to the signed-in account
       // and makes two written in the same millisecond impossible to collide.
       const id = window.TrackerBlobs.id("img");
@@ -99,8 +123,14 @@
       const list = load();
       list.push({
         id: "g-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
-        blob: id, prompt: text, engine: p.id, engineLabel: p.label,
-        model: p.imageModel ? p.imageModel() : "",
+        // Read off the Blob, which the dispatch tagged with the engine that
+        // ACTUALLY drew it. Under Auto that is the only truthful source: the
+        // engine on screen is the choice, not necessarily the one that
+        // answered, and a card naming the wrong one is worse than no card.
+        blob: id, prompt: text,
+        engine: blob.drawnBy || chosenId(),
+        engineLabel: blob.drawnByLabel || choiceLabel(),
+        model: blob.drawnWith || "",
         type: blob.type || "image/png", size: blob.size || 0,
         at: new Date().toISOString(),
         // Kept so a card can say it was drawn from a picture you supplied,
@@ -142,8 +172,10 @@
       const p = current();
       // Said at the moment of upload, not at the moment of generating. Being
       // told after a wait that the engine never wanted your picture is the
-      // worse order to learn it in.
-      notice = p && !p.canBasis
+      // worse order to learn it in. Under Auto the dispatch only considers
+      // engines that CAN take a basis, so there is nothing to warn about
+      // unless none of them is ready - which the Generate button already says.
+      notice = !isAuto() && p && !p.canBasis
         ? `${p.label} cannot work from an uploaded picture. Choose an engine that can, in the settings above.`
         : "";
       window.TrackerRender();
@@ -200,6 +232,7 @@
     const p = current();
     const list = engines();
     const models = (modelCache[p ? p.id : ""] || []);
+    const auto = isAuto();
     return `<div class="note rich imgsettings">
         <h3>Image generator settings</h3>
         <p class="lede">The free tools that can draw. Only models that generate
@@ -207,21 +240,32 @@
           in a backup file.</p>
         <div class="field">
           <label for="imgEngine">Engine</label>
-          <select id="imgEngine" data-imgengine>${list.map((e) =>
-            `<option value="${esc(e.id)}"${p && e.id === p.id ? " selected" : ""}>${esc(e.label)}</option>`
-          ).join("")}</select>
-          <small>${p ? esc(p.keyHelp || "") : ""}${
-            p && !p.canBasis ? " This engine cannot work from an uploaded picture." : ""}</small>
+          <select id="imgEngine" data-imgengine>
+            <option value="${esc(AI().AUTO)}"${auto ? " selected" : ""}>Auto - try each until one draws</option>
+            ${list.map((e) =>
+              `<option value="${esc(e.id)}"${p && e.id === p.id ? " selected" : ""}>${esc(e.label)}</option>`
+            ).join("")}</select>
+          <small>${auto
+            ? `Tries the engines you have set up, keyed ones first, and falls back to the one that needs no key. ` +
+              `Ready now: ${esc(engines().filter((e) => AI().imageReady(e)).map((e) => e.label).join(", ") || "none")}.`
+            : esc(p ? (p.keyHelp || "") : "") +
+              (p && !p.canBasis ? " This engine cannot work from an uploaded picture." : "")}</small>
         </div>
+        ${auto ? "" : `
         <div class="field">
           <label for="imgModel">Model</label>
           <select id="imgModel" data-imgmodel>${
-            (models.length ? models : [p ? p.imageModel() : ""]).filter(Boolean).map((m) =>
-              `<option value="${esc(m)}"${p && m === p.imageModel() ? " selected" : ""}>${esc(m)}</option>`
-            ).join("")}</select>
+            (models.length ? models : [p ? p.imageModel() : ""]).filter(Boolean).map((m) => {
+              const t = tierOf(p, m);
+              return `<option value="${esc(m)}"${m === p.imageModel() ? " selected" : ""}>${
+                esc(m)}${t ? ` — ${esc(t)}` : ""}</option>`;
+            }).join("")}</select>
           <small>${models.length
-            ? "Read from the engine itself."
-            : "The engine has not listed its models yet. The one saved still works."}</small>
+            ? "Read from the engine itself. "
+            : "The engine has not listed its models yet. The one saved still works. "
+            }The free or paid label beside each name is this app's own guess from
+            the name, not a fact read from your account, so a model labelled free
+            can still be refused for want of an allowance.</small>
         </div>
         ${p && p.keyless
           ? `<p class="m">${esc(p.label)} needs no key.</p>`
@@ -230,8 +274,8 @@
                <input id="imgKey" type="password" placeholder="Paste your key"
                       spellcheck="false" autocomplete="off"
                       value="${esc(p && p.key ? p.key() : "")}">
-               <small>Stored in this browser only.</small>
-             </div>`}
+               <small>Stored in this browser only, and never put in a backup file.</small>
+             </div>`}`}
         <div class="actions">
           <button class="btn" data-imgsettings="close">Close settings</button>
           <button class="btn primary" data-imgsettings="save">Save settings</button>
@@ -266,8 +310,7 @@
       (r.prompt + " " + (r.engineLabel || "") + " " + (r.model || "")).toLowerCase().includes(needle));
     const cur = UI().pageIndex("images", rows.length, PER_PAGE);
     const slice = rows.slice(cur * PER_PAGE, (cur + 1) * PER_PAGE);
-    const p = current();
-    const ready = p ? AI().imageReady(p) : false;
+    const ready = anyReady();
 
     // The thumbnails resolve from IndexedDB, which cannot happen during
     // render, so the shared painter runs on the next tick.
@@ -277,7 +320,7 @@
       <h2 class="page">Image Generator</h2>
       <p class="lede">${all.length} picture${all.length === 1 ? "" : "s"} made in this browser.
         They are kept here and deliberately left out of the backup file, so export
-        the ones you want to keep. Drawing runs on ${p ? esc(p.label) : "no engine"}.</p>
+        the ones you want to keep. Drawing runs on ${esc(choiceLabel())}.</p>
 
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("images", "Search your pictures…")}
@@ -297,8 +340,9 @@
           <button class="btn primary" data-imggo ${busy ? "disabled" : ""}>${
             busy ? "Drawing…" : "Generate"}</button>
         </div>
-        ${!ready ? `<p class="m">${esc(p ? `${p.label} needs a key. Open Settings above.`
-                                        : "No engine available.")}</p>` : ""}
+        ${!ready ? `<p class="m">${esc(isAuto()
+            ? "No engine is ready. Open Settings above."
+            : `${current() ? current().label : "That engine"} needs a key. Open Settings above, or choose Auto.`)}</p>` : ""}
         ${notice ? `<p class="note">${esc(notice)}</p>` : ""}
       </div>
 
@@ -322,6 +366,9 @@
         // you are only looking at makes no network call at all.
         const p = current();
         if (p) loadModels(p.id).then(() => window.TrackerRender());
+        // Under Auto every engine's list is wanted, so the picker for a later
+        // switch is warm and no engine looks modelless.
+        if (!p) for (const e of engines()) loadModels(e.id);
         return window.TrackerRender();
       }
       if (what === "close") { showSettings = false; return window.TrackerRender(); }
