@@ -964,9 +964,52 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       // you read a table at is a fact about this device, not about the update,
       // and nothing about it is written into anyone's saved text.
       "tracker.tableZoom",
+      // The Image Generator's own settings, kept per engine for the same
+      // reason the Standardize ones are: choosing a second engine must not
+      // destroy the first one's setup. Pollinations needs no key, so it has a
+      // model and nothing else.
+      "tracker.imageEngine",
+      "tracker.geminiImageModel",
+      "tracker.pollinationsModel",
+    ],
+    /**
+     * Authored data that deliberately stays in THIS browser.
+     *
+     * A third list, and it exists for one reason: the backup carries every
+     * picture the exported data refers to (collectBlobs below greps the
+     * exported keys for blob ids), and a gallery of generated images is tens
+     * of megabytes of pictures you can regenerate from their prompts. So the
+     * generations are excluded from the backup by not being exported at all,
+     * which is a cleaner guarantee than a size rule someone has to remember.
+     *
+     * What that costs, stated exactly, because two of these are easy to
+     * assume and wrong:
+     *
+     *   SCOPED per account - yes. scoped() is applied by get and set to every
+     *   key the app has, not just the exported ones, so one account's
+     *   generations are never another's.
+     *   IN THE BACKUP - no, which is the point. exportData filters to
+     *   KEYS.data, so collectBlobs never sees these blob ids to carry.
+     *   UNDOABLE - NO. record() gates on KEYS.data.includes(key), so deleting
+     *   a generation is not an undo step. That is why the gallery's delete
+     *   asks first, like every other delete in this app, rather than relying
+     *   on the arrows in the sidebar to bail you out.
+     *   SYNCED to your other computer - no. notify() gates on the same list.
+     *   "This browser only" is the whole description of this key.
+     *
+     * check_accounts enumerates ALL and check_backup enumerates KEYS.data,
+     * both at runtime, so this key lands on the right side of each without
+     * either check being edited.
+     *
+     * The prompt is kept with every generation, so what is lost by leaving
+     * them out of the backup is the pixels, not the record of what you asked
+     * for - and Export saves any picture you want to keep as a real file.
+     */
+    local: [
+      "tracker.images",      // Image Generator gallery, this browser only
     ],
   };
-  const ALL = [...KEYS.data, ...KEYS.settings];
+  const ALL = [...KEYS.data, ...KEYS.settings, ...KEYS.local];
 
   /* ---------- account scope ----------
      Every key above is a logical name. What actually reaches localStorage is
@@ -2151,6 +2194,24 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     }
   }
 
+  /**
+   * base64 to a Blob, without a data: URI.
+   *
+   * Deliberately not `fetch("data:...")`, which is the short way and puts the
+   * whole picture in a string first. A generated image is a megabyte or two,
+   * and the one rule this app does not bend is that image bytes never travel
+   * as text through anything that could persist them - check_images.mjs
+   * asserts no data: URI reaches localStorage anywhere in the app. Decoding
+   * to bytes here means the picture is a Blob from the moment it exists, and
+   * the only place it is ever written is IndexedDB.
+   */
+  function b64ToBlob(data, type) {
+    const bin = atob(String(data || "").replace(/\s/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: type || "image/png" });
+  }
+
   /** Rough cost and speed order, by name. Unknown names sort in the middle. */
   const rank = (m) =>
     /flash-lite/.test(m) ? 0 : /flash/.test(m) ? 1 : /pro/.test(m) ? 3 : 2;
@@ -2276,6 +2337,94 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       return ((cand.content && cand.content.parts) || [])
         .map((p) => p.text || "").join("").trim();
     },
+
+    /* ---- the image side of the same engine ----
+
+       Deliberately the same entry, the same key and the same listModels as
+       the text side above, rather than a second "Gemini images" engine. One
+       AI Studio key does both jobs, and two entries would mean pasting it
+       twice and keeping two copies in step.
+
+       canImage says this engine can draw; canBasis says it can be given a
+       picture to work from. They are separate because they are separately
+       true - Pollinations below can draw and cannot take a basis - and the
+       Image Generator reads both rather than assuming that drawing implies
+       the rest. */
+    canImage: true,
+    canBasis: true,
+    imageModelSetting: "tracker.geminiImageModel",
+    // Named rather than discovered, as the fallback only. listImageModels
+    // asks the account what it actually has; this is what runs before anyone
+    // has opened the picker, and it is the current image model at the time of
+    // writing. A name baked in here goes stale, which is why it is a fallback
+    // and not the answer.
+    imageModel: () => get("tracker.geminiImageModel") || "gemini-2.5-flash-image",
+
+    /** The account's own models, narrowed to the ones that draw. */
+    async listImageModels(key) {
+      const all = await gemini.listModels(key);
+      // Narrowed through the SAME classify the Settings dialog groups by, not
+      // a second pattern of its own. Two lists that decide "is this an image
+      // model" separately are two lists that will disagree.
+      return all.filter((m) => classify(m).purpose === "image");
+    },
+
+    /**
+     * Draw `prompt`, optionally working from `basis`.
+     *
+     * The reply is read for inlineData rather than text, which is the whole
+     * reason this is not a call to run(): image bytes arrive as base64 on a
+     * part, and run()'s `.map((p) => p.text || "")` above drops them and
+     * hands back an empty string. That is not a hypothetical - it is what
+     * pointing the wand at an image model did before this existed.
+     */
+    async image(prompt, { basis } = {}) {
+      const key = gemini.key();
+      if (!key) throw new Error("Add a Google AI Studio key in the settings above to use this.");
+      const parts = [{ text: prompt }];
+      // The basis goes in the same contents array as the prompt, which is how
+      // this API takes a reference picture: one turn carrying both.
+      if (basis && basis.base64) {
+        parts.push({ inline_data: { mime_type: basis.type || "image/png", data: basis.base64 } });
+      }
+      const res = await send(
+        `${GEMINI_BASE}/models/${encodeURIComponent(gemini.imageModel())}:generateContent`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts }],
+            // Asked for explicitly. An image model handed no modalities can
+            // answer with a paragraph describing the picture it would have
+            // drawn, which arrives as a perfectly valid 200 with no bytes in
+            // it at all.
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+          }),
+        }, "Google");
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Google"));
+      const cand = body && body.candidates && body.candidates[0];
+      if (!cand) {
+        const why = body && body.promptFeedback && body.promptFeedback.blockReason;
+        throw new Error(why ? `Gemini declined that prompt (${why}).`
+                            : "Nothing came back, so no picture was made.");
+      }
+      const bits = (cand.content && cand.content.parts) || [];
+      // Both spellings. The REST API answers in snake_case and the client
+      // libraries in camelCase, and which one arrives is not worth betting a
+      // blank picture on.
+      const img = bits.map((x) => x.inlineData || x.inline_data).find((x) => x && x.data);
+      if (!img) {
+        // A model that replied in words instead of pixels is the single most
+        // likely failure here, so its words are what the message carries.
+        const said = bits.map((x) => x.text || "").join(" ").trim();
+        throw new Error(said ? "That engine answered with text rather than a picture: " +
+                               said.slice(0, 200)
+                             : "The reply carried no image data.");
+      }
+      return b64ToBlob(img.data, img.mimeType || img.mime_type || "image/png");
+    },
   };
 
   /* ------------------------------------------------------------ OpenRouter */
@@ -2385,6 +2534,103 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     },
   };
 
+  /* --------------------------------------------------------- Pollinations */
+  /*
+   * The keyless engine, and the reason the Image Generator works the moment
+   * it ships.
+   *
+   * Every other engine in this file needs a key pasted in before it does
+   * anything. This one needs nothing: the prompt is the URL, and the reply is
+   * the picture. That makes it the honest answer to "free image generation on
+   * a static site" - there is no key to leak, no account to create, and no
+   * free tier to run out.
+   *
+   * It is image-only. canText is false, so PROVIDERS below excludes it and it
+   * is never offered as a Standardize engine, which it cannot do. The guard
+   * asserts that exclusion rather than trusting this comment.
+   *
+   * canBasis is false, and that is a real limitation rather than an omission.
+   * Working from a reference picture here means handing the service a public
+   * URL it can fetch, and an image you just chose off your own disk does not
+   * have one. Uploading a basis and having it silently ignored would be worse
+   * than being told, so the Image Generator reads canBasis and says so.
+   *
+   * NOT VERIFIED: no call has been made to this host from the build
+   * environment, which cannot reach it - the egress proxy answers CONNECT
+   * with 403 for everything outside its allowlist. Its documented keyless GET
+   * interface is the basis for it being here, exactly as OpenRouter's
+   * documented browser support was above. The first real proof is a click.
+   */
+  const POLLINATIONS_BASE = "https://image.pollinations.ai";
+
+  const pollinations = {
+    id: "pollinations",
+    label: "Pollinations (free, no key needed)",
+    keyHelp: "No key needed. Nothing to set up.",
+    free: true,
+    keyless: true,
+    canText: false,
+    canImage: true,
+    canBasis: false,
+    wire: "pollinations",
+    modelSetting: "tracker.pollinationsModel",
+    imageModelSetting: "tracker.pollinationsModel",
+    key: () => "",
+    model: () => get("tracker.pollinationsModel") || "flux",
+    imageModel: () => get("tracker.pollinationsModel") || "flux",
+    classify: (name) => ({ tier: "free", purpose: "image" }),
+
+    /**
+     * The models the service offers.
+     *
+     * Every one is an image model and every one is free, so unlike the other
+     * engines there is nothing to filter or label - which is why classify
+     * above answers the same thing for any name. A dead or changed endpoint
+     * falls back to the names known at the time of writing rather than
+     * emptying the picker: an engine that needs no key should never present
+     * as unusable because a list request failed.
+     */
+    async listImageModels() {
+      try {
+        const res = await send(`${POLLINATIONS_BASE}/models`, { method: "GET" }, "Pollinations");
+        if (!res.ok) return ["flux", "turbo"];
+        const body = await res.json().catch(() => null);
+        const names = (Array.isArray(body) ? body : [])
+          .map((m) => (typeof m === "string" ? m : m && (m.name || m.id)))
+          .filter(Boolean).map(String);
+        return names.length ? names.sort() : ["flux", "turbo"];
+      } catch {
+        return ["flux", "turbo"];
+      }
+    },
+
+    async image(prompt, { width = 1024, height = 1024 } = {}) {
+      // The prompt is a path segment, so it is encoded rather than
+      // interpolated: a prompt containing a slash or a question mark would
+      // otherwise change the URL rather than the picture.
+      const qs = new URLSearchParams({
+        model: pollinations.imageModel(),
+        width: String(width), height: String(height),
+        nologo: "true",
+        // Without this the same prompt returns the same picture from cache,
+        // so pressing Generate twice would look like a button that does
+        // nothing. A seed per call is what makes a second press a second try.
+        seed: String(Math.floor(Math.random() * 1e9)),
+      });
+      const url = `${POLLINATIONS_BASE}/prompt/${encodeURIComponent(prompt)}?${qs}`;
+      const res = await send(url, { method: "GET" }, "Pollinations");
+      if (!res.ok) throw new Error(explain(res.status, "", "Pollinations"));
+      const blob = await res.blob();
+      // A service under load can answer 200 with an error page. A picture
+      // that is not an image type, or is too small to be one, is a failure
+      // however healthy the status line looked.
+      if (!blob || !/^image\//.test(blob.type || "") || blob.size < 100) {
+        throw new Error("Pollinations answered, but not with a picture. Try again shortly.");
+      }
+      return blob;
+    },
+  };
+
   /**
    * Move a Google key out of the slot the removed engine used.
    *
@@ -2423,8 +2669,28 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   adopt();
 
   /* -------------------------------------------------------------- dispatch */
-  const PROVIDERS = [gemini, openrouter];
+  /**
+   * Every engine this file knows, and the two capability views onto it.
+   *
+   * ENGINES is the registry. PROVIDERS is the TEXT-capable subset and keeps
+   * its old name and old contents on purpose: the Settings dialog in drive.js
+   * enumerates it to build the Standardize engine picker, and check_models
+   * and check_standardize assert against it. Adding an image-only engine to
+   * that list would offer Pollinations as a text rewriter, which it cannot
+   * do - so the capability decides membership, not the registry.
+   *
+   * Both views are derived here rather than written out, so a fourth engine
+   * is one entry above and appears in exactly the pickers its own flags say
+   * it belongs in. The guard enumerates ENGINES at runtime and asserts each
+   * engine reaches the right view, which is what stops a new one landing in
+   * a picker that cannot use it.
+   */
+  const ENGINES = [gemini, openrouter, pollinations];
+  const PROVIDERS = ENGINES.filter((p) => p.canText !== false);
+  /** The engines that can draw, for the Image Generator's own picker. */
+  const imageEngines = () => ENGINES.filter((p) => p.canImage);
   const DEFAULT_ENGINE = gemini.id;
+  const DEFAULT_IMAGE_ENGINE = pollinations.id;
 
   const byId = (id) => PROVIDERS.find((p) => p.id === id);
   /** The chosen engine, falling back to the default if the setting is stale. */
@@ -2473,8 +2739,45 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return dispatch(text, "report");
   }
 
-  window.TrackerAI = { standardize, report, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt, retire,
-                     classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt };
+  /**
+   * Which engine draws, and whether it is usable at all.
+   *
+   * Not a copy of dispatch() above, because the question is different: a text
+   * engine is usable when it holds a key, and a keyless engine is usable
+   * always. Falling back to "the first engine with a key" would also be wrong
+   * here - it would silently send a prompt to an engine you did not pick.
+   * The chosen one runs, or it says what it needs.
+   */
+  const imageEngine = () => imageEngines().find((p) => p.id === get("tracker.imageEngine")) ||
+                            imageEngines().find((p) => p.id === DEFAULT_IMAGE_ENGINE) ||
+                            imageEngines()[0];
+
+  /** Can this engine be used right now, with what is saved? */
+  const imageReady = (p) => !!p && (p.keyless === true || !!p.key());
+
+  /**
+   * Draw a picture. Resolves with a Blob, or throws with a readable reason.
+   *
+   * `basis` is an optional { base64, type } reference picture. An engine that
+   * cannot take one says so rather than quietly dropping it: being told the
+   * upload was ignored is the difference between a limitation and a bug.
+   */
+  async function image(prompt, { basis = null, engineId = null } = {}) {
+    const p = engineId ? imageEngines().find((x) => x.id === engineId) : imageEngine();
+    if (!p) throw new Error("No image engine is available.");
+    if (!imageReady(p)) throw new Error(`Add a ${p.label} key in the settings above to use this.`);
+    if (basis && !p.canBasis) {
+      throw new Error(`${p.label} cannot work from an uploaded picture. ` +
+                      "Pick an engine that can, or remove the basis image.");
+    }
+    return p.image(prompt, basis ? { basis } : {});
+  }
+
+  window.TrackerAI = { standardize, report, hasKey, engine, PROVIDERS, ENGINES,
+                     DEFAULT_ENGINE, adopt, retire,
+                     classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt,
+                     image, imageEngines, imageEngine, imageReady,
+                     DEFAULT_IMAGE_ENGINE, b64ToBlob };
 })();
 
 </script>
