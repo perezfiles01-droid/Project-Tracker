@@ -1009,6 +1009,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       "tracker.imageEngine",
       "tracker.geminiImageModel",
       "tracker.pollinationsModel",
+      "tracker.openrouterImageModel",
+      "tracker.hfKey",
+      "tracker.hfModel",
     ],
     /**
      * Authored data that deliberately stays in THIS browser.
@@ -2206,20 +2209,81 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const get = (k) => window.TrackerStore.getText(k);
 
   /**
+   * Does this error say the allowance is ZERO rather than merely used up?
+   *
+   * The distinction is the whole point, and it decides what to tell someone:
+   * a spent allowance comes back tomorrow, an allowance of zero never does,
+   * and "try again shortly" is advice that can never come true in the second
+   * case. Somebody sat pressing Generate on a model their key has no claim on
+   * at all, because this app told them to try again shortly.
+   *
+   * Google reports it in a QuotaFailure detail: violations[].quotaValue is
+   * "0", and the quotaId names the tier ("...-FreeTier"). Verified against the
+   * live API's real error shape - { error: { code, message, status, details } }
+   * - rather than assumed from the docs.
+   *
+   * Deliberately generous about shape and deliberately NOT the only thing
+   * this function reports. A provider that words it differently, or nests it
+   * somewhere new, simply falls through to "rate limited" WITH its own
+   * message attached, which is strictly better than what this did before. No
+   * string match here is load-bearing: the improvement is that the provider's
+   * own words always reach the user now.
+   */
+  function zeroAllowance(err) {
+    if (!err || typeof err !== "object") return false;
+    const vios = []
+      .concat(err.details || [])
+      .flatMap((d) => (d && d.violations) || []);
+    if (vios.some((v) => String(v && v.quotaValue) === "0")) return true;
+    // The other shape seen in the wild: the limit stated in the prose.
+    return /limit(?:\s*[:=]\s*|\s+of\s+)0\b/i.test(String(err.message || ""));
+  }
+
+  /** Free-tier wording in the quota id, so the advice can name the tier. */
+  function tierNamed(err) {
+    const ids = []
+      .concat((err && err.details) || [])
+      .flatMap((d) => (d && d.violations) || [])
+      .map((v) => String((v && (v.quotaId || v.quotaMetric)) || ""));
+    return ids.some((i) => /free.?tier/i.test(i));
+  }
+
+  /**
    * Turn an HTTP status into something worth reading.
    *
    * "Request failed" tells you nothing about which of these it was, and each
-   * one has a different fix. `detail` is the provider's own message, which is
-   * usually the most useful thing on a 400.
+   * one has a different fix. `err` is the provider's own error - an object
+   * ({ message, status, details }) where there is one, or a bare string, or
+   * nothing. It is usually the most useful thing in the whole response.
+   *
+   * The 429 branch used to be the ONLY one that took this and threw it away,
+   * while 400 and 404 both used it. Every one of the six call sites was
+   * already handing it over. So Google would say "your allowance for this
+   * model is zero" and the app would print "try again shortly", which is the
+   * one sentence guaranteed to waste the reader's time. Reproduced against
+   * the real error shape before this was changed.
    */
-  function explain(status, detail, who) {
-    if (status === 401 || status === 403) return `That ${who} key was refused. Check it in Settings.`;
+  function explain(status, err, who) {
+    // Both shapes: an object from the provider, or the bare message string the
+    // older call sites and Pollinations pass.
+    const obj = err && typeof err === "object" ? err : null;
+    const detail = obj ? String(obj.message || "") : String(err || "");
+    const tail = detail ? " " + who + " said: " + detail : "";
+
+    if (status === 401 || status === 403) return `That ${who} key was refused. Check it in Settings.${tail}`;
     if (status === 400) return detail ? "The request was rejected: " + detail : "The request was rejected.";
     if (status === 404) return detail ? "Not found: " + detail : "That model was not found. Pick another in Settings.";
-    if (status === 429) return "Rate limited, or the free quota is used up for now. Try again shortly.";
-    if (status === 402) return "There is a billing problem on the account.";
+    if (status === 429) {
+      if (zeroAllowance(obj)) {
+        return `This model has no${tierNamed(obj) ? " free-tier" : ""} allowance on that ${who} key, ` +
+               "so waiting will not help. Pick a different model in the settings above, or use " +
+               `an engine that needs no key.${tail}`;
+      }
+      return `Rate limited, or the quota is used up for now. Try again shortly.${tail}`;
+    }
+    if (status === 402) return `There is a billing problem on the account.${tail}`;
     if (status >= 500) return `${who} had a problem. Try again shortly.`;
-    return `That did not work (HTTP ${status}).`;
+    return `That did not work (HTTP ${status}).${tail}`;
   }
 
   /** fetch that reports a dead network as a sentence rather than a TypeError. */
@@ -2311,7 +2375,23 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * exposed: a withdrawal is a fact about the service, not a guess about a
    * price, and the guard checks it by calling this rather than by scraping.
    */
-  const GEMINI_RETIRED = /^gemini-2\.5-flash/;
+  /* The negative lookahead is load-bearing, and it is here because this rule
+     silently broke image generation.
+
+     Written for the withdrawn 2.5 flash TEXT models, the bare prefix also
+     matched gemini-2.5-flash-image and gemini-2.5-flash-image-preview - the
+     CURRENT image family. listImageModels delegates to listModels, whose
+     chain drops retired names, so the whole image family was stripped from
+     the Image Generator's picker while imageModel() still defaulted to one of
+     them. The app called a model it refused to offer, and there was no way to
+     see or choose it.
+
+     The evidence that the image names are live is a user's own error: a
+     withdrawn model answers 404 "no longer available to new users", which is
+     what the note above records. Theirs answered 429, which means the model
+     exists, the key reaches it, and it was refused on allowance. A 429 is
+     proof of life. */
+  const GEMINI_RETIRED = /^gemini-2\.5-flash(?!-image)/;
 
   const gemini = {
     id: "gemini",
@@ -2335,7 +2415,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       const res = await send(`${GEMINI_BASE}/models?key=${encodeURIComponent(key)}`,
                              { method: "GET" }, "Google");
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Google"));
+      if (!res.ok) throw new Error(explain(res.status, body && body.error, "Google"));
       return ((body && body.models) || [])
         .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
         .map((m) => String(m.name || "").replace(/^models\//, ""))
@@ -2362,7 +2442,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         }, "Google");
 
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Google"));
+      if (!res.ok) throw new Error(explain(res.status, body && body.error, "Google"));
 
       // A blocked prompt comes back as a 200 with no candidate, so the reply
       // is read rather than assumed.
@@ -2441,7 +2521,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         }, "Google");
 
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "Google"));
+      if (!res.ok) throw new Error(explain(res.status, body && body.error, "Google"));
       const cand = body && body.candidates && body.candidates[0];
       if (!cand) {
         const why = body && body.promptFeedback && body.promptFeedback.blockReason;
@@ -2523,7 +2603,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         headers: { authorization: "Bearer " + key },
       }, "OpenRouter");
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      if (!res.ok) throw new Error(explain(res.status, body && body.error, "OpenRouter"));
       const rows = (body && body.data) || [];
       orMeta.clear();
       const zero = (v) => v === 0 || v === "0" || Number(v) === 0;
@@ -2564,11 +2644,181 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       }, "OpenRouter");
 
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(explain(res.status, body && body.error && body.error.message, "OpenRouter"));
+      if (!res.ok) throw new Error(explain(res.status, body && body.error, "OpenRouter"));
       const choice = body && body.choices && body.choices[0];
       const out = choice && choice.message && choice.message.content;
       if (!out) throw new Error("Nothing came back. Your text is unchanged.");
       return String(out).trim();
+    },
+
+    /* ---- the image side, on the same entry and the same key ----
+
+       The cheapest engine to add, because everything except the reply reader
+       already existed: the key slot, the listing, the price-reading classify.
+       Its image models answer on the SAME chat/completions endpoint as text,
+       which is exactly why run() above could never return a picture - it
+       reads message.content, and an image arrives in message.images[]. Same
+       class of bug as Gemini's `p.text || ""`, in a second engine, which is
+       what the family sweep is for. */
+    canImage: true,
+    // Some of its image models do accept a reference picture, passed as an
+    // image_url part the same way a vision model takes one.
+    canBasis: true,
+    imageModelSetting: "tracker.openrouterImageModel",
+    imageModel: () => get("tracker.openrouterImageModel") ||
+                      "google/gemini-2.5-flash-image-preview",
+
+    /** The catalogue, narrowed to models that can output an image. */
+    async listImageModels(key) {
+      const all = await openrouter.listModels(key);
+      return all.filter((m) => orClassify(m).purpose === "image");
+    },
+
+    async image(prompt, { basis } = {}) {
+      const key = openrouter.key();
+      if (!key) throw new Error("Add an OpenRouter key in the settings above to use this.");
+      const content = [{ type: "text", text: prompt }];
+      if (basis && basis.base64) {
+        content.push({ type: "image_url",
+                       image_url: { url: `data:${basis.type || "image/png"};base64,${basis.base64}` } });
+      }
+      const res = await send(`${OPENROUTER_BASE}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + key,
+                   "x-title": "Project Tracker" },
+        body: JSON.stringify({
+          model: openrouter.imageModel(),
+          // Asked for explicitly, for the same reason Gemini's is: a model
+          // given no modalities can answer with a paragraph describing the
+          // picture, which is a valid 200 carrying no bytes.
+          modalities: ["image", "text"],
+          messages: [{ role: "user", content }],
+        }),
+      }, "OpenRouter");
+
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(explain(res.status, body && body.error, "OpenRouter"));
+      const msg = body && body.choices && body.choices[0] && body.choices[0].message;
+      const imgs = (msg && msg.images) || [];
+      const url = imgs.map((i) => (i && (i.image_url ? i.image_url.url : i.url)) || "").find(Boolean);
+      if (!url) {
+        const said = String((msg && msg.content) || "").trim();
+        throw new Error(said ? "That engine answered with text rather than a picture: " + said.slice(0, 200)
+                             : "The reply carried no image data.");
+      }
+      const m = /^data:([^;,]+)?;base64,(.*)$/.exec(url);
+      if (!m) throw new Error("The reply carried an image link this app cannot read.");
+      return b64ToBlob(m[2], m[1] || "image/png");
+    },
+  };
+
+  /* ------------------------------------------------------- Hugging Face */
+  /*
+   * The open-weights engine: FLUX.1-schnell (Apache-2.0) and the Stable
+   * Diffusion family, on a token that costs nothing to create.
+   *
+   * Why it is here rather than a fourth hosted API: the MODELS are open
+   * source, which is what was actually asked for. Anyone can read their
+   * weights, run them elsewhere, and verify what they are. That is a
+   * different kind of free from a generous tier - a tier can be withdrawn,
+   * an Apache-2.0 model cannot be taken back.
+   *
+   * The listing endpoint needs no token at all (it is the public model hub
+   * search), so the picker fills in before a key is pasted. Only generating
+   * needs the token.
+   *
+   * NOT VERIFIED: huggingface.co answers 000 from the build environment - the
+   * egress proxy refuses everything outside its allowlist, which was measured
+   * rather than assumed. Its documented inference interface is the basis for
+   * this, and the first real proof is a click. Every failure path routes
+   * through the shared explain(), so a refusal arrives as a sentence carrying
+   * the service's own words.
+   *
+   * canBasis is false: image-to-image here needs a different payload shape
+   * per model, and offering it while sending a text-to-image request would be
+   * the silent-ignore failure this app refuses to ship.
+   */
+  const HF_INFER = "https://api-inference.huggingface.co/models";
+  const HF_HUB = "https://huggingface.co/api/models";
+
+  const huggingface = {
+    id: "huggingface",
+    label: "Hugging Face (open-weight models)",
+    keySetting: "tracker.hfKey",
+    modelSetting: "tracker.hfModel",
+    imageModelSetting: "tracker.hfModel",
+    keyHelp: "huggingface.co/settings/tokens - create a read token. No card needed.",
+    free: true,
+    canText: false,
+    canImage: true,
+    canBasis: false,
+    wire: "huggingface",
+    // Every model it offers is text-to-image and open-weight, so there is
+    // nothing to guess about purpose. The tier is the honest unknown: the
+    // token is free to make, the monthly credit is small and the service sets
+    // it, so this says free and the dialog says the tier is the app's guess.
+    classify: () => ({ tier: "free", purpose: "image" }),
+    key: () => get("tracker.hfKey"),
+    model: () => get("tracker.hfModel") || "black-forest-labs/FLUX.1-schnell",
+    imageModel: () => get("tracker.hfModel") || "black-forest-labs/FLUX.1-schnell",
+
+    /**
+     * Text-to-image models from the public hub, most-liked first.
+     *
+     * No token needed for this, so the picker is populated before anyone has
+     * pasted one. A failed listing falls back to names known at the time of
+     * writing rather than emptying the picker.
+     */
+    async listImageModels() {
+      const fallback = ["black-forest-labs/FLUX.1-schnell",
+                        "stabilityai/stable-diffusion-xl-base-1.0"];
+      try {
+        const res = await send(
+          `${HF_HUB}?pipeline_tag=text-to-image&sort=likes&direction=-1&limit=30`,
+          { method: "GET" }, "Hugging Face");
+        if (!res.ok) return fallback;
+        const body = await res.json().catch(() => null);
+        const names = (Array.isArray(body) ? body : [])
+          .map((m) => String((m && (m.id || m.modelId)) || "")).filter(Boolean);
+        // The default stays reachable even if the hub's ranking drops it.
+        for (const f of fallback) if (!names.includes(f)) names.push(f);
+        return names;
+      } catch { return fallback; }
+    },
+
+    async image(prompt) {
+      const key = huggingface.key();
+      if (!key) throw new Error("Add a Hugging Face token in the settings above to use this.");
+      const res = await send(`${HF_INFER}/${huggingface.imageModel()}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + key },
+        body: JSON.stringify({ inputs: prompt }),
+      }, "Hugging Face");
+
+      if (!res.ok) {
+        // This service answers errors as JSON and pictures as bytes, so the
+        // body is only read as text on the failure path.
+        const body = await res.json().catch(() => null);
+        // Both shapes this service answers with, and the reason it matters:
+        // wrapping an error OBJECT in { message: <object> } printed
+        // "[object Object]" to the reader and hid the quota detail from
+        // zeroAllowance, so a zero-allowance refusal read as a transient one.
+        // Caught by the guard over every engine rather than by reading.
+        const err = body && body.error;
+        throw new Error(explain(res.status,
+          err && typeof err === "object" ? err
+            : err ? { message: String(err) }
+            : body && typeof body === "object" ? body : "",
+          "Hugging Face"));
+      }
+      const blob = await res.blob();
+      // A model still loading answers 200 with a JSON body saying so, which
+      // would otherwise be stored as a "picture" that renders as nothing.
+      if (!blob || !/^image\//.test(blob.type || "") || blob.size < 100) {
+        throw new Error("Hugging Face answered, but not with a picture. " +
+                        "The model may still be loading - try again shortly.");
+      }
+      return blob;
     },
   };
 
@@ -2657,7 +2907,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       });
       const url = `${POLLINATIONS_BASE}/prompt/${encodeURIComponent(prompt)}?${qs}`;
       const res = await send(url, { method: "GET" }, "Pollinations");
-      if (!res.ok) throw new Error(explain(res.status, "", "Pollinations"));
+      if (!res.ok) {
+        // Its own words, where it has any. This engine answers errors as text
+        // rather than JSON, so there is no quota structure to read - but
+        // handing over an empty detail meant a refusal arrived with nothing
+        // at all in it, and every other engine in this file now passes
+        // something through.
+        const said = await res.text().catch(() => "");
+        throw new Error(explain(res.status, said.slice(0, 200).trim(), "Pollinations"));
+      }
       const blob = await res.blob();
       // A service under load can answer 200 with an error page. A picture
       // that is not an image type, or is too small to be one, is a failure
@@ -2723,7 +2981,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * engine reaches the right view, which is what stops a new one landing in
    * a picker that cannot use it.
    */
-  const ENGINES = [gemini, openrouter, pollinations];
+  const ENGINES = [gemini, openrouter, huggingface, pollinations];
   const PROVIDERS = ENGINES.filter((p) => p.canText !== false);
   /** The engines that can draw, for the Image Generator's own picker. */
   const imageEngines = () => ENGINES.filter((p) => p.canImage);
@@ -2789,6 +3047,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const imageEngine = () => imageEngines().find((p) => p.id === get("tracker.imageEngine")) ||
                             imageEngines().find((p) => p.id === DEFAULT_IMAGE_ENGINE) ||
                             imageEngines()[0];
+  /** Is the saved choice Auto? Asked rather than inferred from imageEngine(). */
+  const imageAuto = () => get("tracker.imageEngine") === AUTO;
 
   /** Can this engine be used right now, with what is saved? */
   const imageReady = (p) => !!p && (p.keyless === true || !!p.key());
@@ -2801,21 +3061,101 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * upload was ignored is the difference between a limitation and a bug.
    */
   async function image(prompt, { basis = null, engineId = null } = {}) {
-    const p = engineId ? imageEngines().find((x) => x.id === engineId) : imageEngine();
+    /* Resolved from the SAVED setting when no engine is named, not just from
+       an explicit argument.
+
+       This was a bug, caught by driving the real page: auto ran only when the
+       caller passed engineId === AUTO, so image() called without one read
+       imageEngine(), which looks for a matching engine id, found nothing
+       (AUTO is not an engine), fell back to the default engine and drew with
+       it. Auto was saved, Auto was displayed, and a single engine ran. The
+       test that was supposed to prove the fallback proved nothing, because
+       the engine it happened to fall back to was the same one auto would have
+       finished with. */
+    const id = engineId || get("tracker.imageEngine") || DEFAULT_IMAGE_ENGINE;
+    if (id === AUTO) return auto(prompt, { basis });
+    const p = imageEngines().find((x) => x.id === id);
     if (!p) throw new Error("No image engine is available.");
-    if (!imageReady(p)) throw new Error(`Add a ${p.label} key in the settings above to use this.`);
+    // Capability BEFORE readiness, and the order is deliberate. Whether an
+    // engine can work from an uploaded picture is a fact about the engine,
+    // true before any key exists; telling someone to paste a key when the
+    // real answer is "this engine will never use your picture" sends them to
+    // do useless work and then refuses them again afterwards.
     if (basis && !p.canBasis) {
       throw new Error(`${p.label} cannot work from an uploaded picture. ` +
                       "Pick an engine that can, or remove the basis image.");
     }
-    return p.image(prompt, basis ? { basis } : {});
+    if (!imageReady(p)) throw new Error(`Add a ${p.label} key in the settings above to use this.`);
+    const blob = await p.image(prompt, basis ? { basis } : {});
+    // Which engine drew it travels WITH the picture, so the gallery can say
+    // so. Under auto that is the only way to know, and it is the difference
+    // between "the app picked something" and a record of what happened.
+    return tag(blob, p);
   }
+
+  /** The engine that drew, carried on the Blob rather than inferred later. */
+  function tag(blob, p) {
+    try {
+      blob.drawnBy = p.id;
+      blob.drawnByLabel = p.label;
+      blob.drawnWith = p.imageModel ? p.imageModel() : "";
+    } catch { /* a Blob that refuses a property still holds the picture */ }
+    return blob;
+  }
+
+  /**
+   * Try every usable engine until one draws.
+   *
+   * The reason this exists: somebody pressed Generate, the one engine they
+   * had chosen refused on quota, and that was the end of it - while a keyless
+   * engine that needed nothing sat in the same list. A dead end with a
+   * working alternative one click away is a design fault, not bad luck.
+   *
+   * The order is deliberate. Keyed engines first, because someone who pasted
+   * a key wants that engine's quality; the keyless one LAST, as the floor
+   * that means this can always produce something. Enumerated from
+   * imageEngines() at runtime, so a fifth engine joins the rotation by
+   * existing.
+   *
+   * Every failure is kept. If all of them refuse, the message says what each
+   * one said, because "that did not work" after four attempts hides four
+   * different reasons - one of which is usually actionable.
+   */
+  async function auto(prompt, { basis = null } = {}) {
+    const usable = imageEngines()
+      .filter(imageReady)
+      // A basis picture is a requirement, not a preference: an engine that
+      // cannot take one would silently draw something unrelated to the
+      // picture you uploaded, so it is not a candidate at all here.
+      .filter((p) => !basis || p.canBasis)
+      .sort((a, b) => (a.keyless === true) - (b.keyless === true));
+
+    if (!usable.length) {
+      throw new Error(basis
+        ? "No available engine can work from an uploaded picture. Add a key for one that can, or remove the basis image."
+        : "No image engine is available.");
+    }
+
+    const failures = [];
+    for (const p of usable) {
+      try {
+        const blob = await p.image(prompt, basis ? { basis } : {});
+        return tag(blob, p);
+      } catch (err) {
+        failures.push(`${p.label}: ${(err && err.message) || "failed"}`);
+      }
+    }
+    throw new Error("Every engine refused. " + failures.join(" | "));
+  }
+
+  /** The picker value that means "try them all". Not an engine id. */
+  const AUTO = "auto";
 
   window.TrackerAI = { standardize, report, hasKey, engine, PROVIDERS, ENGINES,
                      DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt,
                      image, imageEngines, imageEngine, imageReady,
-                     DEFAULT_IMAGE_ENGINE, b64ToBlob };
+                     DEFAULT_IMAGE_ENGINE, b64ToBlob, AUTO, imageAuto, zeroAllowance };
 })();
 
 </script>
@@ -6523,7 +6863,30 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   /* ------------------------------------------------------------- the engine */
   const engines = () => AI().imageEngines();
-  const current = () => AI().imageEngine();
+  /** The saved choice, which may be the Auto pseudo-engine rather than an id. */
+  const chosenId = () => getText("tracker.imageEngine") || AI().DEFAULT_IMAGE_ENGINE;
+  const isAuto = () => chosenId() === AI().AUTO;
+  /** The engine object, or null when Auto is chosen (Auto is not an engine). */
+  const current = () => (isAuto() ? null : AI().imageEngine());
+  /** What the page calls the current choice, Auto included. */
+  const choiceLabel = () => isAuto()
+    ? "Auto (tries each engine until one draws)"
+    : (current() ? current().label : "no engine");
+  /** Under Auto, anything usable will do; otherwise the chosen one must be. */
+  const anyReady = () => isAuto()
+    ? engines().some((p) => AI().imageReady(p))
+    : !!current() && AI().imageReady(current());
+  /**
+   * The tier the app GUESSES for a model, never a fact read from the account.
+   *
+   * Said out loud in the panel because assuming it is what produced the bug
+   * this was written after: the app called a model free, the service refused
+   * it on allowance, and nothing on screen had ever claimed otherwise.
+   */
+  const tierOf = (p, m) => {
+    try { return (p.classify ? p.classify(m) : AI().classify(m)).tier; }
+    catch { return ""; }
+  };
   /** Model names offered for the chosen engine, asked of the engine itself. */
   let modelCache = {};
 
@@ -6552,15 +6915,16 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (busy) return;
     const text = String(prompt || "").trim();
     if (!text) { notice = "Type what you want a picture of first."; return window.TrackerRender(); }
-    const p = current();
-    if (!p) { notice = "No image engine is available."; return window.TrackerRender(); }
+    if (!isAuto() && !current()) {
+      notice = "No image engine is available."; return window.TrackerRender();
+    }
 
     busy = true;
-    notice = `Drawing with ${p.label}…`;
+    notice = `Drawing with ${choiceLabel()}…`;
     window.TrackerRender();
 
     try {
-      const blob = await AI().image(text, { basis, engineId: p.id });
+      const blob = await AI().image(text, { basis, engineId: chosenId() });
       // The id comes from the store, which scopes it to the signed-in account
       // and makes two written in the same millisecond impossible to collide.
       const id = window.TrackerBlobs.id("img");
@@ -6568,8 +6932,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       const list = load();
       list.push({
         id: "g-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
-        blob: id, prompt: text, engine: p.id, engineLabel: p.label,
-        model: p.imageModel ? p.imageModel() : "",
+        // Read off the Blob, which the dispatch tagged with the engine that
+        // ACTUALLY drew it. Under Auto that is the only truthful source: the
+        // engine on screen is the choice, not necessarily the one that
+        // answered, and a card naming the wrong one is worse than no card.
+        blob: id, prompt: text,
+        engine: blob.drawnBy || chosenId(),
+        engineLabel: blob.drawnByLabel || choiceLabel(),
+        model: blob.drawnWith || "",
         type: blob.type || "image/png", size: blob.size || 0,
         at: new Date().toISOString(),
         // Kept so a card can say it was drawn from a picture you supplied,
@@ -6611,8 +6981,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       const p = current();
       // Said at the moment of upload, not at the moment of generating. Being
       // told after a wait that the engine never wanted your picture is the
-      // worse order to learn it in.
-      notice = p && !p.canBasis
+      // worse order to learn it in. Under Auto the dispatch only considers
+      // engines that CAN take a basis, so there is nothing to warn about
+      // unless none of them is ready - which the Generate button already says.
+      notice = !isAuto() && p && !p.canBasis
         ? `${p.label} cannot work from an uploaded picture. Choose an engine that can, in the settings above.`
         : "";
       window.TrackerRender();
@@ -6669,6 +7041,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const p = current();
     const list = engines();
     const models = (modelCache[p ? p.id : ""] || []);
+    const auto = isAuto();
     return `<div class="note rich imgsettings">
         <h3>Image generator settings</h3>
         <p class="lede">The free tools that can draw. Only models that generate
@@ -6676,21 +7049,32 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           in a backup file.</p>
         <div class="field">
           <label for="imgEngine">Engine</label>
-          <select id="imgEngine" data-imgengine>${list.map((e) =>
-            `<option value="${esc(e.id)}"${p && e.id === p.id ? " selected" : ""}>${esc(e.label)}</option>`
-          ).join("")}</select>
-          <small>${p ? esc(p.keyHelp || "") : ""}${
-            p && !p.canBasis ? " This engine cannot work from an uploaded picture." : ""}</small>
+          <select id="imgEngine" data-imgengine>
+            <option value="${esc(AI().AUTO)}"${auto ? " selected" : ""}>Auto - try each until one draws</option>
+            ${list.map((e) =>
+              `<option value="${esc(e.id)}"${p && e.id === p.id ? " selected" : ""}>${esc(e.label)}</option>`
+            ).join("")}</select>
+          <small>${auto
+            ? `Tries the engines you have set up, keyed ones first, and falls back to the one that needs no key. ` +
+              `Ready now: ${esc(engines().filter((e) => AI().imageReady(e)).map((e) => e.label).join(", ") || "none")}.`
+            : esc(p ? (p.keyHelp || "") : "") +
+              (p && !p.canBasis ? " This engine cannot work from an uploaded picture." : "")}</small>
         </div>
+        ${auto ? "" : `
         <div class="field">
           <label for="imgModel">Model</label>
           <select id="imgModel" data-imgmodel>${
-            (models.length ? models : [p ? p.imageModel() : ""]).filter(Boolean).map((m) =>
-              `<option value="${esc(m)}"${p && m === p.imageModel() ? " selected" : ""}>${esc(m)}</option>`
-            ).join("")}</select>
+            (models.length ? models : [p ? p.imageModel() : ""]).filter(Boolean).map((m) => {
+              const t = tierOf(p, m);
+              return `<option value="${esc(m)}"${m === p.imageModel() ? " selected" : ""}>${
+                esc(m)}${t ? ` — ${esc(t)}` : ""}</option>`;
+            }).join("")}</select>
           <small>${models.length
-            ? "Read from the engine itself."
-            : "The engine has not listed its models yet. The one saved still works."}</small>
+            ? "Read from the engine itself. "
+            : "The engine has not listed its models yet. The one saved still works. "
+            }The free or paid label beside each name is this app's own guess from
+            the name, not a fact read from your account, so a model labelled free
+            can still be refused for want of an allowance.</small>
         </div>
         ${p && p.keyless
           ? `<p class="m">${esc(p.label)} needs no key.</p>`
@@ -6699,8 +7083,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
                <input id="imgKey" type="password" placeholder="Paste your key"
                       spellcheck="false" autocomplete="off"
                       value="${esc(p && p.key ? p.key() : "")}">
-               <small>Stored in this browser only.</small>
-             </div>`}
+               <small>Stored in this browser only, and never put in a backup file.</small>
+             </div>`}`}
         <div class="actions">
           <button class="btn" data-imgsettings="close">Close settings</button>
           <button class="btn primary" data-imgsettings="save">Save settings</button>
@@ -6735,8 +7119,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       (r.prompt + " " + (r.engineLabel || "") + " " + (r.model || "")).toLowerCase().includes(needle));
     const cur = UI().pageIndex("images", rows.length, PER_PAGE);
     const slice = rows.slice(cur * PER_PAGE, (cur + 1) * PER_PAGE);
-    const p = current();
-    const ready = p ? AI().imageReady(p) : false;
+    const ready = anyReady();
 
     // The thumbnails resolve from IndexedDB, which cannot happen during
     // render, so the shared painter runs on the next tick.
@@ -6746,7 +7129,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       <h2 class="page">Image Generator</h2>
       <p class="lede">${all.length} picture${all.length === 1 ? "" : "s"} made in this browser.
         They are kept here and deliberately left out of the backup file, so export
-        the ones you want to keep. Drawing runs on ${p ? esc(p.label) : "no engine"}.</p>
+        the ones you want to keep. Drawing runs on ${esc(choiceLabel())}.</p>
 
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("images", "Search your pictures…")}
@@ -6766,8 +7149,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
           <button class="btn primary" data-imggo ${busy ? "disabled" : ""}>${
             busy ? "Drawing…" : "Generate"}</button>
         </div>
-        ${!ready ? `<p class="m">${esc(p ? `${p.label} needs a key. Open Settings above.`
-                                        : "No engine available.")}</p>` : ""}
+        ${!ready ? `<p class="m">${esc(isAuto()
+            ? "No engine is ready. Open Settings above."
+            : `${current() ? current().label : "That engine"} needs a key. Open Settings above, or choose Auto.`)}</p>` : ""}
         ${notice ? `<p class="note">${esc(notice)}</p>` : ""}
       </div>
 
@@ -6791,6 +7175,9 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         // you are only looking at makes no network call at all.
         const p = current();
         if (p) loadModels(p.id).then(() => window.TrackerRender());
+        // Under Auto every engine's list is wanted, so the picker for a later
+        // switch is warm and no engine looks modelless.
+        if (!p) for (const e of engines()) loadModels(e.id);
         return window.TrackerRender();
       }
       if (what === "close") { showSettings = false; return window.TrackerRender(); }

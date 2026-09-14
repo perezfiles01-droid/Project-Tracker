@@ -122,10 +122,28 @@ const retired = await page.evaluate((names) => {
   const p = window.TrackerAI.PROVIDERS.find((x) => x.id === "gemini");
   return names.filter((n) => p.retired && p.retired(n));
 }, FIXTURE);
-ok("every 2.5 flash name is withdrawn",
-   ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash-image",
+/* The withdrawal is about the 2.5 flash TEXT models, and this assertion used
+   to include gemini-2.5-flash-image with them - which is how it came to
+   enforce a bug. The bare prefix rule swept up the CURRENT image family, so
+   listImageModels (which delegates here) stripped every image model from the
+   Image Generator's picker while imageModel() still defaulted to one of them:
+   the app called a model it refused to offer.
+
+   The evidence that the image names are live is a user's own error. A
+   withdrawn model answers 404 "no longer available to new users"; theirs
+   answered 429, which means the model exists, the key reaches it, and it was
+   refused on allowance. A 429 is proof of life.
+
+   So the list is the text family, and the image family is asserted live just
+   below - the pair of them, so neither half can drift back. */
+ok("every withdrawn 2.5 flash TEXT name is out of reach",
+   ["gemini-2.5-flash", "gemini-2.5-flash-lite",
     "gemini-2.5-flash-preview-tts"].every((n) => retired.includes(n)),
    retired.join(", "));
+ok("the 2.5 flash IMAGE family is NOT swept up with them",
+   !retired.includes("gemini-2.5-flash-image") &&
+   !retired.includes("gemini-2.5-flash-image-preview"),
+   retired.filter((n) => n.includes("image")).join(", ") || "none retired");
 ok("nothing else is withdrawn with them",
    retired.every((n) => n.startsWith("gemini-2.5-flash")) &&
    !retired.includes("gemini-2.5-pro") && !retired.includes("gemini-3.7-flash"),

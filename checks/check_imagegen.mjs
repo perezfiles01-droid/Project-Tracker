@@ -103,6 +103,14 @@ for (const e of api.engines) {
      `keyless=${e.keyless} ready=${ready}`);
 }
 
+// Captured BEFORE anything is stubbed, so the sections that need the real
+// implementations can put them back. Sections below stub engines to exercise
+// the UI without a network; the 429 section needs the genuine article.
+await page.evaluate(() => {
+  window.__pristine = new Map();
+  for (const p of window.TrackerAI.ENGINES) window.__pristine.set(p.id, p.image);
+});
+
 ok("at least one image engine needs no key at all",
    api.engines.some((e) => e.canImage && e.keyless),
    "otherwise the section is unusable until a key is pasted in");
@@ -178,7 +186,10 @@ ok("a keyed engine with no key asks for one rather than throwing raw",
 
 /* ============================================ 3. a basis is never ignored */
 const basisRefused = await page.evaluate(async () => {
-  const off = window.TrackerAI.imageEngines().find((p) => !p.canBasis);
+  // The keyless one where there is a choice, so this tests the CAPABILITY
+  // refusal rather than tripping over a missing key first.
+  const noBasis = window.TrackerAI.imageEngines().filter((p) => !p.canBasis);
+  const off = noBasis.find((p) => p.keyless) || noBasis[0];
   if (!off) return { skip: true };
   try {
     await window.TrackerAI.image("x", { engineId: off.id, basis: { base64: "AAAA", type: "image/png" } });
@@ -256,7 +267,12 @@ const png = await page.evaluate(async () => {
   // broken-image icon that would still satisfy a naive "src is set" check.
   const b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
   window.__png = window.TrackerAI.b64ToBlob(b64, "image/png");
-  window.TrackerAI.image = async () => window.__png;
+  // Each ENGINE is stubbed, never the dispatch. Replacing TrackerAI.image
+  // itself is what this check used to do, and it silently disabled every
+  // later assertion about Auto: the dispatch stayed replaced for the rest of
+  // the run, so the engines were never reached and "every engine refused"
+  // came back as a success. Stubbing the leaves keeps the plumbing real.
+  for (const p of window.TrackerAI.imageEngines()) p.image = async () => window.__png;
   return window.__png.size;
 });
 ok("the test has a real PNG to hand back", png > 0, `${png} bytes`);
@@ -389,11 +405,21 @@ ok("the settings open inside the section, not in the global dialog",
    (await page.locator("#view .imgsettings").count()) > 0 &&
    (await page.locator("#settingsModal:not([hidden])").count()) === 0);
 const offered = await page.$$eval("[data-imgengine] option", (o) => o.map((x) => x.value));
+const AUTO = await page.evaluate(() => window.TrackerAI.AUTO);
 const canDraw = api.engines.filter((e) => e.canImage).map((e) => e.id);
-ok("the engine picker offers exactly the engines that can draw",
-   offered.slice().sort().join(",") === canDraw.slice().sort().join(","),
+ok("the engine picker offers Auto plus exactly the engines that can draw",
+   offered.filter((v) => v !== AUTO).sort().join(",") === canDraw.slice().sort().join(",") &&
+   offered.includes(AUTO),
    `offered ${offered.join(",")} / can draw ${canDraw.join(",")}`);
-ok("a text-only engine is never offered here", !offered.includes("openrouter"));
+ok("Auto is offered first, as the choice that always produces something",
+   offered[0] === AUTO, offered[0]);
+// Expressed over the runtime list rather than by naming an engine: this used
+// to assert that OpenRouter was absent, which was true only while it could
+// not draw. Now it can, and the invariant that actually matters is that
+// nothing which cannot draw is ever offered here.
+ok("nothing that cannot draw is offered in the image picker",
+   api.engines.filter((e) => !e.canImage).every((e) => !offered.includes(e.id)),
+   `cannot draw: ${api.engines.filter((e) => !e.canImage).map((e) => e.id).join(", ") || "none"}`);
 // Pollinations is keyless, so it must not ask for a key it has no use for.
 ok("a keyless engine shows no key box",
    (await page.locator("#imgKey").count()) === 0);
@@ -453,6 +479,185 @@ const fallback = await page.evaluate(async () => {
 });
 ok("a model list that fails still offers the saved model",
    fallback.opts.filter(Boolean).length > 0, fallback.opts.join(","));
+
+/* ============== 14. a 429 says which kind of refusal it was, per engine */
+// The real implementations go back first. Earlier sections stubbed each
+// engine to return a fixed PNG so the gallery could be driven without a
+// network, and leaving those in place made every assertion below pass
+// vacuously - "(succeeded)" where a refusal was the whole point.
+await page.evaluate(() => {
+  for (const p of window.TrackerAI.ENGINES) {
+    if (window.__pristine.has(p.id)) p.image = window.__pristine.get(p.id);
+  }
+});
+// The bug this whole round exists because of: Google reported an allowance of
+// ZERO and the app printed "try again shortly", which is the one sentence that
+// can never come true. Asserted over every engine, enumerated at runtime.
+for (const e of api.engines) {
+  const said = await page.evaluate(async (id) => {
+    const eng = window.TrackerAI.ENGINES.find((p) => p.id === id);
+    const realFetch = window.fetch;
+    // Every keyed engine needs a key present or it refuses before fetching.
+    const slots = ["tracker.geminiKey", "tracker.openrouterKey", "tracker.hfKey"];
+    for (const k of slots) window.TrackerStore.setText(k, "TESTKEY");
+    const zero = { error: { code: 429, status: "RESOURCE_EXHAUSTED",
+      message: "You exceeded your current quota, please check your plan and billing details.",
+      details: [{ violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                                 quotaValue: "0" }] }] } };
+    const cap = { error: { code: 429, status: "RESOURCE_EXHAUSTED",
+      message: "Quota exceeded for quota metric requests per minute.",
+      details: [{ violations: [{ quotaId: "PerMinute", quotaValue: "15" }] }] } };
+    const grab = async (body) => {
+      window.fetch = async () => ({ ok: false, status: 429,
+        json: async () => body, blob: async () => new Blob([]),
+        // Pollinations reads its error as text rather than JSON.
+        text: async () => "quota exceeded for this prompt" });
+      try { await eng.image("x"); return "(succeeded)"; }
+      catch (err) { return String(err && err.message); }
+    };
+    const out = { zero: await grab(zero), cap: await grab(cap) };
+    window.fetch = realFetch;
+    for (const k of slots) window.TrackerStore.remove(k);
+    return out;
+  }, e.id);
+  if (!e.canImage) continue;
+  // A keyless engine has no key and therefore no per-key allowance: telling
+  // someone their allowance is zero on a key they never pasted would be
+  // nonsense. It must still pass the service's own words through, which the
+  // third assertion below checks for every engine alike.
+  if (!e.keyless) {
+    ok(`${e.id}: a zero allowance says waiting will not help`,
+       /will not help/i.test(said.zero), said.zero.slice(0, 120));
+  }
+  ok(`${e.id}: a real rate limit still says to try again`,
+     /try again/i.test(said.cap), said.cap.slice(0, 120));
+  // The regression proper: the provider's own words must reach the reader.
+  ok(`${e.id}: the service's own message reaches the user`,
+     /quota/i.test(said.zero) && /quota/i.test(said.cap));
+}
+
+/* ======== 15. the retirement rule, and the model a picker must offer */
+const retire = await page.evaluate(() => {
+  const g = window.TrackerAI.ENGINES.find((p) => p.id === "gemini");
+  return {
+    // The withdrawn TEXT family must stay out of reach.
+    text: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash-preview-05-20"]
+      .map((n) => g.retired(n)),
+    // The live IMAGE family must not be swept up by the same prefix. A user's
+    // 429 is what proved these are live: a withdrawn model answers 404.
+    image: ["gemini-2.5-flash-image", "gemini-2.5-flash-image-preview"].map((n) => g.retired(n)),
+  };
+});
+ok("the withdrawn 2.5 flash text models are still out of reach",
+   retire.text.every(Boolean), JSON.stringify(retire.text));
+ok("the live 2.5 flash IMAGE models are not treated as withdrawn",
+   retire.image.every((r) => r === false), JSON.stringify(retire.image));
+
+// The family invariant, over every image engine: the model an engine will
+// actually CALL must be one its own picker offers. Gemini failed this - it
+// defaulted to a model its listing filtered out, so the app called something
+// it refused to show.
+for (const e of api.engines.filter((x) => x.canImage)) {
+  const inv = await page.evaluate(async (id) => {
+    const p = window.TrackerAI.ENGINES.find((x) => x.id === id);
+    // Asked of the engine with its own listing, network stubbed out so this
+    // tests the FILTERING rather than the service.
+    const realFetch = window.fetch;
+    window.fetch = async () => { throw new Error("no network"); };
+    let listed = [];
+    try { listed = await p.listImageModels(p.key ? p.key() : ""); } catch { listed = []; }
+    window.fetch = realFetch;
+    const def = p.imageModel();
+    return { def, listed, retired: p.retired ? p.retired(def) : false };
+  }, e.id);
+  // An engine whose listing needs a key returns nothing here; the assertion
+  // that matters then is that its default is not one it would itself reject.
+  ok(`${e.id}: the model it will call is not one it treats as withdrawn`,
+     inv.retired === false, `${inv.def} retired=${inv.retired}`);
+  if (inv.listed.length) {
+    ok(`${e.id}: the model it will call is offered by its own picker`,
+       inv.listed.includes(inv.def), `${inv.def} not in [${inv.listed.slice(0, 5).join(", ")}]`);
+  }
+}
+
+/* ============================= 16. Auto mode, and what it records */
+const autoRun = await page.evaluate(async () => {
+  const A = window.TrackerAI;
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+  const keep = new Map();
+  for (const p of A.imageEngines()) keep.set(p.id, p.image);
+  window.TrackerStore.setText("tracker.geminiKey", "AIzaTEST");
+  window.TrackerStore.setText("tracker.hfKey", "hf_TEST");
+  window.TrackerStore.setText("tracker.imageEngine", A.AUTO);
+  const order = [];
+  const keyless = A.imageEngines().find((p) => p.keyless);
+  for (const p of A.imageEngines()) {
+    p.image = p === keyless
+      ? async () => { order.push(p.id); return A.b64ToBlob(png, "image/png"); }
+      : async () => { order.push(p.id); throw new Error("refused by " + p.id); };
+  }
+  // NO engineId: the path the Generate button actually takes. This is what
+  // caught the bug - auto used to run only when told explicitly.
+  const blob = await A.image("a cat");
+  const first = { order: order.slice(), drew: blob.drawnBy, label: blob.drawnByLabel };
+  order.length = 0;
+  for (const p of A.imageEngines()) p.image = async () => { order.push(p.id); throw new Error("refused by " + p.id); };
+  let all = "";
+  try { await A.image("a cat"); all = "(succeeded)"; }
+  catch (err) { all = String(err && err.message); }
+  const tried = order.slice();
+  for (const p of A.imageEngines()) p.image = keep.get(p.id);
+  return { first, all, tried, keyless: keyless && keyless.id };
+});
+ok("Auto runs from the saved setting, with no engine named",
+   autoRun.first.order.length > 1, autoRun.first.order.join(" -> "));
+ok("Auto keeps the first engine that draws", autoRun.first.drew === autoRun.keyless,
+   `${autoRun.first.drew} drew it`);
+ok("Auto tries keyed engines before the keyless floor",
+   autoRun.first.order[autoRun.first.order.length - 1] === autoRun.keyless,
+   autoRun.first.order.join(" -> "));
+ok("the picture records which engine ACTUALLY drew it, not the one on screen",
+   !!autoRun.first.label && autoRun.first.label !== "Auto", autoRun.first.label);
+ok("when every engine refuses, every reason is reported",
+   /Every engine refused/.test(autoRun.all) &&
+   autoRun.tried.every((id) => autoRun.all.includes(id)),
+   autoRun.all.slice(0, 160));
+
+/* ============================ 17. the tier is shown, and called a guess */
+// Reloaded first. The section caches each engine's model list for the life of
+// the page - correct behaviour, so a page you are only looking at makes no
+// network call - which means a list stubbed earlier in this run is still the
+// one on screen. Without this the picker showed one model and the assertion
+// failed for a reason that was about the check, not the app.
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(300);
+await page.click('#nav button[data-route="images"]');
+await page.waitForTimeout(250);
+await page.evaluate(() => {
+  window.TrackerStore.setText("tracker.imageEngine", "gemini");
+  window.TrackerStore.setText("tracker.geminiKey", "AIzaTEST");
+  for (const p of window.TrackerAI.imageEngines()) {
+    p.listImageModels = async () => p.id === "gemini"
+      ? ["gemini-2.5-flash-image", "imagen-3.0-generate-002"] : ["flux"];
+  }
+  window.TrackerRender();
+});
+await page.click('[data-imgsettings="open"]');
+await page.waitForTimeout(600);
+const tiers = await page.$$eval("[data-imgmodel] option", (o) => o.map((x) => x.textContent.trim()));
+ok("each model is shown with the tier the app thinks it is",
+   tiers.some((t) => /free/i.test(t)) && tiers.some((t) => /paid/i.test(t)), tiers.join(" / "));
+ok("and the panel says that tier is the app's own guess, not a fact",
+   /own guess/i.test(await page.locator("#view .imgsettings").innerText()));
+
+/* ================================ 18. the new engines are in the sweep */
+ok("the image family has grown beyond the two it started with",
+   api.engines.filter((e) => e.canImage).length >= 4,
+   api.engines.filter((e) => e.canImage).map((e) => e.id).join(", "));
+ok("an open-weight engine is among them",
+   api.engines.some((e) => e.id === "huggingface" && e.canImage));
+ok("OpenRouter can now draw as well as rewrite",
+   api.engines.some((e) => e.id === "openrouter" && e.canImage && e.canText));
 
 ok("nothing threw while doing all that", errors.length === 0, errors.join(" | "));
 await browser.close();
