@@ -374,6 +374,8 @@
     drive() { return window.TrackerDrive.view(window.TrackerLinks.findValue("drive")); },
 
     todo() { return window.TrackerTasks.view(window.TrackerLinks.findValue("todo")); },
+
+    images() { return window.TrackerImages.view(window.TrackerLinks.findValue("images")); },
   };
 
   /* ---------- shell ---------- */
@@ -410,6 +412,10 @@
       ["daily", "Daily activity", window.TrackerTasks.logAll().length],
     ] },
     { title: "Drive", items: [["drive", "Google Drive", driveLinks().length]] },
+    // Its own group, below Drive, as asked. The count is what the gallery
+    // holds in this browser: the key is deliberately browser-local, so this
+    // number is honestly about this machine and not about the account.
+    { title: "Image", items: [["images", "Image Generator", window.TrackerImages.count()]] },
   ];
 
   function navButton([r, label, n]) {

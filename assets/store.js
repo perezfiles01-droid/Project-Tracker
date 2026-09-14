@@ -127,9 +127,52 @@
       // you read a table at is a fact about this device, not about the update,
       // and nothing about it is written into anyone's saved text.
       "tracker.tableZoom",
+      // The Image Generator's own settings, kept per engine for the same
+      // reason the Standardize ones are: choosing a second engine must not
+      // destroy the first one's setup. Pollinations needs no key, so it has a
+      // model and nothing else.
+      "tracker.imageEngine",
+      "tracker.geminiImageModel",
+      "tracker.pollinationsModel",
+    ],
+    /**
+     * Authored data that deliberately stays in THIS browser.
+     *
+     * A third list, and it exists for one reason: the backup carries every
+     * picture the exported data refers to (collectBlobs below greps the
+     * exported keys for blob ids), and a gallery of generated images is tens
+     * of megabytes of pictures you can regenerate from their prompts. So the
+     * generations are excluded from the backup by not being exported at all,
+     * which is a cleaner guarantee than a size rule someone has to remember.
+     *
+     * What that costs, stated exactly, because two of these are easy to
+     * assume and wrong:
+     *
+     *   SCOPED per account - yes. scoped() is applied by get and set to every
+     *   key the app has, not just the exported ones, so one account's
+     *   generations are never another's.
+     *   IN THE BACKUP - no, which is the point. exportData filters to
+     *   KEYS.data, so collectBlobs never sees these blob ids to carry.
+     *   UNDOABLE - NO. record() gates on KEYS.data.includes(key), so deleting
+     *   a generation is not an undo step. That is why the gallery's delete
+     *   asks first, like every other delete in this app, rather than relying
+     *   on the arrows in the sidebar to bail you out.
+     *   SYNCED to your other computer - no. notify() gates on the same list.
+     *   "This browser only" is the whole description of this key.
+     *
+     * check_accounts enumerates ALL and check_backup enumerates KEYS.data,
+     * both at runtime, so this key lands on the right side of each without
+     * either check being edited.
+     *
+     * The prompt is kept with every generation, so what is lost by leaving
+     * them out of the backup is the pixels, not the record of what you asked
+     * for - and Export saves any picture you want to keep as a real file.
+     */
+    local: [
+      "tracker.images",      // Image Generator gallery, this browser only
     ],
   };
-  const ALL = [...KEYS.data, ...KEYS.settings];
+  const ALL = [...KEYS.data, ...KEYS.settings, ...KEYS.local];
 
   /* ---------- account scope ----------
      Every key above is a logical name. What actually reaches localStorage is

@@ -685,3 +685,41 @@ body[data-signed-in="no"] .topbar{display:none}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .acct-sub{color:var(--dim);font-size:11px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- Image Generator ----------
+   The grid uses the same auto-fill idiom as .grid above rather than a fixed
+   column count, so nine cards reflow rather than overflowing on a narrow
+   window. Every colour is a token, never a literal: the palette is what
+   carries light and dark, and a hard-coded hex here is a card that reads
+   correctly in one theme and is invisible in the other. */
+.genbar{border:1px solid var(--line);border-radius:10px;background:var(--panel);
+        padding:12px;margin:12px 0 18px}
+.genbar textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:64px;
+        background:var(--panel-2);color:var(--fg);border:1px solid var(--line);
+        border-radius:8px;padding:9px 10px;font:inherit}
+.genbarrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+/* The file input is hidden and its label is the control, which is the only way
+   to style a file picker. The label therefore has to behave like a button
+   rather than merely look like one. */
+.genbarrow label.btn{cursor:pointer;margin:0}
+.genbar .note{margin:10px 0 0}
+.genbar .m{margin:8px 0 0}
+
+.imgsettings{margin:0 0 18px}
+.imgsettings h3{margin:0 0 4px;font-size:15px}
+.imgsettings .field{margin-top:12px}
+.imgsettings .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+.gengrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.gencard{border:1px solid var(--line);border-radius:10px;background:var(--panel);
+         padding:10px;display:flex;flex-direction:column;gap:8px}
+.genshot{padding:0;border:0;background:none;cursor:pointer;display:block;line-height:0}
+/* A fixed aspect box, so a gallery of different shapes stays a grid rather
+   than a ragged column, and a picture that has not resolved from IndexedDB
+   yet holds its space instead of making every card jump when it arrives. */
+.genshot img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;
+             display:block;background:var(--panel-2)}
+.genmeta{display:flex;flex-direction:column;gap:3px;flex:1}
+.genprompt{font-weight:600;line-height:1.35;word-break:break-word;font-size:13.5px}
+.gencard .m{font-size:12px;color:var(--muted);word-break:break-word}
+.genactions{display:flex;gap:6px;align-items:center;justify-content:flex-end}
