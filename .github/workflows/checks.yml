@@ -120,3 +120,8 @@ jobs:
         run: node checks/check_modal_dismissal.mjs
       - name: Table columns stretch, tables zoom, and text takes a palette colour
         run: node checks/check_table_size.mjs
+      # The failure this catches is a report that looks complete and is not:
+      # a range that drops the boundary day, a field that stops reaching the
+      # file, or an AI failure that stops the export instead of degrading it.
+      - name: The exported report carries every fact, in the range asked for
+        run: node checks/check_export.mjs

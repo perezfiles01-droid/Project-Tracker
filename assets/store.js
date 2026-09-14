@@ -582,13 +582,11 @@
   async function saveToFile() {
     const payload = await exportFile();
     const blob = new Blob([JSON.stringify(payload, null, 1)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `project-tracker-backup-${payload.savedAt.slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(a.href);
+    // Through the one helper, which keeps the anchor and the object URL alive
+    // until the browser has actually started the download. This line used to
+    // revoke the URL immediately after the click, which is a race over the
+    // backup's own bytes - the one file in this app you cannot rebuild.
+    window.TrackerUI.saveBlob(blob, `project-tracker-backup-${payload.savedAt.slice(0, 10)}.json`);
     return { keys: Object.keys(payload.keys).length,
              blobs: Object.keys(payload.blobs || {}).length };
   }

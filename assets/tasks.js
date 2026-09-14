@@ -364,15 +364,7 @@
   async function openAttachment(id) {
     const blob = await getBlob(id);
     if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    window.TrackerUI.openBlob(blob);
   }
 
   /**
@@ -387,14 +379,7 @@
     const meta = list.flatMap((t) => t.attachments || []).find((a) => a.id === id);
     const blob = await getBlob(id);
     if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = (meta && meta.name) || "attachment";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    window.TrackerUI.saveBlob(blob, (meta && meta.name) || "attachment");
   }
 
   /* ---------- render ---------- */
@@ -859,6 +844,7 @@
         Click a task to see everything on it, beside the list.</p>
       <div class="pagetools">
         ${window.TrackerLinks.searchBox("todo", "Search tasks…")}
+        <button class="btn" data-export="active">Export</button>
         <button class="btn primary" data-edit="task:new">New task</button>
       </div>
       ${rows.length
@@ -1069,8 +1055,19 @@
            (t.no ? "Task " + t.no : "Untitled task");
   }
 
+  /* Shared with the exporter rather than copied into it.
+
+     numbered, today and dayOf are the three things a report has to agree with
+     the screen about: the number in the Task No. column is a position worked
+     out at render, and every date in this app is a LOCAL calendar day. A
+     second copy of either in export.js is a second copy that can drift, and
+     the drift is silent - a report numbered differently from the table, or a
+     "created today" range that starts eight hours late east of Greenwich.
+     refsOf and updatesOf go with them for the same reason: the report lists
+     what the pane lists, read through the pane's own accessors. */
   window.TrackerTasks = { view, load, active, editTask, setStatus, STATUSES, COLUMNS,
                           logAll, logEdit, logRemove, updateCount,
-                          updatesOf, UPDATE_IMAGES,
+                          updatesOf, UPDATE_IMAGES, numbered, today, dayOf,
+                          refsOf, overdue, LOGGED,
                           taskPane, openTask, taskLabel, paintPane: paint };
 })();

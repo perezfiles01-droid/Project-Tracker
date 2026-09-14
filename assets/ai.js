@@ -64,7 +64,75 @@
     description: "This is a task description. A short paragraph is right.",
   };
 
-  const prompt = (kind) => SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description);
+  /**
+   * The second job this file does: read a batch of tasks and say what they add
+   * up to, for the .txt report the To Do List exports.
+   *
+   * A separate instruction rather than another KIND_HINT, because SYSTEM asks
+   * for a REWRITE of the text it is given - "improve the tone", "retain the
+   * message" - and a report is not a tidied copy of its input. Hinting the
+   * rewrite instruction towards summarising would have produced a politely
+   * reworded field dump.
+   *
+   * The no-invention rule is repeated here in its own words rather than
+   * inherited, and it matters more here than it does there. Standardize hands
+   * its answer back into a field you are looking at, where an invented detail
+   * is in front of you; this text is written into a file that gets read later,
+   * by which time nothing distinguishes a sentence the model made up from one
+   * your own notes support. The report is built so that it CANNOT do damage
+   * beyond its own paragraphs - export.js prints every fact verbatim from
+   * storage and lets this text sit beside them, never in place of them - and
+   * the instruction is the second line of defence, not the first.
+   *
+   * The reply shape is asked for strictly because it is parsed back: export.js
+   * splits on the TASK n headings to place each line under the right task. A
+   * reply that ignores the shape costs the per-task lines and nothing else -
+   * the summary and every task still reach the file.
+   */
+  const REPORT = [
+    "You are writing the summary section of a work report, from a list of",
+    "tasks the user has recorded. Read all of them and say what the batch of",
+    "work adds up to: what it is about, what is moving, what is waiting on",
+    "someone, what is blocked or overdue, and anything several tasks have in",
+    "common. Write for someone who has not seen the list.",
+    "",
+    "Use ONLY what the tasks say. Invent no names, dates, systems, numbers,",
+    "statuses or outcomes, and do not guess at what a task means if it does",
+    "not say. If the tasks are too thin to summarise, say that in one line.",
+    "",
+    "Never use an em dash or an en dash. Write plainly, in the register of a",
+    "work note. No preamble, no sign-off, no markdown headings, no bullets.",
+    "",
+    "Reply in exactly this shape, and nothing else:",
+    "",
+    "SUMMARY",
+    "One to three short paragraphs about the batch as a whole.",
+    "",
+    "TASK 1",
+    "One or two sentences saying what this task is about in plain terms.",
+    "",
+    "TASK 2",
+    "One or two sentences.",
+    "",
+    "Use the task numbers exactly as they are given to you, and write one",
+    "TASK block for every task in the list.",
+  ].join("\n");
+
+  const prompt = (kind) =>
+    kind === "report" ? REPORT
+                      : SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description);
+
+  /**
+   * Room to answer in.
+   *
+   * A rewrite is about as long as what it was given, so 2000 has always been
+   * ample. A report over twenty tasks is not: the same ceiling truncates it
+   * mid-sentence, and a Gemini reply cut off at the limit still arrives as a
+   * 200 with a candidate, so it would have read as a short summary rather
+   * than as a failure. Read by both engines, which is the point of it being
+   * here rather than written into each one.
+   */
+  const MAX_TOKENS = (kind) => (kind === "report" ? 8000 : 2000);
   const get = (k) => window.TrackerStore.getText(k);
 
   /**
@@ -201,7 +269,7 @@
           body: JSON.stringify({
             system_instruction: { parts: [{ text: prompt(kind) }] },
             contents: [{ role: "user", parts: [{ text }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
+            generationConfig: { temperature: 0.3, maxOutputTokens: MAX_TOKENS(kind) },
           }),
         }, "Google");
 
@@ -315,7 +383,7 @@
             { role: "user", content: text },
           ],
           temperature: 0.3,
-          max_tokens: 2000,
+          max_tokens: MAX_TOKENS(kind),
         }),
       }, "OpenRouter");
 
@@ -383,6 +451,19 @@
    * default should get a working button, not a lecture.
    */
   async function standardize(text, { kind = "description" } = {}) {
+    return dispatch(text, kind);
+  }
+
+  /**
+   * Which engine actually runs this, whatever kind of work it is.
+   *
+   * Lifted out of standardize unchanged so that report() cannot acquire a
+   * second, subtly different answer to the same question - the fallback to the
+   * first engine holding a key is the behaviour someone who set up OpenRouter
+   * and then changed the default depends on, and it should not be a thing that
+   * works for the wand and not for the report.
+   */
+  async function dispatch(text, kind) {
     const chosen = engine();
     const provider = chosen.key() ? chosen : PROVIDERS.find((p) => p.key());
     if (!provider) {
@@ -391,6 +472,18 @@
     return provider.run(text, kind);
   }
 
-  window.TrackerAI = { standardize, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt, retire,
-                     classify, PURPOSE_ORDER, PURPOSE_LABEL };
+  /**
+   * Summarise a batch of tasks for the exported report.
+   *
+   * Throws exactly as standardize does, with the same readable reasons, and
+   * export.js catches every one of them: the file is written either way, with
+   * a line saying why the summary is missing. The AI makes the report easier
+   * to read; it is never what decides whether you get one.
+   */
+  async function report(text) {
+    return dispatch(text, "report");
+  }
+
+  window.TrackerAI = { standardize, report, hasKey, engine, PROVIDERS, DEFAULT_ENGINE, adopt, retire,
+                     classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt };
 })();
