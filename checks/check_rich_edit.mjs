@@ -276,6 +276,94 @@ const accumulation = await page.evaluate(async () => {
 ok("one toolbar click runs its command exactly once, after six dialogs",
    accumulation === 1, `${accumulation} execCommand calls`);
 
+/* ====== 11. a standardize is one step, and both paths agree on it ======= */
+// The fault: standardize assigns innerHTML, and a programmatic assignment
+// fires no `input` event, so the snapshot listening for it never ran. Measured
+// before the fix: the undo count did not move across a standardize, the
+// standardized text was never a state you could reach or redo back to, and the
+// history's account of the past was false - it claimed the field held your
+// original just before your next keystroke when it actually held the
+// standardized text.
+const ORIGINAL = "Need to review the failed record that was forwarded by Willie via email yesterday.";
+const STD = "Review the failed record forwarded by Willie";
+
+const freshStd = async () => {
+  await page.evaluate((std) => {
+    // Stubbed, so this tests the WIRING and runs with no key and no network.
+    window.TrackerAI.standardize = async () => std;
+  }, STD);
+  await openDialog([{ name: "text", label: "Update", type: "rich", rows: 4, standardize: true }]);
+  await page.click("[data-rich]");
+  await page.type("[data-rich]", ORIGINAL, { delay: 3 });
+  await page.waitForTimeout(620);
+  const before = await page.$eval("[data-richundo]", (e) => e.getAttribute("aria-label"));
+  await page.click("[data-standardize]");
+  await page.waitForTimeout(420);
+  const after = await page.$eval("[data-richundo]", (e) => e.getAttribute("aria-label"));
+  return { before, after };
+};
+const richText = () => page.$eval("[data-rich]", (e) => e.innerText.trim());
+
+const counts = await freshStd();
+ok("standardizing replaces the text", (await richText()) === STD, await richText());
+ok("and records a step of its own in the history",
+   counts.before !== counts.after, `${counts.before} -> ${counts.after}`);
+await page.click("[data-richundo]");
+await page.waitForTimeout(200);
+ok("undo gives your own words back", (await richText()) === ORIGINAL, await richText());
+await page.click("[data-richredo]");
+await page.waitForTimeout(200);
+ok("redo returns the standardized version", (await richText()) === STD, await richText());
+
+// The one the request was actually about: going back LATER, after working on.
+await page.click("[data-rich]");
+await page.keyboard.press("End");
+await page.type("[data-rich]", " Also chase Ada.", { delay: 3 });
+await page.waitForTimeout(620);
+await page.click("[data-richundo]");
+await page.waitForTimeout(180);
+ok("after typing on, one undo reaches the standardized text",
+   (await richText()) === STD, await richText());
+await page.click("[data-richundo]");
+await page.waitForTimeout(180);
+ok("and a second undo still reaches the original, at any time",
+   (await richText()) === ORIGINAL, await richText());
+
+// The inline offer must mean what it says, and agree with the toolbar.
+await close(false);
+const viaLink = await (async () => {
+  await freshStd();
+  ok("the inline Standardized/Undo offer is shown",
+     (await page.locator("[data-undo]").count()) === 1);
+  await page.click("[data-undo]");
+  await page.waitForTimeout(200);
+  const t = await richText();
+  await close(false);
+  return t;
+})();
+const viaButton = await (async () => {
+  await freshStd();
+  await page.click("[data-richundo]");
+  await page.waitForTimeout(200);
+  const t = await richText();
+  await close(false);
+  return t;
+})();
+ok("the inline link and the toolbar button leave the field identical",
+   viaLink === viaButton, `link ${JSON.stringify(viaLink)} vs button ${JSON.stringify(viaButton)}`);
+ok("and both of them give back the original", viaLink === ORIGINAL, viaLink);
+
+// Once you edit again, one step back is no longer the standardize, so the
+// offer must not still be claiming it is.
+await freshStd();
+await page.click("[data-rich]");
+await page.keyboard.press("End");
+await page.type("[data-rich]", " Also chase Ada.", { delay: 3 });
+await page.waitForTimeout(300);
+ok("the offer expires once you edit again, rather than lying about what it does",
+   (await page.locator("[data-undo]").count()) === 0);
+await close(false);
+
 ok("nothing threw while doing all that", errors.length === 0, errors.join(" | "));
 await browser.close();
 console.log(failed ? `\nFAIL: ${failed} check(s)` : "\nPASS: the field keeps what you typed, and steps back one edit at a time");

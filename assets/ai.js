@@ -46,22 +46,41 @@
    * prompt is the request, the regex is the guarantee.
    */
   const SYSTEM = [
-    "Improve the tone of the text the user gives you. Fix the grammar, retain",
-    "the message, and make it clear and easy to understand.",
+    "Improve the tone of the text the user gives you. Fix the grammar, and",
+    "make it clear and easy to understand. Repair the spelling, the",
+    "punctuation and the word choice.",
+    "",
+    "This is a repair, not a rewrite. Keep every idea, every clause and every",
+    "detail that is already there, in the order it was written, and keep the",
+    "construction of each sentence. Do not shorten the text, do not compress",
+    "it, do not summarise it, and do not merge two sentences into one. Do not",
+    "drop a phrase because it reads as redundant. The result should be about",
+    "as long as what you were given, and longer wherever correct grammar needs",
+    "more words.",
     "",
     "Never use an em dash or an en dash. Write plainly, in the register of a",
-    "work note written by the person who typed it. Do not make it longer than",
-    "it needs to be, and do not invent specifics such as names, dates, systems",
-    "or numbers that the text does not already imply.",
+    "work note written by the person who typed it, and do not invent specifics",
+    "such as names, dates, systems or numbers that the text does not already",
+    "imply.",
     "",
     "Reply with the improved text and nothing else. No preamble, no quotes",
     "around it, no explanation of what you changed.",
   ].join("\n");
 
   /** A task title is a label, so it stays a label rather than becoming prose. */
+  /* The per-kind hints, and what was taken OUT of them.
+     Both used to push the answer shorter: the title carried a cap of "under
+     about ten words" and the description said "a short paragraph is right".
+     Together with the line that used to sit in SYSTEM - do not make it longer
+     than it needs to be - they were three separate instructions to cut, which
+     is why a sentence came back with half of itself missing. The prompt was
+     working exactly as written. It now asks for the shape it was handed to be
+     kept, whatever that shape is. */
   const KIND_HINT = {
-    title: "This is a short task title. Keep it to one line, under about ten words.",
-    description: "This is a task description. A short paragraph is right.",
+    title: "This is a task title, so keep it to one line. Keep every word of " +
+           "substance that is in it; do not trim it to fit.",
+    description: "This is a task description. Keep the paragraph shape you " +
+                 "were given, however long it is.",
   };
 
   /**

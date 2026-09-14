@@ -1213,7 +1213,18 @@
 
       /* `input` rather than keyup, so a paste, a drag and a dictated phrase
          are remembered too - keyup misses every edit not typed. */
-      on(el, "input", () => richSnapshot(el));
+      on(el, "input", () => {
+        richSnapshot(el);
+        /* The "Standardized. Undo" offer expires the moment you edit again.
+           Nothing used to clear it, so it sat there after you had typed on,
+           still saying Undo - and by then one step back was no longer the
+           standardize but your own last sentence. A control that does
+           something other than what it says is worse than no control. While
+           it IS offered, undoing once is exactly the standardize, which is
+           what makes the link and the toolbar button agree by construction
+           rather than by coincidence. */
+        if (originals.has(el.id)) { originals.delete(el.id); setNote(el.id, ""); }
+      });
 
       /* Ctrl+Z and Ctrl+Shift+Z drive the SAME history as the buttons.
          Without this the keyboard runs the browser's stack and the buttons
@@ -2312,8 +2323,30 @@
       // The original is kept as it really is - the markup for a rich field, so
       // Undo restores the formatting and not a flattened copy of it.
       originals.set(id, rich ? field.innerHTML : text);
-      if (rich) field.innerHTML = esc(improved).replace(/\n/g, "<br>");
-      else field.value = improved;
+      if (rich) {
+        /* Snapshotted either side of the replacement, so a standardize is
+           exactly ONE step in the field's own history.
+
+           It was invisible to that history before, and the reason is worth
+           writing down: this assigns innerHTML, and a programmatic assignment
+           fires no `input` event, which is what the snapshot listens for. The
+           consequences were all silent. The undo count did not move, so the
+           button's label was wrong. The standardized text was never a state
+           you could step to or redo back to - undo leapt from "standardized
+           plus whatever you typed next" straight to your original, skipping
+           it. And the history's account of the past was false: it claimed the
+           field held your original just before your next keystroke, when it
+           actually held the standardized text.
+
+           `now: true` on both, like a toolbar command, because a standardize
+           is one deliberate act and undo should step over exactly it rather
+           than over it plus the sentence you were halfway through. */
+        richSnapshot(field, { now: true });
+        field.innerHTML = esc(improved).replace(/\n/g, "<br>");
+        richSnapshot(field, { now: true });
+      } else {
+        field.value = improved;
+      }
       setNote(id, `Standardized. <button type="button" class="linkish"
                      data-undo="${id}">Undo</button>`, "ok");
     } catch (err) {
@@ -2333,9 +2366,24 @@
       e.preventDefault();
       const id = u.dataset.undo;
       const field = document.getElementById(id);
-      if (field && originals.has(id)) {
-        if (field.dataset && field.dataset.rich) field.innerHTML = originals.get(id);
-        else field.value = originals.get(id);
+      if (field && field.dataset && field.dataset.rich) {
+        /* One history, not two.
+
+           This link used to restore from `originals`, its own single-entry
+           map, while the toolbar buttons walked the field's snapshot stack.
+           Two mechanisms with two ideas of the past: the link survived
+           further typing and would have put your original back while
+           silently discarding everything typed after the standardize, and
+           the toolbar would then disagree about what came before what.
+
+           Now it is a shortcut to the same step the toolbar undo takes -
+           which is the step the standardize just pushed - so the two can
+           never diverge, and redo still reaches the standardized text. */
+        richUndo(field);
+      } else if (field && originals.has(id)) {
+        // A plain input has no snapshot history to walk, so this remains its
+        // only way back. The browser's own Ctrl+Z covers typing there.
+        field.value = originals.get(id);
       }
       originals.delete(id);
       return setNote(id, "");

@@ -65,8 +65,16 @@ const bodies = await page.evaluate(async (ids) => {
 const seen = Object.keys(bodies);
 ok("a request body was captured for at least one engine", seen.length > 0, seen.join(", "));
 
-for (const [id, body] of Object.entries(bodies)) {
-  if (!body) { ok(`${id}: a body was sent`, false, "empty"); continue; }
+for (const [id, rawBody] of Object.entries(bodies)) {
+  if (!rawBody) { ok(`${id}: a body was sent`, false, "empty"); continue; }
+  /* Matched against a body whose line breaks are flattened to single spaces.
+     The body is JSON, so a newline in the instruction arrives here as the two
+     characters backslash-n, and \s does not match that. Every phrase asserted
+     below would therefore fail the moment someone re-wrapped a line of the
+     prompt - which is a check failing on formatting rather than on meaning,
+     and it happened while writing these. The self-test at the foot of this
+     file exists for the same hazard on the banned scan. */
+  const body = String(rawBody).replace(/\\n/g, " ").replace(/\s+/g, " ");
   ok(`${id}: still asks for tone, grammar and clarity`,
      /improve the tone/i.test(body) && /fix the grammar/i.test(body) &&
      /clear and easy to understand/i.test(body));
@@ -75,6 +83,30 @@ for (const [id, body] of Object.entries(bodies)) {
   ok(`${id}: still forbids inventing specifics`, /do not invent specifics/i.test(body));
   ok(`${id}: still asks for the text and nothing else`,
      /nothing else/i.test(body));
+
+  /* A repair, not a rewrite.
+     Three separate instructions used to push the answer shorter - SYSTEM said
+     "do not make it longer than it needs to be", the description hint said "a
+     short paragraph is right", and the title hint capped it at "about ten
+     words". Together they are why a sentence came back with half of itself
+     missing: the prompt was working exactly as written. Asserted over the
+     LIVE request body of every engine, so neither the shared instruction nor
+     a per-kind hint can quietly reintroduce a licence to cut. */
+  for (const re of [/longer than it needs to be/i, /short paragraph/i,
+                    /ten words/i, /\bconcise\b/i, /\bbrief\b/i]) {
+    ok(`${id}: carries no licence to shorten (${re.source})`, !re.test(body));
+  }
+  ok(`${id}: says it is a repair rather than a rewrite`,
+     /not a rewrite/i.test(body));
+  ok(`${id}: asks for every idea and detail to be kept`,
+     /keep every idea/i.test(body) && /every detail/i.test(body));
+  ok(`${id}: forbids shortening, compressing and merging outright`,
+     /do not shorten/i.test(body) && /do not compress/i.test(body) &&
+     /merge two sentences/i.test(body));
+  ok(`${id}: asks for the sentence construction to be kept`,
+     /construction of each sentence/i.test(body));
+  ok(`${id}: expects a result about as long as the input`,
+     /about\s+as long as/i.test(body));
 }
 
 /* The source itself, as a second reading - a prompt assembled from pieces
