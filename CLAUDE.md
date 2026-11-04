@@ -16,6 +16,9 @@ permission at any step:
    some deploy succeeded.
 6. Say what to click to see it, and that a hard refresh may be needed.
 
+That list is the **full lane**. Content, wording, CSS and docs take the
+**fast lane** straight to `main` (see "How we work" below).
+
 Standing instruction from the repository owner, 14 September 2026, in their
 own words:
 
@@ -33,6 +36,85 @@ choice.** Both were authorised once, for every future change. Asking again is
 itself the thing they asked to stop.
 
 **The live site:** https://perezfiles01-droid.github.io/Project-Tracker/
+
+## How we work: the exact routine, every request
+
+Set by the owner on 4 November 2026: handle every change the same way as the
+adb-tracker site, so it makes no difference which chat they are in.
+
+### 1. Before touching anything
+```bash
+cd /home/user/Project-Tracker
+git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'   # once, if the clone lacks it
+git fetch origin && git checkout main && git pull
+mkdir -p node_modules && ln -sfn "$(npm root -g)/playwright" node_modules/playwright   # once per container; the checks import playwright as ESM
+export CHROMIUM_PATH=/opt/pw-browsers/chromium
+```
+
+### 2. Decide the lane
+- **Fast lane:** wording, content, `data/`, CSS, docs. Commit and push
+  straight to `main`. About 1 to 3 minutes end to end.
+- **Full lane:** anything in `assets/*.js`, `index.html` script, or new
+  behaviour. Branch, PR, wait for Checks, merge, confirm the deploy.
+- **Unsure?** Use the full lane.
+
+### 3. Mockup first, when asked or for a new section
+Write the mockup in the chat first, in the same structure the page will
+have, and list what to confirm. Wait for "go" or corrections. **Never ask
+about merging or deploying**; that is always yes.
+
+### 4. Make the change
+- Edit the files. For JSON content, a small Python script that loads,
+  changes and dumps it keeps the diff clean.
+- After any change to `assets/`, `index.html` or `data/`, run
+  `python3 scripts/build_standalone.py` and commit the regenerated
+  `Tracker-standalone.html`.
+
+### 5. Verify
+```bash
+node checks/check_render.mjs && node checks/check_search.mjs     # fast lane
+ls checks/check_*.mjs | xargs -P4 -I{} sh -c 'node {} >/dev/null 2>&1 || echo "FAIL {}"'   # full lane: prints only FAILs
+```
+- Run the specific guard for what changed, and add one if none covers it.
+- **Look at a screenshot** of the changed screen; some bugs show only there.
+- **If a check fails, rerun it alone and read its output.** Prove whether
+  the change, the test (parallel load) or stale data is at fault before
+  changing code.
+
+### 6. Ship
+**Fast lane:**
+```bash
+git commit -am "<what changed, plain words>"   # ends with the session's attribution lines
+git push origin main
+sha=$(git rev-parse HEAD)
+until [ "$(gh api "repos/perezfiles01-droid/Project-Tracker/actions/runs?head_sha=$sha" --jq '[.workflow_runs[]|select(.name=="Deploy site to GitHub Pages" and .status=="completed")]|length')" -ge 1 ]; do sleep 5; done
+gh api "repos/perezfiles01-droid/Project-Tracker/actions/runs?head_sha=$sha" --jq '.workflow_runs[]|select(.name=="Deploy site to GitHub Pages")|.conclusion'   # must print success
+```
+
+**Full lane:**
+1. `git checkout -b claude/<topic>`, commit.
+2. `git fetch origin && git merge origin/main`, so nothing on `main` is lost.
+3. Push, then open the PR with the GitHub MCP `create_pull_request`: what
+   changed, how it was verified, PR attribution lines.
+4. Wait for **Checks** on the PR head SHA (same `until` loop with
+   `.name=="Checks"`). Must be `success`, and the relevant step must have run,
+   not `skipped`.
+5. Merge with `merge_pull_request`, method `merge`, `expectedHeadSha` set.
+6. Wait for the Pages run on the **merge SHA**. Must be `success`.
+7. `git checkout main && git pull`.
+
+### 7. Report to the owner
+Short and plain:
+1. **One line:** it's live, https://perezfiles01-droid.github.io/Project-Tracker/,
+   press **Ctrl+Shift+R** (Cmd+Shift+R on a Mac).
+2. **What to click** to see it.
+3. **What changed**, a few bullets in their words.
+4. **What was checked**, then: "I can't open github.io from here, so I haven't
+   seen the live page itself."
+5. **Anything open**, only if real, with a suggested next step.
+
+No apologies, no asking permission to merge or deploy, no technical detail
+they did not ask for.
 
 ## What still stops, and why it is not the same thing
 
@@ -70,7 +152,7 @@ deploy succeeded" up to "I watched it work".
 
 ```bash
 python3 scripts/build_standalone.py     # REQUIRED: every check runs against this file
-CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
+CHROMIUM_PATH=/opt/pw-browsers/chromium \
   node checks/check_<name>.mjs          # the guard for whatever changed
 ```
 
@@ -80,7 +162,7 @@ old app and passes. Rebuild before running anything and before every commit.
 
 Playwright's npm package is newer than the pre-installed browser, so
 `CHROMIUM_PATH` must point at
-`/opt/pw-browsers/chromium-1194/chrome-linux/chrome` or every browser check
+`/opt/pw-browsers/chromium` (the old `chromium-1194` path no longer exists) or every browser check
 dies with "Executable doesn't exist". Do not run `playwright install` — the
 download host is blocked.
 

@@ -423,10 +423,19 @@
         <span>${esc(label)}</span>${n !== null ? `<span class="count">${n}</span>` : ""}</button>`;
   }
 
+  /*
+   * The owner asked (4 Nov 2026) for Projects, Task, Drive and Image to be
+   * hidden from the sidebar. Only on the live site: the browser checks run
+   * from file:// and localhost and enumerate every route, so they keep
+   * exercising the full app. The pages still exist; only the entries go.
+   */
+  const LIVE = /\.github\.io$/.test(location.hostname);
+  const HIDDEN_ON_LIVE = ["Projects", "Task", "Drive", "Image"];
+
   function renderNav() {
     // A scrolling group is wrapped so its own box can be given a height;
     // the buttons themselves are unchanged.
-    $("#nav").innerHTML = navGroups().map((g) =>
+    $("#nav").innerHTML = navGroups().filter((g) => !(LIVE && HIDDEN_ON_LIVE.includes(g.title))).map((g) =>
       `<div class="nav-title">${esc(g.title)}</div>` +
       (g.scroll
         ? `<div class="navscroll">${g.items.map(navButton).join("")}</div>`
