@@ -173,6 +173,7 @@
      */
     local: [
       "tracker.images",      // Image Generator gallery, this browser only
+      "tracker.imageEditor", // Image editor drafts; their pictures are in IndexedDB
     ],
   };
   const ALL = [...KEYS.data, ...KEYS.settings, ...KEYS.local];

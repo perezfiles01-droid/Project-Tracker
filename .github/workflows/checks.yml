@@ -137,3 +137,8 @@ jobs:
       # dialog ever opened.
       - name: The rich field keeps what you typed, and steps back one edit
         run: node checks/check_rich_edit.mjs
+      # Drives the editor with a real mouse: every tool on the ribbon (read at
+      # runtime) must draw, crop must keep the chosen part, the PNG must match
+      # the canvas without handles, and no picture bytes may reach localStorage.
+      - name: The image editor draws, crops, exports and keeps drafts
+        run: node checks/check_editor.mjs

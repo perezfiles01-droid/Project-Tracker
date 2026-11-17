@@ -376,6 +376,7 @@
     todo() { return window.TrackerTasks.view(window.TrackerLinks.findValue("todo")); },
 
     images() { return window.TrackerImages.view(window.TrackerLinks.findValue("images")); },
+    editor() { return window.TrackerEditor.view(window.TrackerLinks.findValue("editor")); },
   };
 
   /* ---------- shell ---------- */
@@ -403,7 +404,12 @@
   });
 
   const navGroups = () => [
-    { title: "Index", items: [["overview", "Overview", window.TrackerLinks.resolved().length]] },
+    { title: "Index", items: [
+      ["overview", "Overview", window.TrackerLinks.resolved().length],
+      // Asked for 17 Nov 2026: under Index, above the account box. No count;
+      // its drafts are per browser and listed on the page itself.
+      ["editor", "Image editor", null],
+    ] },
     { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
       // The count is what the page lists, not every task ever saved: blocked
@@ -507,6 +513,8 @@
       html = (views[state.route] || views.overview)();
     }
     $("#view").innerHTML = html;
+    // The editor draws on a canvas, which a string of HTML cannot carry.
+    if (state.route === "editor" && window.TrackerEditor) window.TrackerEditor.mount();
   }
   window.TrackerRender = render;
 
