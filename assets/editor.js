@@ -388,17 +388,10 @@
       c.strokeStyle = "#ef4444"; c.lineWidth = s; c.setLineDash([5 * s, 3 * s]); c.strokeRect(x, y, w, h); c.restore();
     }
   }
-  /** Each member outlined, and one box around the lot. */
+  /** Every member drawn with its own handles, the way PowerPoint shows a
+      multiple selection, so it is plain at a glance which items will move. */
   function paintGroup(c) {
-    const s = 1 / scale, list = chosen();
-    if (!list.length) return;
-    c.save(); c.strokeStyle = "#ef4444"; c.lineWidth = s;
-    c.setLineDash([4 * s, 3 * s]);
-    for (const o of list) { const b = bounds(o); c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
-    const u = unionOf(list), pad = 6 * s;
-    c.setLineDash([]); c.lineWidth = 1.5 * s;
-    c.strokeRect(u.x0 - pad, u.y0 - pad, u.x1 - u.x0 + pad * 2, u.y1 - u.y0 + pad * 2);
-    c.restore();
+    for (const o of chosen()) paintSelection(c, o);
   }
 
   function draw() {
@@ -937,7 +930,7 @@
     if (crop) return `<span class="ie-hint">Drag the frame or its handles to choose what to keep.</span>
       ${small("crop-apply", "Apply crop")} ${small("crop-cancel", "Cancel")}`;
     if (group.length) return `<span class="ie-cap2">${chosen().length} selected</span>
-      <span class="ie-hint">Drag any of them to move them all. Shift+click adds or removes one.</span>
+      <span class="ie-hint">Drag any of them to move them all. Ctrl+click adds or removes one.</span>
       <span class="ie-sep"></span>` + small("front", "Bring to front") + small("back", "Send to back") +
       small("dup", "Duplicate") + small("del", "Delete");
     const o = selected();
