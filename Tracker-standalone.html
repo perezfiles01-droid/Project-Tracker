@@ -783,6 +783,34 @@ body[data-signed-in="no"] .topbar{display:none}
 .ie-text{position:absolute;margin:0;border:1px dashed var(--accent);background:transparent;resize:none;overflow:hidden;white-space:pre;outline:0;transform-origin:center;box-sizing:border-box;z-index:2}
 .ie-foot{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--dim)}
 .ie-keys{margin-left:auto}
+/* Image editor: pages strip on the right, and the small menus. */
+.ie-work{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:10px;align-items:start}
+.ie-work.collapsed{grid-template-columns:minmax(0,1fr) 34px}
+.ie-pages{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px;display:flex;flex-direction:column;gap:8px;position:sticky;top:10px}
+.ie-work.collapsed .ie-pages{padding:4px;align-items:center}
+.ie-phead{display:flex;align-items:center;justify-content:space-between;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);padding:0 2px}
+.ie-pt{background:none;border:1px solid var(--line);border-radius:7px;color:var(--muted);cursor:pointer;width:24px;height:24px;font:inherit;line-height:1}
+.ie-pt:hover{color:var(--text);border-color:var(--accent)}
+.ie-plist{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 330px);min-height:80px;overflow:auto;padding:2px}
+.ie-thumb{position:relative;display:flex;gap:6px;align-items:flex-start;cursor:pointer;border-radius:8px;padding:4px;border:1px solid transparent}
+.ie-thumb:hover{background:var(--panel-2)}
+.ie-thumb.cur{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--accent);border-color:var(--line)}
+.ie-thumb.cur canvas{outline:2px solid var(--accent)}
+.ie-thumb.drop{border-top:2px solid var(--accent)}
+.ie-thumb canvas{width:118px;height:auto;display:block;border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,.25);pointer-events:none}
+.ie-pno{font-size:11px;color:var(--dim);min-width:12px;text-align:right}
+.ie-dots{position:absolute;top:6px;right:6px;width:22px;height:20px;border:0;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;opacity:0;font:inherit;line-height:1}
+.ie-thumb:hover .ie-dots,.ie-thumb.cur .ie-dots{opacity:1}
+.ie-add{width:100%}
+.ie-menuwrap{position:relative}
+.ie-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:170px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column}
+.ie-menu[hidden]{display:none}
+.ie-menu.ie-up{top:auto;bottom:calc(100% + 4px);left:0;right:0}
+.ie-menu.ie-tm{top:28px;right:4px;min-width:120px}
+.ie-menu button{background:none;border:0;text-align:left;padding:7px 10px;border-radius:7px;color:var(--text);cursor:pointer;font:inherit;font-size:13px}
+.ie-menu button:hover:not(:disabled){background:var(--panel-2)}
+.ie-menu button:disabled{opacity:.4;cursor:default}
+@media (max-width:760px){.ie-work{grid-template-columns:1fr}.ie-plist{flex-direction:row;max-height:none;overflow-x:auto}}
 
 </style>
 </head>
@@ -7684,8 +7712,27 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const LINE = new Set(["line", "arrow"]);
 
   /* ---------------------------------------------------------------- state */
-  const fresh = () => ({ id: "d" + Date.now().toString(36), name: "", w: 1280, h: 720, bg: "#ffffff", objects: [] });
-  let doc = fresh();
+  /* A draft ("book") holds pages, like slides in one file. `doc` is always the
+     page on screen, so every drawing routine below works on one page and
+     never needs to know there are others. Snapshots are of the whole book, so
+     undo also covers adding, deleting and reordering pages. */
+  const blankPage = (w = 1280, h = 720, bg = "#ffffff") => ({ id: "p" + uid(), w, h, bg, objects: [] });
+  const fresh = () => ({ id: "d" + Date.now().toString(36), name: "", cur: 0, pages: [blankPage()] });
+  /** Drafts saved before pages existed were one bare page; wrap them. */
+  const adopt = (d) => {
+    const b = JSON.parse(JSON.stringify(d));
+    if (!b.pages) {
+      b.pages = [{ id: "p" + uid(), w: b.w || 1280, h: b.h || 720, bg: b.bg || "#ffffff", objects: b.objects || [] }];
+      b.cur = 0; delete b.w; delete b.h; delete b.bg; delete b.objects;
+    }
+    b.cur = Math.min(Math.max(0, b.cur || 0), b.pages.length - 1);
+    return b;
+  };
+  let book = fresh();
+  let doc = book.pages[0];
+  const sync = () => { book.cur = Math.min(Math.max(0, book.cur), book.pages.length - 1); doc = book.pages[book.cur]; };
+  const objectsOf = (b) => b.pages.flatMap((pg) => pg.objects);
+  const hasContent = (b) => b.pages.length > 1 || b.pages.some((pg) => pg.objects.length);
   let opened = false;            // first visit reopens the latest draft
   let tool = "select";
   let sel = null;                // selected object id
@@ -7694,6 +7741,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   let editing = null;            // text object id being typed into
   let zoom = "fit";
   let showDrafts = false;
+  let showPages = true;
+  let addMenu = false;
+  let dlMenu = false;
+  let thumbMenu = null;          // page index whose ⋯ menu is open
   let notice = "";
   let undo = [], redo = [];
   const style = {
@@ -7703,7 +7754,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   };
   const imgs = {};               // blob id -> { el, ok }
 
-  const snap = () => JSON.stringify(doc);
+  const snap = () => JSON.stringify(book);
   const find = (id) => doc.objects.find((o) => o.id === id);
   const selected = () => (sel ? find(sel) : null);
 
@@ -7713,11 +7764,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function persist() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      if (!doc.objects.length) return;
-      const list = drafts().filter((d) => d.id !== doc.id);
-      if (!doc.name) doc.name = "Edit " + new Date().toLocaleString(undefined,
+      if (!hasContent(book)) return;
+      const list = drafts().filter((d) => d.id !== book.id);
+      if (!book.name) book.name = "Edit " + new Date().toLocaleString(undefined,
         { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-      doc.updated = new Date().toISOString();
+      book.updated = new Date().toISOString();
       list.unshift(JSON.parse(snap()));
       S().set(KEY, list);
       paintDrafts();
@@ -7726,7 +7777,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function openDraft(id) {
     const d = drafts().find((x) => x.id === id);
     if (!d) return;
-    doc = JSON.parse(JSON.stringify(d));
+    book = adopt(d); sync();
     sel = null; crop = null; editing = null; undo = []; redo = [];
     refresh();
   }
@@ -7740,15 +7791,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const rest = drafts().filter((x) => x.id !== id);
     S().set(KEY, rest);
     // Bytes no remaining draft (or the open canvas) still points at.
-    const used = new Set([...rest, doc].flatMap((x) => x.objects).map((o) => o.blob).filter(Boolean));
-    const gone = d.objects.map((o) => o.blob).filter((b) => b && !used.has(b));
+    const used = new Set([...rest.map(adopt), book].flatMap(objectsOf).map((o) => o.blob).filter(Boolean));
+    const gone = objectsOf(adopt(d)).map((o) => o.blob).filter((b) => b && !used.has(b));
     if (gone.length) window.TrackerBlobs.purge(gone);
-    if (doc.id === id) { doc = fresh(); sel = null; undo = []; redo = []; }
+    if (book.id === id) { book = fresh(); sync(); sel = null; undo = []; redo = []; }
     refresh();
   }
   function newDoc() {
     persist();
-    doc = fresh(); sel = null; crop = null; editing = null; undo = []; redo = [];
+    book = fresh(); sync(); sel = null; crop = null; editing = null; undo = []; redo = [];
     tool = "select";
     refresh();
   }
@@ -7764,13 +7815,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function change(fn) { const b = snap(); fn(); checkpoint(b); refresh(); }
   function stepBack() {
     if (!undo.length) return;
-    redo.push(snap()); doc = JSON.parse(undo.pop());
+    redo.push(snap()); book = JSON.parse(undo.pop()); sync();
     if (sel && !find(sel)) sel = null;
     crop = null; persist(); refresh();
   }
   function stepForward() {
     if (!redo.length) return;
-    undo.push(snap()); doc = JSON.parse(redo.pop());
+    undo.push(snap()); book = JSON.parse(redo.pop()); sync();
     if (sel && !find(sel)) sel = null;
     persist(); refresh();
   }
@@ -7992,6 +8043,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     ctx.clearRect(0, 0, doc.w, doc.h);
     render(ctx, true);
     placeTextBox();
+    if (!drag) paintThumbs();
   }
 
   function sizeCanvas() {
@@ -8077,7 +8129,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       if (h) { drag = { ...h, o0: JSON.parse(JSON.stringify(s)), p0: p, before }; return; }
       const o = [...doc.objects].reverse().find((x) => hit(x, p));
       sel = o ? o.id : null;
-      if (o && e.detail === 2 && o.type === "text") { editBefore = before; startEdit(o); return refreshChrome(); }
       if (o) drag = { kind: "move", o0: JSON.parse(JSON.stringify(o)), p0: p, before };
       refreshChrome(); draw();
       return;
@@ -8271,17 +8322,132 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     });
   }
 
-  function exportBlob() {
-    const c = document.createElement("canvas");
-    c.width = doc.w; c.height = doc.h;
-    const was = editing; editing = null;
-    render(c.getContext("2d"), false);
-    editing = was;
-    return new Promise((ok) => c.toBlob(ok, "image/png"));
+  /** Draw one page with no handles, at its own size times k. */
+  function pageCanvas(pg, k = 1, c = document.createElement("canvas")) {
+    c.width = Math.max(1, Math.round(pg.w * k)); c.height = Math.max(1, Math.round(pg.h * k));
+    const g = c.getContext("2d");
+    const was = doc, ed = editing;
+    doc = pg; editing = null;
+    g.setTransform(k, 0, 0, k, 0, 0);
+    try { render(g, false); } finally { doc = was; editing = ed; }
+    return c;
   }
-  const fileName = () => (doc.name || "image").replace(/[\\/:*?"<>|]+/g, "-").trim() + ".png";
+  function exportBlob(pg = doc, type = "image/png", q) {
+    return new Promise((ok) => pageCanvas(pg).toBlob(ok, type, q));
+  }
+
+  /* ---------------------------------------------------------------- pages */
+  function goPage(i) {
+    if (editing) endEdit();
+    if (i < 0 || i >= book.pages.length || i === book.cur) return;
+    book.cur = i; sync(); sel = null; crop = null;
+    persist(); refresh();
+  }
+  function addPage(dup) {
+    if (editing) endEdit();
+    addMenu = false;
+    change(() => {
+      const pg = dup ? JSON.parse(JSON.stringify(doc)) : blankPage(doc.w, doc.h, doc.bg);
+      pg.id = "p" + uid();
+      if (dup) pg.objects.forEach((o) => { o.id = uid(); });
+      book.pages.splice(book.cur + 1, 0, pg);
+      book.cur += 1; sync(); sel = null; crop = null;
+    });
+  }
+  async function deletePage(i) {
+    thumbMenu = null;
+    if (book.pages.length < 2) return refresh();
+    const yes = await window.TrackerUI.confirmDialog({
+      title: `Delete page ${i + 1}?`, intro: "Everything on this page goes with it. Undo brings it back.",
+      confirmLabel: "Delete page",
+    });
+    if (!yes) return refresh();
+    change(() => {
+      book.pages.splice(i, 1);
+      if (book.cur >= i && book.cur > 0) book.cur -= 1;
+      sync(); sel = null; crop = null;
+    });
+  }
+  function dupPage(i) { thumbMenu = null; if (i !== book.cur) { book.cur = i; sync(); } addPage(true); }
+  function movePage(from, to) {
+    if (from === to || to < 0 || to >= book.pages.length) return;
+    change(() => {
+      const curId = doc.id;
+      const [pg] = book.pages.splice(from, 1);
+      book.pages.splice(to, 0, pg);
+      book.cur = book.pages.findIndex((x) => x.id === curId); sync();
+    });
+  }
+
+  /* Thumbnails are drawn after the page settles, not on every pointer move. */
+  let thumbTimer = 0;
+  const THUMB_W = 138;
+  function paintThumbs() {
+    clearTimeout(thumbTimer);
+    thumbTimer = setTimeout(() => {
+      document.querySelectorAll("canvas[data-ie-thumb]").forEach((c) => {
+        const pg = book.pages[Number(c.dataset.ieThumb)];
+        if (pg) pageCanvas(pg, THUMB_W / pg.w, c);
+      });
+    }, 120);
+  }
+
+  /* ------------------------------------------------------------- download */
+  async function downloadAll() {
+    if (editing) endEdit();
+    for (let i = 0; i < book.pages.length; i++) {
+      window.TrackerUI.saveBlob(await exportBlob(book.pages[i]), `${baseName()} - Page ${i + 1}.png`);
+      // Browsers drop rapid back-to-back downloads; a short gap lets each one land.
+      await new Promise((r) => setTimeout(r, 350));
+    }
+  }
+
+  /**
+   * One PDF, each page sized to its own canvas (1px = 0.75pt, so it prints at
+   * the size it shows). Written by hand: a JPEG is a valid PDF image stream
+   * as it stands, so no library is needed and the page stays light.
+   */
+  async function pdfBlob() {
+    const enc = new TextEncoder();
+    const parts = [], offsets = [];
+    let len = 0;
+    const push = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); len += b.length; };
+    const obj = (n, body) => { offsets[n] = len; push(`${n} 0 obj\n`); body(); push("\nendobj\n"); };
+    push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+    const n = book.pages.length;
+    const kids = book.pages.map((_, i) => `${3 + i * 3} 0 R`).join(" ");
+    obj(1, () => push("<< /Type /Catalog /Pages 2 0 R >>"));
+    obj(2, () => push(`<< /Type /Pages /Kids [${kids}] /Count ${n} >>`));
+    for (let i = 0; i < n; i++) {
+      const pg = book.pages[i];
+      const jpg = new Uint8Array(await (await exportBlob(pg, "image/jpeg", 0.92)).arrayBuffer());
+      const W = +(pg.w * 0.75).toFixed(2), H = +(pg.h * 0.75).toFixed(2);
+      const pn = 3 + i * 3, cn = pn + 1, im = pn + 2;
+      const draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+      obj(pn, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] ` +
+        `/Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${cn} 0 R >>`));
+      obj(cn, () => push(`<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`));
+      obj(im, () => {
+        push(`<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} /ColorSpace /DeviceRGB ` +
+          `/BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+        push(jpg); push("\nendstream");
+      });
+    }
+    const total = 3 + n * 3, xref = len;
+    push(`xref\n0 ${total}\n0000000000 65535 f \n` +
+      offsets.slice(1, total).map((o) => String(o).padStart(10, "0") + " 00000 n \n").join(""));
+    push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    return new Blob(parts, { type: "application/pdf" });
+  }
+  async function downloadPdf() {
+    if (editing) endEdit();
+    window.TrackerUI.saveBlob(await pdfBlob(), baseName() + ".pdf");
+  }
+  const baseName = () => (book.name || "image").replace(/[\\/:*?"<>|]+/g, "-").trim();
+  const fileName = () => baseName() + (book.pages.length > 1 ? ` - Page ${book.cur + 1}` : "") + ".png";
   async function download() {
     if (editing) endEdit();
+    if (dlMenu) { dlMenu = false; paintPages(); }
     window.TrackerUI.saveBlob(await exportBlob(), fileName());
   }
   async function copy() {
@@ -8347,7 +8513,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     let f = "";
     if (kind === "text") {
       const t = o || { size: style.size, color: style.color, bold: style.bold, italic: style.italic, bg: style.tbgOn ? style.tbg : null };
-      f = num("size", t.size, "Size", 6, 400) + color("color", t.color, "Color") +
+      f = (o ? small("edittext", "Edit text") : "") + num("size", t.size, "Size", 6, 400) + color("color", t.color, "Color") +
         `<button class="ie-tog${t.bold ? " on" : ""}" data-ie-prop="bold" title="Bold"><b>B</b></button>` +
         `<button class="ie-tog${t.italic ? " on" : ""}" data-ie-prop="italic" title="Italic"><i>I</i></button>` +
         check("bgOn", !!t.bg, "Background") + color("bg", t.bg || style.tbg, "");
@@ -8369,29 +8535,59 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     return f;
   }
 
+  const pagesOf = (d) => (d.pages ? d.pages.length : 1);
   function draftsHtml(q) {
     const list = drafts().filter((d) => !q || (d.name || "").toLowerCase().includes(q));
     if (!list.length) return `<div class="ie-none">${q ? "No draft matches that search." : "No drafts yet. Your edits save here on their own."}</div>`;
-    return list.map((d) => `<div class="ie-draft${d.id === doc.id ? " cur" : ""}">
+    return list.map((d) => `<div class="ie-draft${d.id === book.id ? " cur" : ""}">
         <button class="ie-dopen" data-ie-open="${esc(d.id)}"><b>${esc(d.name || "Untitled")}</b>
-          <small>${esc(new Date(d.updated || Date.now()).toLocaleString())} · ${d.objects.length} item${d.objects.length === 1 ? "" : "s"}</small></button>
+          <small>${esc(new Date(d.updated || Date.now()).toLocaleString())} · ${pagesOf(d)} page${pagesOf(d) === 1 ? "" : "s"}</small></button>
         <button class="btn sm" data-ie-drop="${esc(d.id)}">Delete</button></div>`).join("");
+  }
+
+  /** The strip on the right: one live preview per page. */
+  function pagesHtml() {
+    if (!showPages) return `<button class="ie-pt" data-ie-act="pages" title="Show pages" aria-label="Show pages">‹</button>`;
+    return `<div class="ie-phead"><b>Pages</b>
+        <button class="ie-pt" data-ie-act="pages" title="Hide pages" aria-label="Hide pages">›</button></div>
+      <div class="ie-plist">${book.pages.map((pg, i) => `
+        <div class="ie-thumb${i === book.cur ? " cur" : ""}" draggable="true" data-ie-page="${i}" title="Page ${i + 1}">
+          <span class="ie-pno">${i + 1}</span>
+          <canvas data-ie-thumb="${i}" width="${THUMB_W}" height="${Math.round(THUMB_W * pg.h / pg.w)}"></canvas>
+          <button class="ie-dots" data-ie-tmenu="${i}" aria-label="Page ${i + 1} options">⋯</button>
+          ${thumbMenu === i ? `<div class="ie-menu ie-tm">
+            <button data-ie-pdup="${i}">Duplicate</button>
+            <button data-ie-pdel="${i}"${book.pages.length < 2 ? " disabled" : ""}>Delete</button></div>` : ""}
+        </div>`).join("")}</div>
+      <div class="ie-menuwrap ie-addwrap">
+        <button class="btn sm ie-add" data-ie-act="addmenu" aria-expanded="${addMenu}">+ Add page</button>
+        ${addMenu ? `<div class="ie-menu ie-up">
+          <button data-ie-act="page-blank">Blank page</button>
+          <button data-ie-act="page-dup">Duplicate this page</button></div>` : ""}
+      </div>`;
   }
 
   let lastQ = "";
   function view(q) {
     lastQ = q || "";
-    if (!opened) { opened = true; const d = drafts()[0]; if (d) doc = JSON.parse(JSON.stringify(d)); }
+    if (!opened) { opened = true; const d = drafts()[0]; if (d) { book = adopt(d); sync(); } }
     if (q) showDrafts = true;
     return `<div id="ie">
       <div class="ie-head">
         <h2 class="page">Image editor</h2>
-        <input class="ie-name" data-ie-name value="${esc(doc.name)}" placeholder="Untitled" aria-label="Draft name">
+        <input class="ie-name" data-ie-name value="${esc(book.name)}" placeholder="Untitled" aria-label="Draft name">
         <div class="ie-actions">
           <button class="btn sm" data-ie-act="drafts" aria-pressed="${showDrafts}">Drafts (${drafts().length})</button>
           <button class="btn sm" data-ie-act="new">New</button>
           <button class="btn sm" data-ie-act="copy">Copy</button>
-          <button class="btn sm primary" data-ie-act="download">Download PNG</button>
+          <div class="ie-menuwrap">
+            <button class="btn sm primary" data-ie-act="dlmenu" aria-expanded="${dlMenu}">Download ▾</button>
+            <div class="ie-menu" id="ieDlMenu"${dlMenu ? "" : " hidden"}>
+              <button data-ie-act="download">This page (PNG)</button>
+              <button data-ie-act="dl-all">All pages (PNG)</button>
+              <button data-ie-act="dl-pdf">All pages (PDF)</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="ie-drafts"${showDrafts ? "" : " hidden"}>
@@ -8402,17 +8598,21 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       <div class="ie-ribbon" id="ieRibbon">${ribbon()}</div>
       <div class="ie-format" id="ieFormat">${formatBar()}</div>
       <div class="ie-notice" id="ieNotice"${notice ? "" : " hidden"}>${esc(notice)}</div>
+      <div class="ie-work${showPages ? "" : " collapsed"}">
       <div class="ie-stage" id="ieStage">
         <canvas id="ieCanvas"></canvas>
         <textarea id="ieText" class="ie-text" hidden spellcheck="false"></textarea>
         <div class="ie-drop" id="ieDrop"${doc.objects.length ? " hidden" : ""}>
           <b>Drop images here</b><span>paste with Ctrl+V, or use Add image</span></div>
       </div>
+      <aside class="ie-pages" id="iePages">${pagesHtml()}</aside>
+      </div>
       <div class="ie-foot">
         <label class="ie-f">Zoom <select data-ie-zoom>
           ${["fit", "0.5", "0.75", "1", "1.5", "2"].map((z) => `<option value="${z}"${String(zoom) === z ? " selected" : ""}>${z === "fit" ? "Fit" : Number(z) * 100 + "%"}</option>`).join("")}
         </select></label>
-        <span>${doc.w} × ${doc.h}px</span>
+        <span id="ieSize">${doc.w} × ${doc.h}px</span>
+        <span id="iePageNo">Page ${book.cur + 1} of ${book.pages.length}</span>
         <span class="ie-keys">Shift keeps proportions · arrows nudge · Delete removes · Ctrl+Z / Ctrl+Y · Ctrl+D duplicates</span>
       </div>
     </div>`;
@@ -8427,6 +8627,15 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     c.addEventListener("pointermove", move);
     c.addEventListener("pointerup", up);
     c.addEventListener("pointercancel", up);
+    // Text you already finished can always be reopened: double-click it.
+    // A real dblclick event, because Chrome reports 0 in pointerdown's detail,
+    // which is why double-click to edit used to do nothing there.
+    c.addEventListener("dblclick", (e) => {
+      if (crop) return;
+      const p = pt(e);
+      const o = [...doc.objects].reverse().find((x) => hit(x, p));
+      if (o && o.type === "text") { drag = null; editBefore = snap(); startEdit(o); refreshChrome(); }
+    });
     const stage = document.getElementById("ieStage");
     stage.addEventListener("dragover", (e) => { e.preventDefault(); stage.classList.add("over"); });
     stage.addEventListener("dragleave", () => stage.classList.remove("over"));
@@ -8451,7 +8660,17 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const f = document.getElementById("ieFormat"); if (f) f.innerHTML = formatBar();
     const n = document.getElementById("ieNotice"); if (n) { n.hidden = !notice; n.textContent = notice; }
     const d = document.getElementById("ieDrop"); if (d) d.hidden = doc.objects.length > 0;
-    const nm = document.querySelector("[data-ie-name]"); if (nm && document.activeElement !== nm) nm.value = doc.name;
+    const nm = document.querySelector("[data-ie-name]"); if (nm && document.activeElement !== nm) nm.value = book.name;
+  }
+  function paintPages() {
+    const pp = document.getElementById("iePages"); if (!pp) return;
+    const keep = pp.querySelector(".ie-plist"), top = keep ? keep.scrollTop : 0;
+    pp.innerHTML = pagesHtml();
+    const l = pp.querySelector(".ie-plist"); if (l) l.scrollTop = top;
+    const w = document.querySelector(".ie-work"); if (w) w.classList.toggle("collapsed", !showPages);
+    const n = document.getElementById("iePageNo"); if (n) n.textContent = `Page ${book.cur + 1} of ${book.pages.length}`;
+    const dm = document.getElementById("ieDlMenu"); if (dm) dm.hidden = !dlMenu;
+    paintThumbs();
   }
   function paintDrafts() {
     const l = document.getElementById("ieDrafts"); if (l) l.innerHTML = draftsHtml(lastQ);
@@ -8461,7 +8680,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!document.getElementById("ie")) return;
     const sizeChanged = canvas && (canvas.style.width !== Math.round(doc.w * scale) + "px" || canvas.style.height !== Math.round(doc.h * scale) + "px");
     refreshChrome(); paintDrafts();
-    const foot = document.querySelector(".ie-foot span"); if (foot) foot.textContent = `${doc.w} × ${doc.h}px`;
+    const foot = document.getElementById("ieSize"); if (foot) foot.textContent = `${doc.w} × ${doc.h}px`;
+    paintPages();
     if (sizeChanged || zoom === "fit") sizeCanvas(); else draw();
   }
 
@@ -8471,6 +8691,18 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
 
   document.addEventListener("click", (e) => {
     if (!here()) return;
+    // Any open menu closes on a click outside it.
+    if ((dlMenu || addMenu || thumbMenu !== null) && !e.target.closest(".ie-menuwrap, .ie-menu, [data-ie-tmenu]")) {
+      dlMenu = addMenu = false; thumbMenu = null; paintPages();
+    }
+    const tm = e.target.closest("[data-ie-tmenu]");
+    if (tm) { const i = Number(tm.dataset.ieTmenu); thumbMenu = thumbMenu === i ? null : i; return paintPages(); }
+    const pd = e.target.closest("[data-ie-pdup]");
+    if (pd) return dupPage(Number(pd.dataset.iePdup));
+    const px = e.target.closest("[data-ie-pdel]");
+    if (px) return px.disabled ? null : deletePage(Number(px.dataset.iePdel));
+    const th = e.target.closest("[data-ie-page]");
+    if (th) { thumbMenu = null; return goPage(Number(th.dataset.iePage)); }
     const t = e.target.closest("[data-ie-tool]");
     if (t) {
       if (editing) endEdit();
@@ -8493,6 +8725,13 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       "crop-apply": applyCrop, "crop-cancel": () => { crop = null; refresh(); },
       fitcanvas: canvasToImage, front: () => arrange("front"), back: () => arrange("back"),
       dup: duplicate, del: remove, download, copy, new: newDoc,
+      edittext: () => { const o = selected(); if (o && o.type === "text") { editBefore = snap(); startEdit(o); } },
+      dlmenu: () => { dlMenu = !dlMenu; addMenu = false; paintPages(); },
+      "dl-all": () => { dlMenu = false; paintPages(); downloadAll(); },
+      "dl-pdf": () => { dlMenu = false; paintPages(); downloadPdf(); },
+      addmenu: () => { addMenu = !addMenu; dlMenu = false; paintPages(); },
+      "page-blank": () => addPage(false), "page-dup": () => addPage(true),
+      pages: () => { showPages = !showPages; thumbMenu = null; paintPages(); sizeCanvas(); },
       uncrop: () => { const o = selected(); const r = img(o.blob); change(() => {
         const nw = r.el.naturalWidth, nh = r.el.naturalHeight, k = o.w / o.crop.w;
         o.crop = { x: 0, y: 0, w: nw, h: nh }; o.w = nw * k; o.h = nh * k; }); },
@@ -8545,7 +8784,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const z = e.target.closest("[data-ie-zoom]");
     if (z) { zoom = z.value; return sizeCanvas(); }
     const n = e.target.closest("[data-ie-name]");
-    if (n) { doc.name = n.value.trim(); persist(); }
+    if (n) { book.name = n.value.trim(); persist(); }
   });
 
   document.addEventListener("paste", (e) => {
@@ -8565,6 +8804,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (mod && (k === "y" || (k === "z" && e.shiftKey))) { stop(); return stepForward(); }
     if (mod && k === "d") { stop(); return duplicate(); }
     if (crop && k === "enter") { stop(); return applyCrop(); }
+    if (k === "pagedown") { stop(); return goPage(book.cur + 1); }
+    if (k === "pageup") { stop(); return goPage(book.cur - 1); }
     if (k === "escape") { if (crop) crop = null; else { sel = null; tool = "select"; } return refresh(); }
     if ((k === "delete" || k === "backspace") && sel) { stop(); return remove(); }
     const step = e.shiftKey ? 10 : 1;
@@ -8573,12 +8814,45 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (k === "enter" && sel) { const o = selected(); if (o.type === "text") { stop(); editBefore = snap(); startEdit(o); } }
   }, true);
 
+  document.addEventListener("contextmenu", (e) => {
+    const th = here() && e.target.closest("[data-ie-page]");
+    if (!th) return;
+    e.preventDefault();
+    thumbMenu = Number(th.dataset.iePage); paintPages();
+  });
+  let dragFrom = null;
+  document.addEventListener("dragstart", (e) => {
+    const th = here() && e.target.closest("[data-ie-page]");
+    if (!th) return;
+    dragFrom = Number(th.dataset.iePage);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", "page");
+  });
+  document.addEventListener("dragover", (e) => {
+    const th = dragFrom !== null && e.target.closest("[data-ie-page]");
+    if (!th) return;
+    e.preventDefault();
+    document.querySelectorAll(".ie-thumb.drop").forEach((x) => x.classList.remove("drop"));
+    th.classList.add("drop");
+  });
+  document.addEventListener("drop", (e) => {
+    const th = dragFrom !== null && e.target.closest("[data-ie-page]");
+    if (!th) return;
+    e.preventDefault();
+    const from = dragFrom; dragFrom = null;
+    movePage(from, Number(th.dataset.iePage));
+  });
+  document.addEventListener("dragend", () => {
+    dragFrom = null;
+    document.querySelectorAll(".ie-thumb.drop").forEach((x) => x.classList.remove("drop"));
+  });
+
   window.addEventListener("resize", () => { if (here() && zoom === "fit") sizeCanvas(); });
 
   window.TrackerEditor = {
     view, mount,
     /* For the browser check: read the document, and drive it without a mouse. */
-    _doc: () => doc, _addImage: addImage, _exportBlob: exportBlob,
+    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob,
   };
 })();
 

@@ -140,5 +140,5 @@ jobs:
       # Drives the editor with a real mouse: every tool on the ribbon (read at
       # runtime) must draw, crop must keep the chosen part, the PNG must match
       # the canvas without handles, and no picture bytes may reach localStorage.
-      - name: The image editor draws, crops, exports and keeps drafts
+      - name: The image editor draws, crops, exports, keeps drafts and pages
         run: node checks/check_editor.mjs
