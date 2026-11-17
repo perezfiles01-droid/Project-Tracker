@@ -206,6 +206,53 @@ await page.fill('#view [data-search="editor"]', "");
 await page.waitForTimeout(150);
 ok("and clearing it brings the draft back", (await page.locator(".ie-draft").count()) === 1);
 
+/* --- several at once: drag a box, Shift+click, move them together --- */
+await page.keyboard.press("Escape");
+const before = await doc();
+const isLine = (o) => o.type === "line" || o.type === "arrow";
+const tops = before.objects.filter((o) => !isLine(o) && o.x > 880).map((o) => o.id);  // the shapes drawn at x 900-1150
+await dragOn(870, 30, 1275, 715);
+let ids = await page.evaluate(() => window.TrackerEditor._chosen());
+const right = before.objects.filter((o) => (isLine(o) ? Math.min(o.x1, o.x2) : o.x) > 880).map((o) => o.id);
+ok("dragging on empty space selects everything wholly inside the box",
+   right.length >= 5 && right.every((id) => ids.includes(id)) && ids.length === right.length, `${ids.length} of ${right.length}`);
+ok("the format bar says how many are selected", /\d+ selected/i.test(await page.locator("#ieFormat").innerText()));
+const firstRight = before.objects.find((o) => o.id === right[0]);
+const grab = isLine(firstRight) ? [(firstRight.x1 + firstRight.x2) / 2, (firstRight.y1 + firstRight.y2) / 2] : [firstRight.x + firstRight.w / 2, firstRight.y + firstRight.h / 2];
+await dragOn(grab[0], grab[1], grab[0] - 100, grab[1] + 5);
+let moved = await doc();
+const dxOf = (id) => { const a = before.objects.find((o) => o.id === id), b = moved.objects.find((o) => o.id === id);
+  return isLine(a) ? b.x1 - a.x1 : b.x - a.x; };
+ok("dragging one of them moves them all together", right.every((id) => Math.abs(dxOf(id) + 100) < 2),
+   right.map(dxOf).map((n) => n.toFixed(0)).join(","));
+ok("things outside the box stay put", before.objects.filter((o) => !right.includes(o.id)).every((o) => dxOf(o.id) === 0));
+await page.keyboard.press("Shift+ArrowRight");
+moved = await doc();
+ok("arrow keys nudge the whole selection", right.every((id) => Math.abs(dxOf(id) + 90) < 2));
+await page.keyboard.press("Control+z"); await page.keyboard.press("Control+z");
+ok("undo takes the group back where it was",
+   (await doc()).objects.every((o, i) => JSON.stringify(o) === JSON.stringify(before.objects[i])));
+// Shift+click adds one more, and takes it out again.
+const txtNow = (await doc()).objects.find((o) => o.type === "text");
+await page.keyboard.down("Shift");
+await page.mouse.click(...await at(txtNow.x + 10, txtNow.y + txtNow.h / 2));
+await page.keyboard.up("Shift");
+ids = await page.evaluate(() => window.TrackerEditor._chosen());
+ok("Shift+click adds to the selection", ids.includes(txtNow.id) && ids.length === right.length + 1, `${ids.length}`);
+// Shift+drag starting on the big picture selects instead of moving it.
+const pic = (await doc()).objects.find((o) => o.type === "image");
+await page.keyboard.down("Shift");
+await dragOn(pic.x + 5, pic.y + 5, 1275, 715);
+await page.keyboard.up("Shift");
+ok("Shift+drag over a picture draws a selection box instead of moving the picture",
+   (await doc()).objects.find((o) => o.id === pic.id).x === pic.x);
+await page.keyboard.press("Control+a");
+ids = await page.evaluate(() => window.TrackerEditor._chosen());
+ok("Ctrl+A selects everything on the page", ids.length === (await doc()).objects.length);
+const many = await page.evaluate(async () => (await createImageBitmap(await window.TrackerEditor._copyBlob())).width);
+ok("Copy with several selected copies just their area, not the page", many < 1280, String(many));
+await page.keyboard.press("Escape");
+
 /* --- pages: a draft holds several, like slides --- */
 const book = () => page.evaluate(() => JSON.parse(JSON.stringify(window.TrackerEditor._book())));
 const pageCount = async () => (await book()).pages.length;
