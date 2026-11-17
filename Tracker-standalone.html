@@ -7735,7 +7735,11 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const hasContent = (b) => b.pages.length > 1 || b.pages.some((pg) => pg.objects.length);
   let opened = false;            // first visit reopens the latest draft
   let tool = "select";
-  let sel = null;                // selected object id
+  let sel = null;                // selected object id, when exactly one is selected
+  /* Several selected at once (17 Nov 2026: "drag over everything I want to
+     move"). Holds ids only while two or more are chosen; with one, `sel` is
+     used as before so resize, rotate and crop keep working unchanged. */
+  let group = [];
   let drag = null;               // the pointer gesture in progress
   let crop = null;               // { id, u0, v0, u1, v1 } while cropping
   let editing = null;            // text object id being typed into
@@ -7757,6 +7761,34 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   const snap = () => JSON.stringify(book);
   const find = (id) => doc.objects.find((o) => o.id === id);
   const selected = () => (sel ? find(sel) : null);
+  /** Everything selected, one object or many, in drawing order. */
+  const chosen = () => (group.length ? doc.objects.filter((o) => group.includes(o.id)) : (selected() ? [selected()] : []));
+  /** Select a list: one becomes `sel`, several become a group. */
+  function choose(list) {
+    const ids = list.map((o) => o.id);
+    if (ids.length > 1) { group = ids; sel = null; } else { group = []; sel = ids[0] || null; }
+  }
+  /** The upright box an object covers on the page, rotation included. */
+  function bounds(o) {
+    let pts;
+    if (LINE.has(o.type)) {
+      const pad = o.width / 2 + (o.type === "arrow" ? Math.max(12, o.width * 3.5) : 2);
+      pts = [[o.x1 - pad, o.y1 - pad], [o.x1 + pad, o.y1 + pad], [o.x2 - pad, o.y2 - pad], [o.x2 + pad, o.y2 + pad]];
+    } else {
+      const pad = o.type === "rect" || o.type === "ellipse" ? o.width / 2 : 0;
+      pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+        const q = toWorld(o, { x: sx * (o.w / 2 + pad), y: sy * (o.h / 2 + pad) }); return [q.x, q.y];
+      });
+    }
+    return { x0: Math.min(...pts.map((q) => q[0])), y0: Math.min(...pts.map((q) => q[1])),
+      x1: Math.max(...pts.map((q) => q[0])), y1: Math.max(...pts.map((q) => q[1])) };
+  }
+  const unionOf = (list) => list.map(bounds).reduce((a, b) => ({
+    x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) }));
+  const shiftObj = (o, o0, dx, dy) => {
+    if (LINE.has(o.type)) Object.assign(o, { x1: o0.x1 + dx, y1: o0.y1 + dy, x2: o0.x2 + dx, y2: o0.y2 + dy });
+    else { o.x = o0.x + dx; o.y = o0.y + dy; }
+  };
 
   /* --------------------------------------------------------------- drafts */
   const drafts = () => S().get(KEY, []);
@@ -7778,7 +7810,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     const d = drafts().find((x) => x.id === id);
     if (!d) return;
     book = adopt(d); sync();
-    sel = null; crop = null; editing = null; undo = []; redo = [];
+    sel = null; group = []; crop = null; editing = null; undo = []; redo = [];
     refresh();
   }
   async function deleteDraft(id) {
@@ -7799,7 +7831,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   }
   function newDoc() {
     persist();
-    book = fresh(); sync(); sel = null; crop = null; editing = null; undo = []; redo = [];
+    book = fresh(); sync(); sel = null; group = []; crop = null; editing = null; undo = []; redo = [];
     tool = "select";
     refresh();
   }
@@ -7817,12 +7849,14 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!undo.length) return;
     redo.push(snap()); book = JSON.parse(undo.pop()); sync();
     if (sel && !find(sel)) sel = null;
+    group = group.filter((id) => find(id));
     crop = null; persist(); refresh();
   }
   function stepForward() {
     if (!redo.length) return;
     undo.push(snap()); book = JSON.parse(redo.pop()); sync();
     if (sel && !find(sel)) sel = null;
+    group = group.filter((id) => find(id));
     persist(); refresh();
   }
 
@@ -8032,8 +8066,26 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (!withUi) return;
     const o = selected();
     if (o) paintSelection(c, o);
+    if (group.length) paintGroup(c);
     if (crop) { const co = find(crop.id); if (co) paintCrop(c, co); }
-    if (drag && drag.kind === "marquee") {}
+    if (drag && drag.kind === "marquee") {
+      const m = drag, s = 1 / scale;
+      const x = Math.min(m.p0.x, m.p.x), y = Math.min(m.p0.y, m.p.y), w = Math.abs(m.p.x - m.p0.x), h = Math.abs(m.p.y - m.p0.y);
+      c.save(); c.fillStyle = "rgba(239,68,68,.08)"; c.fillRect(x, y, w, h);
+      c.strokeStyle = "#ef4444"; c.lineWidth = s; c.setLineDash([5 * s, 3 * s]); c.strokeRect(x, y, w, h); c.restore();
+    }
+  }
+  /** Each member outlined, and one box around the lot. */
+  function paintGroup(c) {
+    const s = 1 / scale, list = chosen();
+    if (!list.length) return;
+    c.save(); c.strokeStyle = "#ef4444"; c.lineWidth = s;
+    c.setLineDash([4 * s, 3 * s]);
+    for (const o of list) { const b = bounds(o); c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+    const u = unionOf(list), pad = 6 * s;
+    c.setLineDash([]); c.lineWidth = 1.5 * s;
+    c.strokeRect(u.x0 - pad, u.y0 - pad, u.x1 - u.x0 + pad * 2, u.y1 - u.y0 + pad * 2);
+    c.restore();
   }
 
   function draw() {
@@ -8128,8 +8180,25 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       const h = s && handleAt(s, p);
       if (h) { drag = { ...h, o0: JSON.parse(JSON.stringify(s)), p0: p, before }; return; }
       const o = [...doc.objects].reverse().find((x) => hit(x, p));
-      sel = o ? o.id : null;
-      if (o) drag = { kind: "move", o0: JSON.parse(JSON.stringify(o)), p0: p, before };
+      const add = e.shiftKey || e.ctrlKey || e.metaKey;
+      if (o && add) {
+        // Shift or Ctrl: a click adds this one to the selection (or takes it
+        // back out); a drag draws a box even over a picture. Without that, a
+        // screenshot filling the page could never be dragged across, because
+        // every press lands on it.
+        drag = { kind: "pick", o, p0: p, add: chosen(), before };
+        return;
+      }
+      if (!o) {
+        // Empty space: drag a box; whatever is wholly inside it is selected.
+        drag = { kind: "marquee", p0: p, p, add: add ? chosen() : [], before };
+        if (!add) choose([]);
+        refreshChrome(); draw(); return;
+      }
+      // Pressing on a member of the selection moves the whole selection.
+      if (!chosen().includes(o)) choose([o]);
+      const list = chosen();
+      drag = { kind: "move", items: list.map((x) => [x, JSON.parse(JSON.stringify(x))]), p0: p, before };
       refreshChrome(); draw();
       return;
     }
@@ -8205,12 +8274,25 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       }
       return draw();
     }
-    const s = selected(); if (!s) return;
-    const o0 = drag.o0, dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
+    if (drag.kind === "pick") {
+      if (Math.hypot(p.x - drag.p0.x, p.y - drag.p0.y) * scale < 4) return;
+      drag = { kind: "marquee", p0: drag.p0, p, add: drag.add, before: drag.before };
+    }
+    if (drag.kind === "marquee") {
+      drag.p = p;
+      const x0 = Math.min(drag.p0.x, p.x), y0 = Math.min(drag.p0.y, p.y), x1 = Math.max(drag.p0.x, p.x), y1 = Math.max(drag.p0.y, p.y);
+      const inside = doc.objects.filter((o) => { const b = bounds(o); return b.x0 >= x0 && b.y0 >= y0 && b.x1 <= x1 && b.y1 <= y1; });
+      choose([...new Set([...drag.add, ...inside])]);
+      return draw();
+    }
     if (drag.kind === "move") {
-      if (LINE.has(s.type)) Object.assign(s, { x1: o0.x1 + dx, y1: o0.y1 + dy, x2: o0.x2 + dx, y2: o0.y2 + dy });
-      else { s.x = o0.x + dx; s.y = o0.y + dy; }
-    } else if (drag.kind === "end") {
+      const dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
+      for (const [o, o0] of drag.items) shiftObj(o, o0, dx, dy);
+      return draw();
+    }
+    const s = selected(); if (!s) return;
+    const o0 = drag.o0;
+    if (drag.kind === "end") {
       s["x" + drag.end] = p.x; s["y" + drag.end] = p.y;
     } else if (drag.kind === "rotate") {
       const c = centre(o0);
@@ -8250,6 +8332,12 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       tool = "select";
     }
     if (d.kind === "crop") return;
+    if (d.kind === "marquee") { refreshChrome(); return draw(); }
+    if (d.kind === "pick") {
+      const cur = chosen();
+      choose(cur.includes(d.o) ? cur.filter((x) => x !== d.o) : [...cur, d.o]);
+      refreshChrome(); return draw();
+    }
     checkpoint(d.before);
     refreshChrome(); draw();
   }
@@ -8294,33 +8382,35 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       o.w = w; o.h = h; o.x = (doc.w - w) / 2; o.y = (doc.h - h) / 2;
     });
   }
+  /* Every operation below acts on the whole selection, one item or many. */
   function arrange(dir) {
-    const o = selected(); if (!o) return;
+    const list = chosen(); if (!list.length) return;
     change(() => {
-      const i = doc.objects.indexOf(o);
-      doc.objects.splice(i, 1);
-      const j = dir === "front" ? doc.objects.length : dir === "back" ? 0 : dir === "fwd" ? Math.min(doc.objects.length, i + 1) : Math.max(0, i - 1);
-      doc.objects.splice(j, 0, o);
+      // Keep their order among themselves; move the block to the front or back.
+      const rest = doc.objects.filter((x) => !list.includes(x));
+      doc.objects = dir === "front" ? [...rest, ...list] : [...list, ...rest];
     });
   }
   function duplicate() {
-    const o = selected(); if (!o) return;
+    const list = chosen(); if (!list.length) return;
     change(() => {
-      const c = JSON.parse(JSON.stringify(o)); c.id = uid();
-      if (LINE.has(c.type)) { c.x1 += 20; c.y1 += 20; c.x2 += 20; c.y2 += 20; } else { c.x += 20; c.y += 20; }
-      doc.objects.push(c); sel = c.id;
+      const copies = list.map((o) => {
+        const c = JSON.parse(JSON.stringify(o)); c.id = uid();
+        shiftObj(c, o, 20, 20);
+        return c;
+      });
+      doc.objects.push(...copies); choose(copies);
     });
   }
   function remove() {
-    const o = selected(); if (!o) return;
-    change(() => { doc.objects = doc.objects.filter((x) => x !== o); sel = null; });
+    const list = chosen(); if (!list.length) return;
+    change(() => { doc.objects = doc.objects.filter((x) => !list.includes(x)); choose([]); });
   }
   function nudge(dx, dy) {
-    const o = selected(); if (!o) return;
-    change(() => {
-      if (LINE.has(o.type)) { o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; } else { o.x += dx; o.y += dy; }
-    });
+    const list = chosen(); if (!list.length) return;
+    change(() => { for (const o of list) shiftObj(o, JSON.parse(JSON.stringify(o)), dx, dy); });
   }
+  function selectAll() { tool = "select"; choose(doc.objects.slice()); refresh(); }
 
   /** Draw one page with no handles, at its own size times k. */
   function pageCanvas(pg, k = 1, c = document.createElement("canvas")) {
@@ -8340,7 +8430,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function goPage(i) {
     if (editing) endEdit();
     if (i < 0 || i >= book.pages.length || i === book.cur) return;
-    book.cur = i; sync(); sel = null; crop = null;
+    book.cur = i; sync(); sel = null; group = []; crop = null;
     persist(); refresh();
   }
   function addPage(dup) {
@@ -8351,7 +8441,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       pg.id = "p" + uid();
       if (dup) pg.objects.forEach((o) => { o.id = uid(); });
       book.pages.splice(book.cur + 1, 0, pg);
-      book.cur += 1; sync(); sel = null; crop = null;
+      book.cur += 1; sync(); sel = null; group = []; crop = null;
     });
   }
   async function deletePage(i) {
@@ -8365,7 +8455,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     change(() => {
       book.pages.splice(i, 1);
       if (book.cur >= i && book.cur > 0) book.cur -= 1;
-      sync(); sel = null; crop = null;
+      sync(); sel = null; group = []; crop = null;
     });
   }
   function dupPage(i) { thumbMenu = null; if (i !== book.cur) { book.cur = i; sync(); } addPage(true); }
@@ -8456,40 +8546,31 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
    * not the whole page. A picture keeps its source resolution rather than the
    * size it happens to be drawn at, so a pasted screenshot stays sharp.
    */
-  function objectCanvas(o) {
-    let pts;
-    if (LINE.has(o.type)) {
-      const pad = o.width / 2 + (o.type === "arrow" ? Math.max(12, o.width * 3.5) : 2);
-      pts = [[o.x1 - pad, o.y1 - pad], [o.x1 + pad, o.y1 + pad], [o.x2 - pad, o.y2 - pad], [o.x2 + pad, o.y2 + pad]];
-    } else {
-      const pad = o.type === "rect" || o.type === "ellipse" ? o.width / 2 : 0;
-      pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
-        const q = toWorld(o, { x: sx * (o.w / 2 + pad), y: sy * (o.h / 2 + pad) }); return [q.x, q.y];
-      });
-    }
-    const x0 = Math.floor(Math.min(...pts.map((q) => q[0]))), y0 = Math.floor(Math.min(...pts.map((q) => q[1])));
-    const x1 = Math.ceil(Math.max(...pts.map((q) => q[0]))), y1 = Math.ceil(Math.max(...pts.map((q) => q[1])));
-    const k = o.type === "image" ? Math.min(4, Math.max(1, o.crop.w / o.w)) : 1;
+  function objectCanvas(list) {
+    const u = unionOf(list);
+    const x0 = Math.floor(u.x0), y0 = Math.floor(u.y0), x1 = Math.ceil(u.x1), y1 = Math.ceil(u.y1);
+    const o = list.length === 1 ? list[0] : null;
+    const k = o && o.type === "image" ? Math.min(4, Math.max(1, o.crop.w / o.w)) : 1;
     const c = document.createElement("canvas");
     c.width = Math.max(1, Math.round((x1 - x0) * k)); c.height = Math.max(1, Math.round((y1 - y0) * k));
     const g = c.getContext("2d");
     g.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
     const ed = editing; editing = null;
-    try { paint(g, o, null); } finally { editing = ed; }
+    try { for (const x of list) paint(g, x, null); } finally { editing = ed; }
     return c;
   }
   /** What Copy puts on the clipboard: the selection if there is one, else the page. */
   function copyBlob() {
-    const o = selected();
-    return o ? new Promise((ok) => objectCanvas(o).toBlob(ok, "image/png")) : exportBlob();
+    const list = chosen();
+    return list.length ? new Promise((ok) => objectCanvas(list).toBlob(ok, "image/png")) : exportBlob();
   }
   async function copy() {
     if (editing) endEdit();
-    const one = !!selected();
+    const n = chosen().length;
     try {
       // The promise form keeps the user gesture alive in Safari.
       await navigator.clipboard.write([new ClipboardItem({ "image/png": copyBlob() })]);
-      notice = (one ? "Copied the selected item only." : "Copied the whole page.") + " Paste it into Teams, email or Word.";
+      notice = (n ? `Copied the ${n === 1 ? "selected item" : n + " selected items"} only.` : "Copied the whole page.") + " Paste it into Teams, email or Word.";
     } catch (err) {
       notice = "This browser would not copy a picture (" + (err && err.message || "not allowed") + "). Use Download PNG instead.";
     }
@@ -8542,6 +8623,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   function formatBar() {
     if (crop) return `<span class="ie-hint">Drag the frame or its handles to choose what to keep.</span>
       ${small("crop-apply", "Apply crop")} ${small("crop-cancel", "Cancel")}`;
+    if (group.length) return `<span class="ie-cap2">${chosen().length} selected</span>
+      <span class="ie-hint">Drag any of them to move them all. Shift+click adds or removes one.</span>
+      <span class="ie-sep"></span>` + small("front", "Bring to front") + small("back", "Send to back") +
+      small("dup", "Duplicate") + small("del", "Delete");
     const o = selected();
     const kind = o ? o.type : tool;
     let f = "";
@@ -8647,7 +8732,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         </select></label>
         <span id="ieSize">${doc.w} × ${doc.h}px</span>
         <span id="iePageNo">Page ${book.cur + 1} of ${book.pages.length}</span>
-        <span class="ie-keys">Shift keeps proportions · arrows nudge · Delete removes · Ctrl+Z / Ctrl+Y · Ctrl+D duplicates</span>
+        <span class="ie-keys">Shift keeps proportions · arrows nudge · Delete removes · Ctrl+Z / Ctrl+Y · Ctrl+D duplicates · drag on empty space (or Shift+drag anywhere) to select several · Ctrl+A selects all</span>
       </div>
     </div>`;
   }
@@ -8688,7 +8773,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     sizeCanvas();
   }
 
-  const copyLabel = () => (selected() ? "Copy selection" : "Copy page");
+  const copyLabel = () => (chosen().length ? "Copy selection" : "Copy page");
   /** Repaint the parts that change while working, leaving the canvas alone. */
   function refreshChrome() {
     const cp = document.getElementById("ieCopy"); if (cp) cp.textContent = copyLabel();
@@ -8744,7 +8829,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       if (editing) endEdit();
       if (crop) crop = null;
       tool = t.dataset.ieTool;
-      if (tool !== "select") sel = null;
+      if (tool !== "select") { sel = null; group = []; }
       return refresh();
     }
     const op = e.target.closest("[data-ie-open]");
@@ -8839,15 +8924,16 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (mod && k === "z" && !e.shiftKey) { stop(); return stepBack(); }
     if (mod && (k === "y" || (k === "z" && e.shiftKey))) { stop(); return stepForward(); }
     if (mod && k === "d") { stop(); return duplicate(); }
-    if (mod && k === "c" && sel && !window.getSelection().toString()) { stop(); return copy(); }
+    if (mod && k === "c" && chosen().length && !window.getSelection().toString()) { stop(); return copy(); }
+    if (mod && k === "a") { stop(); return selectAll(); }
     if (crop && k === "enter") { stop(); return applyCrop(); }
     if (k === "pagedown") { stop(); return goPage(book.cur + 1); }
     if (k === "pageup") { stop(); return goPage(book.cur - 1); }
-    if (k === "escape") { if (crop) crop = null; else { sel = null; tool = "select"; } return refresh(); }
-    if ((k === "delete" || k === "backspace") && sel) { stop(); return remove(); }
+    if (k === "escape") { if (crop) crop = null; else { sel = null; group = []; tool = "select"; } return refresh(); }
+    if ((k === "delete" || k === "backspace") && chosen().length) { stop(); return remove(); }
     const step = e.shiftKey ? 10 : 1;
     const dir = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step] }[k];
-    if (dir && sel) { stop(); return nudge(...dir); }
+    if (dir && chosen().length) { stop(); return nudge(...dir); }
     if (k === "enter" && sel) { const o = selected(); if (o.type === "text") { stop(); editBefore = snap(); startEdit(o); } }
   }, true);
 
@@ -8889,7 +8975,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   window.TrackerEditor = {
     view, mount,
     /* For the browser check: read the document, and drive it without a mouse. */
-    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob, _copyBlob: copyBlob,
+    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob, _copyBlob: copyBlob, _chosen: () => chosen().map((o) => o.id),
   };
 })();
 
