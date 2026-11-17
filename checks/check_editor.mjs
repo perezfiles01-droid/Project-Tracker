@@ -139,6 +139,29 @@ o2 = (await doc()).objects[0];
 ok("crop keeps the chosen part of the source", Math.abs(o2.crop.w - 200) < 4 && o2.crop.x === 0, JSON.stringify(o2.crop));
 ok("crop shrinks the box to match", Math.abs(o2.w - o.w / 2) < 3);
 
+/* --- Copy with something selected copies only that, at its own resolution --- */
+const cp = await page.evaluate(async () => {
+  const blob = await window.TrackerEditor._copyBlob();
+  const bmp = await createImageBitmap(blob);
+  const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext("2d"); g.drawImage(bmp, 0, 0);
+  const px = (x, y) => [...g.getImageData(x, y, 1, 1).data];
+  return { w: bmp.width, h: bmp.height, mid: px(bmp.width >> 1, bmp.height >> 1), corner: px(1, 1),
+    label: document.getElementById("ieCopy").textContent };
+});
+// The larger of its source size and the size it is drawn at, never smaller.
+const want = Math.round(Math.max(o2.crop.w, o2.w));
+ok("with a picture selected, Copy copies only that picture", Math.abs(cp.w - want) <= 1 && Math.abs(cp.h - want) <= 1, `${cp.w}×${cp.h}, want ${want}`);
+ok("at its source resolution, with none of the rest of the page", cp.mid[2] > 200 && cp.corner[2] > 200 && cp.corner[1] < 60,
+   cp.mid.join(",") + " / " + cp.corner.join(","));
+ok("the button says what it will copy", cp.label === "Copy selection", cp.label);
+await page.keyboard.press("Escape");
+const whole = await page.evaluate(async () => {
+  const bmp = await createImageBitmap(await window.TrackerEditor._copyBlob());
+  return { w: bmp.width, label: document.getElementById("ieCopy").textContent };
+});
+ok("with nothing selected, Copy copies the whole page", whole.w === 1280 && whole.label === "Copy page", JSON.stringify(whole));
+await page.mouse.click(...await at(o2.x + 5, o2.y + 5));
+
 /* --- rotate 90 --- */
 await page.click('[data-ie-act="rotate"]');
 ok("Rotate turns the picture a quarter", Math.abs((await doc()).objects[0].rot - Math.PI / 2) < 1e-6);

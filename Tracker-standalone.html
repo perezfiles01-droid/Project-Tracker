@@ -8450,12 +8450,46 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (dlMenu) { dlMenu = false; paintPages(); }
     window.TrackerUI.saveBlob(await exportBlob(), fileName());
   }
+  /**
+   * Just one object, cut to its own outline on a transparent background.
+   * Asked for 17 Nov 2026: Copy with a picture selected copies that picture,
+   * not the whole page. A picture keeps its source resolution rather than the
+   * size it happens to be drawn at, so a pasted screenshot stays sharp.
+   */
+  function objectCanvas(o) {
+    let pts;
+    if (LINE.has(o.type)) {
+      const pad = o.width / 2 + (o.type === "arrow" ? Math.max(12, o.width * 3.5) : 2);
+      pts = [[o.x1 - pad, o.y1 - pad], [o.x1 + pad, o.y1 + pad], [o.x2 - pad, o.y2 - pad], [o.x2 + pad, o.y2 + pad]];
+    } else {
+      const pad = o.type === "rect" || o.type === "ellipse" ? o.width / 2 : 0;
+      pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+        const q = toWorld(o, { x: sx * (o.w / 2 + pad), y: sy * (o.h / 2 + pad) }); return [q.x, q.y];
+      });
+    }
+    const x0 = Math.floor(Math.min(...pts.map((q) => q[0]))), y0 = Math.floor(Math.min(...pts.map((q) => q[1])));
+    const x1 = Math.ceil(Math.max(...pts.map((q) => q[0]))), y1 = Math.ceil(Math.max(...pts.map((q) => q[1])));
+    const k = o.type === "image" ? Math.min(4, Math.max(1, o.crop.w / o.w)) : 1;
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round((x1 - x0) * k)); c.height = Math.max(1, Math.round((y1 - y0) * k));
+    const g = c.getContext("2d");
+    g.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+    const ed = editing; editing = null;
+    try { paint(g, o, null); } finally { editing = ed; }
+    return c;
+  }
+  /** What Copy puts on the clipboard: the selection if there is one, else the page. */
+  function copyBlob() {
+    const o = selected();
+    return o ? new Promise((ok) => objectCanvas(o).toBlob(ok, "image/png")) : exportBlob();
+  }
   async function copy() {
     if (editing) endEdit();
+    const one = !!selected();
     try {
       // The promise form keeps the user gesture alive in Safari.
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": exportBlob() })]);
-      notice = "Copied. Paste it into Teams, email or Word.";
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": copyBlob() })]);
+      notice = (one ? "Copied the selected item only." : "Copied the whole page.") + " Paste it into Teams, email or Word.";
     } catch (err) {
       notice = "This browser would not copy a picture (" + (err && err.message || "not allowed") + "). Use Download PNG instead.";
     }
@@ -8579,7 +8613,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
         <div class="ie-actions">
           <button class="btn sm" data-ie-act="drafts" aria-pressed="${showDrafts}">Drafts (${drafts().length})</button>
           <button class="btn sm" data-ie-act="new">New</button>
-          <button class="btn sm" data-ie-act="copy">Copy</button>
+          <button class="btn sm" data-ie-act="copy" id="ieCopy">${copyLabel()}</button>
           <div class="ie-menuwrap">
             <button class="btn sm primary" data-ie-act="dlmenu" aria-expanded="${dlMenu}">Download ▾</button>
             <div class="ie-menu" id="ieDlMenu"${dlMenu ? "" : " hidden"}>
@@ -8654,8 +8688,10 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     sizeCanvas();
   }
 
+  const copyLabel = () => (selected() ? "Copy selection" : "Copy page");
   /** Repaint the parts that change while working, leaving the canvas alone. */
   function refreshChrome() {
+    const cp = document.getElementById("ieCopy"); if (cp) cp.textContent = copyLabel();
     const r = document.getElementById("ieRibbon"); if (r) r.innerHTML = ribbon();
     const f = document.getElementById("ieFormat"); if (f) f.innerHTML = formatBar();
     const n = document.getElementById("ieNotice"); if (n) { n.hidden = !notice; n.textContent = notice; }
@@ -8803,6 +8839,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     if (mod && k === "z" && !e.shiftKey) { stop(); return stepBack(); }
     if (mod && (k === "y" || (k === "z" && e.shiftKey))) { stop(); return stepForward(); }
     if (mod && k === "d") { stop(); return duplicate(); }
+    if (mod && k === "c" && sel && !window.getSelection().toString()) { stop(); return copy(); }
     if (crop && k === "enter") { stop(); return applyCrop(); }
     if (k === "pagedown") { stop(); return goPage(book.cur + 1); }
     if (k === "pageup") { stop(); return goPage(book.cur - 1); }
@@ -8852,7 +8889,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   window.TrackerEditor = {
     view, mount,
     /* For the browser check: read the document, and drive it without a mouse. */
-    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob,
+    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob, _copyBlob: copyBlob,
   };
 })();
 
