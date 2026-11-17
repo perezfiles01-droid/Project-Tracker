@@ -474,6 +474,7 @@
     if (e.button !== 0) return;
     if (editing) endEdit();
     const p = pt(e);
+    if (eyedrop) return sampleAt(p);
     canvas.setPointerCapture(e.pointerId);
     const before = snap();
     if (crop) {
@@ -918,8 +919,98 @@
       <div class="ie-grp">${actBtn("undo", "undo", "Undo", !undo.length)}${actBtn("redo", "redo", "Redo", !redo.length)}</div>`;
   }
 
-  const color = (prop, v, label) =>
-    `<label class="ie-f">${label}<input type="color" data-ie-prop="${prop}" value="${esc(v)}"></label>`;
+  /* ------------------------------------------------------- colour picker
+     Asked for 17 Nov 2026: "exactly the same as the ppt". The browser's own
+     colour box is replaced by PowerPoint's panel: Theme Colors with their
+     lighter and darker rows beneath, Standard Colors, Recent Colors, No Fill
+     where nothing is a valid answer, More Colors (the full picker) and an
+     Eyedropper. The theme is Office's current default, so a colour picked
+     here matches the same swatch in PowerPoint or Word. */
+  const THEME = ["#FFFFFF", "#000000", "#E8E8E8", "#0E2841", "#156082", "#E97132", "#196B24", "#0F9ED5", "#A02B93", "#4EA72E"];
+  const STANDARD = ["#C00000", "#FF0000", "#FFC000", "#FFFF00", "#92D050", "#00B050", "#00B0F0", "#0070C0", "#002060", "#7030A0"];
+  const NAMES = { "#FFFFFF": "White", "#000000": "Black", "#E8E8E8": "Light Gray", "#0E2841": "Dark Blue",
+    "#156082": "Blue", "#E97132": "Orange", "#196B24": "Green", "#0F9ED5": "Light Blue", "#A02B93": "Purple",
+    "#4EA72E": "Light Green", "#C00000": "Dark Red", "#FF0000": "Red", "#FFC000": "Gold", "#FFFF00": "Yellow",
+    "#92D050": "Lime", "#00B050": "Green", "#00B0F0": "Sky Blue", "#0070C0": "Blue", "#002060": "Navy", "#7030A0": "Purple" };
+  const hex = (r, g, b) => "#" + [r, g, b].map((n) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0")).join("").toUpperCase();
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  /** Office's rule: dark colours get five tints, light ones five shades, the rest three tints and two shades. */
+  function variants(h) {
+    const c = rgb(h), lum = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+    const tint = (t) => hex(...c.map((v) => v + (255 - v) * t)), shade = (t) => hex(...c.map((v) => v * (1 - t)));
+    if (lum < 0.08) return [[tint(0.5), "Lighter 50%"], [tint(0.35), "Lighter 35%"], [tint(0.25), "Lighter 25%"], [tint(0.15), "Lighter 15%"], [tint(0.05), "Lighter 5%"]];
+    if (lum > 0.85) return [[shade(0.05), "Darker 5%"], [shade(0.15), "Darker 15%"], [shade(0.25), "Darker 25%"], [shade(0.35), "Darker 35%"], [shade(0.5), "Darker 50%"]];
+    return [[tint(0.8), "Lighter 80%"], [tint(0.6), "Lighter 60%"], [tint(0.4), "Lighter 40%"], [shade(0.25), "Darker 25%"], [shade(0.5), "Darker 50%"]];
+  }
+  let colorOpen = null;          // which property's panel is open
+  let eyedrop = null;            // property waiting for a click on the canvas
+  let recent = [];
+  const NOFILL = { fill: "fillOn", bg: "bgOn" };   // where "No Fill" is a real choice
+
+  const sw = (h, title, cur) => `<button class="ie-cs${cur && cur.toUpperCase() === h ? " on" : ""}" data-ie-pick="${h}" style="--c:${h}" title="${esc(title)}" aria-label="${esc(title)}"></button>`;
+  function colorPanel(prop, cur) {
+    const name = (h) => NAMES[h] || h;
+    return `<div class="ie-cp" role="dialog" aria-label="Colors">
+      <div class="ie-cpt">Theme Colors</div>
+      <div class="ie-cg">${THEME.map((h) => sw(h, name(h), cur)).join("")}</div>
+      <div class="ie-cg ie-cv">${[0, 1, 2, 3, 4].map((r) => THEME.map((h) => { const [v, t] = variants(h)[r]; return sw(v, `${name(h)}, ${t}`, cur); }).join("")).join("")}</div>
+      <div class="ie-cpt">Standard Colors</div>
+      <div class="ie-cg">${STANDARD.map((h) => sw(h, name(h), cur)).join("")}</div>
+      ${recent.length ? `<div class="ie-cpt">Recent Colors</div><div class="ie-cg">${recent.map((h) => sw(h, h, cur)).join("")}</div>` : ""}
+      <div class="ie-cpl">
+        ${NOFILL[prop] ? `<button data-ie-nofill="${prop}"><span class="ie-ci ie-none-i"></span>No Fill</button>` : ""}
+        <button data-ie-more="${prop}"><span class="ie-ci ie-more-i"></span>More Colors…</button>
+        <button data-ie-eyedrop="${prop}"><svg class="ie-ci" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5l5 5M12 7l5 5-8.5 8.5H4v-4.5z M15 3.5a2.1 2.1 0 0 1 3 0l2.5 2.5a2.1 2.1 0 0 1 0 3L18 11.5 12.5 6z"/></svg>Eyedropper</button>
+      </div>
+    </div>`;
+  }
+  /** The format-bar control: a swatch with PowerPoint's split arrow, opening the panel. */
+  const color = (prop, v, label, off) =>
+    `<span class="ie-f ie-cwrap">${label}<button class="ie-cbtn" data-ie-color="${prop}" aria-expanded="${colorOpen === prop}" title="${label || "Color"}">
+       <span class="ie-csw${off ? " off" : ""}" style="--c:${esc(v)}"></span><span class="ie-car">▾</span></button>
+       ${colorOpen === prop ? colorPanel(prop, off ? null : v) : ""}</span>`;
+
+  function pickColor(prop, h) {
+    colorOpen = null; eyedrop = null;
+    h = h.toUpperCase();
+    recent = [h, ...recent.filter((x) => x !== h)].slice(0, 10);
+    // Choosing a colour for a fill or a text background switches it on.
+    if (prop === "fill") style.fillOn = true;
+    if (prop === "bg") style.tbgOn = true;
+    setProp(prop, h);
+    refreshChrome();
+  }
+  function moreColors(prop, cur) {
+    colorOpen = null; refreshChrome();
+    const inp = document.createElement("input");
+    inp.type = "color"; inp.value = (cur || "#000000").toLowerCase();
+    inp.style.cssText = "position:fixed;left:-99px;top:0;opacity:0";
+    document.body.appendChild(inp);
+    inp.addEventListener("change", () => { pickColor(prop, inp.value); inp.remove(); });
+    inp.addEventListener("blur", () => setTimeout(() => inp.remove(), 1000));
+    inp.click();
+  }
+  async function eyedropper(prop) {
+    colorOpen = null;
+    // Chrome and Edge can sample anywhere on screen, as PowerPoint can.
+    if (window.EyeDropper) {
+      refreshChrome();
+      try { const r = await new window.EyeDropper().open(); pickColor(prop, r.sRGBHex.length === 7 ? r.sRGBHex : hexFromCss(r.sRGBHex)); }
+      catch { /* Escape cancels; nothing to do */ }
+      return;
+    }
+    // Elsewhere: the next click on the canvas samples it.
+    eyedrop = prop;
+    notice = "Eyedropper: click anywhere on the picture to take its colour. Esc cancels.";
+    refreshChrome(); if (canvas) canvas.style.cursor = "crosshair";
+  }
+  const hexFromCss = (css) => { const m = css.match(/\d+/g) || [0, 0, 0]; return hex(+m[0], +m[1], +m[2]); };
+  function sampleAt(p) {
+    const c = pageCanvas(doc);
+    const d = c.getContext("2d").getImageData(Math.max(0, Math.min(doc.w - 1, Math.floor(p.x))), Math.max(0, Math.min(doc.h - 1, Math.floor(p.y))), 1, 1).data;
+    const prop = eyedrop; eyedrop = null; notice = "";
+    pickColor(prop, hex(d[0], d[1], d[2]));
+  }
   const num = (prop, v, label, min, max) =>
     `<label class="ie-f">${label}<input type="number" data-ie-prop="${prop}" value="${Math.round(v)}" min="${min}" max="${max}"></label>`;
   const check = (prop, on, label) =>
@@ -941,14 +1032,14 @@
       f = (o ? small("edittext", "Edit text") : "") + num("size", t.size, "Size", 6, 400) + color("color", t.color, "Color") +
         `<button class="ie-tog${t.bold ? " on" : ""}" data-ie-prop="bold" title="Bold"><b>B</b></button>` +
         `<button class="ie-tog${t.italic ? " on" : ""}" data-ie-prop="italic" title="Italic"><i>I</i></button>` +
-        check("bgOn", !!t.bg, "Background") + color("bg", t.bg || style.tbg, "");
+        check("bgOn", !!t.bg, "Background") + color("bg", t.bg || style.tbg, "", !t.bg);
     } else if (kind === "pen" || kind === "hl") {
       const t = o || { stroke: kind === "pen" ? style.pen : style.hl, width: kind === "pen" ? style.penW : style.hlW };
       f = color("stroke", t.stroke, "Color") + num("width", t.width, "Thickness", 1, 80);
     } else if (LINE.has(kind) || kind === "rect" || kind === "ellipse") {
       const t = o || { stroke: style.stroke, width: style.width, fill: style.fillOn ? style.fill : null };
       f = color("stroke", t.stroke, "Line") + num("width", t.width, "Thickness", 0, 60);
-      if (!LINE.has(kind)) f += check("fillOn", !!t.fill, "Fill") + color("fill", t.fill || style.fill, "");
+      if (!LINE.has(kind)) f += check("fillOn", !!t.fill, "Fill") + color("fill", t.fill || style.fill, "", !t.fill);
     } else if (kind === "image") {
       f = small("crop", "Crop") + small("rotate", "Rotate 90°") + small("fitcanvas", "Canvas = this image") +
         small("uncrop", "Reset crop", o.crop.x === 0 && o.crop.y === 0 && Math.round(o.crop.w) === (img(o.blob).el.naturalWidth || o.crop.w) && Math.round(o.crop.h) === (img(o.blob).el.naturalHeight || o.crop.h));
@@ -1122,6 +1213,17 @@
     if ((dlMenu || addMenu || thumbMenu !== null) && !e.target.closest(".ie-menuwrap, .ie-menu, [data-ie-tmenu]")) {
       dlMenu = addMenu = false; thumbMenu = null; paintPages();
     }
+    if (colorOpen && !e.target.closest(".ie-cwrap")) { colorOpen = null; refreshChrome(); }
+    const cb = e.target.closest("[data-ie-color]");
+    if (cb) { const pr = cb.dataset.ieColor; colorOpen = colorOpen === pr ? null : pr; return refreshChrome(); }
+    const pk = e.target.closest("[data-ie-pick]");
+    if (pk && colorOpen) return pickColor(colorOpen, pk.dataset.iePick);
+    const nf = e.target.closest("[data-ie-nofill]");
+    if (nf) { colorOpen = null; return setProp(NOFILL[nf.dataset.ieNofill], false); }
+    const mc = e.target.closest("[data-ie-more]");
+    if (mc) { const cur = mc.closest(".ie-cwrap").querySelector(".ie-csw").style.getPropertyValue("--c"); return moreColors(mc.dataset.ieMore, cur); }
+    const ed = e.target.closest("[data-ie-eyedrop]");
+    if (ed) return eyedropper(ed.dataset.ieEyedrop);
     const tm = e.target.closest("[data-ie-tmenu]");
     if (tm) { const i = Number(tm.dataset.ieTmenu); thumbMenu = thumbMenu === i ? null : i; return paintPages(); }
     const pd = e.target.closest("[data-ie-pdup]");
@@ -1235,6 +1337,7 @@
     if (crop && k === "enter") { stop(); return applyCrop(); }
     if (k === "pagedown") { stop(); return goPage(book.cur + 1); }
     if (k === "pageup") { stop(); return goPage(book.cur - 1); }
+    if (k === "escape" && (eyedrop || colorOpen)) { eyedrop = null; colorOpen = null; notice = ""; return refresh(); }
     if (k === "escape") { if (crop) crop = null; else { sel = null; group = []; tool = "select"; } return refresh(); }
     if ((k === "delete" || k === "backspace") && chosen().length) { stop(); return remove(); }
     const step = e.shiftKey ? 10 : 1;
@@ -1281,6 +1384,6 @@
   window.TrackerEditor = {
     view, mount,
     /* For the browser check: read the document, and drive it without a mouse. */
-    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob, _copyBlob: copyBlob, _chosen: () => chosen().map((o) => o.id),
+    _doc: () => doc, _book: () => book, _addImage: addImage, _exportBlob: exportBlob, _pdfBlob: pdfBlob, _copyBlob: copyBlob, _chosen: () => chosen().map((o) => o.id), _variants: variants,
   };
 })();

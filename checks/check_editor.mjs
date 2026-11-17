@@ -253,6 +253,53 @@ const many = await page.evaluate(async () => (await createImageBitmap(await wind
 ok("Copy with several selected copies just their area, not the page", many < 1280, String(many));
 await page.keyboard.press("Escape");
 
+/* --- the colour panel, PowerPoint's: theme, shades, standard, recent, eyedropper --- */
+await page.keyboard.press("Escape");
+await page.click('[data-ie-tool="rect"]');
+await dragOn(60, 40, 160, 110);
+const rectId = (await doc()).objects.at(-1).id;
+await page.click('[data-ie-color="stroke"]');
+const panel = await page.$$eval(".ie-cp .ie-cg", (gs) => gs.map((g) => g.querySelectorAll("[data-ie-pick]").length));
+ok("the panel has 10 theme colours, 5 rows of their shades, and 10 standard colours",
+   panel[0] === 10 && panel[1] === 50 && panel[2] === 10, panel.join(","));
+ok("it offers More Colors and an Eyedropper",
+   (await page.locator(".ie-cp [data-ie-more]").count()) === 1 && (await page.locator(".ie-cp [data-ie-eyedrop]").count()) === 1);
+const shades = await page.evaluate(() => ({ black: window.TrackerEditor._variants("#000000")[0][0], white: window.TrackerEditor._variants("#FFFFFF")[4][0],
+  blue: window.TrackerEditor._variants("#156082").map((v) => v[1]).join("|") }));
+ok("shades follow Office's rule (black lightens, white darkens, colours both)",
+   shades.black === "#808080" && shades.white === "#808080" && shades.blue === "Lighter 80%|Lighter 60%|Lighter 40%|Darker 25%|Darker 50%",
+   JSON.stringify(shades));
+await page.click('.ie-cp [data-ie-pick="#FF0000"]');
+let rectNow = (await doc()).objects.find((o) => o.id === rectId);
+ok("picking a swatch colours the selected shape", rectNow.stroke === "#FF0000", rectNow.stroke);
+ok("and closes the panel", (await page.locator(".ie-cp").count()) === 0);
+await page.click('[data-ie-color="stroke"]');
+ok("the colour just used appears under Recent Colors",
+   (await page.locator(".ie-cp").innerText()).includes("Recent Colors") && (await page.locator(".ie-cp .ie-cg").nth(3).locator('[data-ie-pick="#FF0000"]').count()) === 1);
+ok("and the current colour is marked in the panel", (await page.locator('.ie-cp [data-ie-pick="#FF0000"].on').count()) >= 1);
+await page.mouse.click(10, 10);
+ok("clicking elsewhere closes the panel", (await page.locator(".ie-cp").count()) === 0);
+await page.mouse.click(...await at(110, 75));
+await page.click('[data-ie-color="fill"]');
+await page.click('.ie-cp [data-ie-pick="#FFC000"]');
+ok("choosing a fill colour turns the fill on", (await doc()).objects.find((o) => o.id === rectId).fill === "#FFC000");
+await page.click('[data-ie-color="fill"]');
+await page.click('.ie-cp [data-ie-nofill="fill"]');
+ok("No Fill takes the fill off", (await doc()).objects.find((o) => o.id === rectId).fill === null);
+// Eyedropper: where the browser has no screen-wide one, a click on the canvas samples it.
+await page.evaluate(() => { delete window.EyeDropper; window.EyeDropper = undefined; });
+const blue = (await doc()).objects.find((o) => o.type === "image");
+await page.click('[data-ie-color="stroke"]');
+await page.click('.ie-cp [data-ie-eyedrop="stroke"]');
+await page.mouse.click(...await at(blue.x + blue.w / 2, blue.y + blue.h / 2));
+await page.waitForTimeout(80);
+rectNow = (await doc()).objects.find((o) => o.id === rectId);
+ok("the eyedropper takes the colour it is clicked on", rectNow.stroke === "#0000FF", rectNow.stroke);
+ok("and the click does not move or select anything else", (await page.evaluate(() => window.TrackerEditor._chosen())).join() === rectId);
+await page.keyboard.press("Control+z"); await page.keyboard.press("Control+z"); await page.keyboard.press("Control+z");
+await page.keyboard.press("Control+z"); await page.keyboard.press("Control+z");
+await page.keyboard.press("Escape");
+
 /* --- pages: a draft holds several, like slides --- */
 const book = () => page.evaluate(() => JSON.parse(JSON.stringify(window.TrackerEditor._book())));
 const pageCount = async () => (await book()).pages.length;
