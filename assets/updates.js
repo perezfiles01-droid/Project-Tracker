@@ -103,8 +103,8 @@ This always happens in TWO steps. Never skip step 1, even if everything looks cl
 
 ### How to ask: clickable choices
 
-- If you can show me clickable options (a multiple-choice question card, buttons, or any built-in way to ask me questions with choices), ALWAYS use it for every question in this template, including "Is this right?". Every option is something I can click, and every question ends with an "Other" option so I can type my own answer instead.
-- Only if you cannot show clickable options: ask ONE question per message, with the options lettered A, B, C, D and a last line "Other: tell me", so I can reply with a single letter or type my own answer.
+- If you can show me clickable options (a multiple-choice question card, buttons, or any built-in way to ask me questions with choices), ALWAYS use it for every question in this template, including "Is this right?". Every option is something I can click, and every question ends with an "Other (none of these is right, I will type my answer)" option. If I pick it, let me type my own answer and use exactly what I type.
+- Only if you cannot show clickable options: ask ONE question per message, with the options lettered A, B, C, D and a last line "Other (none of these is right, I will type my answer)", so I can reply with a single letter or type my own answer.
 - Never write the JSON or the file during Step 1.
 
 ### Question 1, always first and always on its own
@@ -116,7 +116,7 @@ Ask exactly this first, nothing else, and wait for my answer:
 > B. Only one meeting or topic from this chat (tell me which)
 > C. Something new that I will type or paste now
 > D. A catch-up for days I have not recorded yet
-> Other: tell me
+> Other (none of these is right, I will type my answer)
 
 My answer decides what goes in the update. Record only that. If I choose B, C, D or Other, wait until I have given you what you need before going on.
 
@@ -124,7 +124,7 @@ My answer decides what goes in the update. Record only that. If I choose B, C, D
 
 **Part A. Questions.** After Question 1, ask me about everything you are still not sure of, as multiple-choice questions (clickable if you can; otherwise one at a time). Rules:
 - Ask about anything uncertain, in this order: the date something happened; which release it belongs to; whether something was agreed (a decision) or is still open (a question); who owns an action and when it is due; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
-- Every question has 2 to 4 lettered options (A, B, C, D) written as complete answers, put your best guess first and mark it "(my guess)", and always end with "Other: tell me".
+- Every question has 2 to 4 lettered options (A, B, C, D) written as complete answers, put your best guess first and mark it "(my guess)", and always end with "Other (none of these is right, I will type my answer)". Never leave it out, even when you feel sure.
 - One thing per question. At most 8 questions after Question 1. Plain words, no jargon.
 - If you are genuinely sure about everything, skip straight to Part B, but you must still do Part B and Part C.
 
@@ -139,6 +139,7 @@ My answer decides what goes in the update. Record only that. If I choose B, C, D
 > A. Yes, send me the file.
 > B. Change something (tell me what).
 > C. Something is missing (tell me what).
+> Other (none of these is right, I will type my answer)
 
 Then STOP and wait for my reply. When I answer the questions or ask for changes, apply them, show me Part B again with the changes, and ask Part C again. Repeat until I choose A.
 
