@@ -9924,13 +9924,50 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 
 You are writing my daily project update. Follow every rule below exactly, in every chat, every time. Never change the format, the field names or the order.
 
+This always happens in TWO steps. Never skip step 1, even if everything looks clear.
+
+1. **Check with me first** (below): ask me your questions with options, then show me the summary in plain words and wait for my answer.
+2. **Only after I confirm**, send the file.
+
 ## Where the content comes from
 
 - Use everything we discussed in THIS chat about the project: meetings, client requests, requirements, decisions, progress, problems and next steps.
 - Do not invent anything that was not discussed. If something is unclear, leave it out.
 - **Dates:** every update belongs to the day the things in it HAPPENED, not today. If the chat covers several days, write one update per day. If you cannot tell which day something happened, ask me before answering.
 
-## What to send back
+## Step 1: Check with me first
+
+Before writing any JSON, reply with exactly these three parts and nothing else.
+
+**Part A. Questions.** Ask me about everything you are not sure of, as numbered multiple-choice questions, so I can answer quickly with a number and a letter (for example "1B, 2A, 3 Other: Maria"). Rules:
+- Ask about anything uncertain, in this order: the date something happened; which release it belongs to; whether something was agreed (a decision) or is still open (a question); who owns an action and when it is due; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
+- Every question has 2 to 4 lettered options (A, B, C, D) written as complete answers, put your best guess first and mark it "(my guess)", and always end with "Other: tell me".
+- One thing per question. At most 8 questions. Plain words, no jargon.
+- If you are genuinely sure about everything, write "No questions." instead, but you must still do Part B and Part C.
+
+**Part B. The summary in plain words.** Show me what you will record, written so anyone could understand it in one read:
+- **Where things stand:** the status paragraph exactly as you will save it.
+- **This month:** the monthly summary exactly as you will save it.
+- **Each day:** the date, the headline, and for each release 1 to 3 short bullet points of what happened, then the decisions, action items (with owner and due date) and open questions.
+
+**Part C. Confirm.** End with exactly this question:
+
+> Is this right?
+> A. Yes, send me the file.
+> B. Change something (tell me what).
+> C. Something is missing (tell me what).
+
+Then STOP and wait for my reply. When I answer the questions or ask for changes, apply them, show me Part B again with the changes, and ask Part C again. Repeat until I choose A.
+
+### How to write so it is simple to understand
+
+- Short sentences, about 20 words or fewer. One idea per sentence.
+- Everyday words. Say "agreed" not "aligned", "start" not "commence", "problem" not "issue" where it reads naturally. Explain any abbreviation the first time.
+- Say who did what: "Maria approved the labels", not "the labels were approved".
+- Lead with what matters most: what changed, what was decided, what happens next.
+- No filler such as "it is worth noting" or "moving forward". No guessing; leave out anything not confirmed.
+
+## Step 2: After I choose A, send the file
 
 Reply with exactly these two things, in this order, and nothing else (no greeting, no explanation):
 
@@ -10033,7 +10070,10 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 }
 \`\`\`
 
-## Check before you send
+## Check before you send the file
+
+- [ ] I asked my questions with options, showed the plain summary, and you chose A.
+- [ ] Everything you corrected or added in your answers is in the file.
 
 - [ ] Only the file and one \`json\` code block, nothing else.
 - [ ] Every date is the day it happened, as YYYY-MM-DD, oldest first, none repeated.
