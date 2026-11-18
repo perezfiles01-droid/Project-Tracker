@@ -47,11 +47,13 @@ ok("it tells Claude to date each update by when it happened",
 ok("it makes Claude check with you before sending the file",
    /TWO steps\. Never skip step 1/.test(tpl) && /## Step 1: Check with me first/.test(tpl) && /## Step 2: After I choose A, send the file/.test(tpl));
 ok("its questions are multiple choice, best guess first, with an Other option",
-   /2 to 4 lettered options/.test(tpl) && /\(my guess\)/.test(tpl) && /Other: tell me/.test(tpl));
+   /2 to 4 lettered options/.test(tpl) && /\(my guess\)/.test(tpl) && /"Other \(none of these is right, I will type my answer\)"/.test(tpl));
 ok("it shows the summary in plain words and asks Is this right? A / B / C",
    /Part B\. The summary in plain words/.test(tpl) && /> Is this right\?\n> A\. Yes, send me the file\.\n> B\. Change something/.test(tpl) && /Then STOP and wait/.test(tpl));
 ok("it asks for clickable choices, with Other to type an answer, and one at a time otherwise",
-   /ALWAYS use it for every question in this template/.test(tpl) && /an "Other" option so I can type my own answer/.test(tpl) && /ask ONE question per message/.test(tpl));
+   /ALWAYS use it for every question in this template/.test(tpl) && /Other \(none of these is right, I will type my answer\)" option\. If I pick it, let me type my own answer/.test(tpl) && /ask ONE question per message/.test(tpl));
+ok("every question, including the first and Is this right?, offers Other to type an answer",
+   (tpl.match(/> Other \(none of these is right, I will type my answer\)/g) || []).length === 2 && /Never leave it out/.test(tpl));
 const q1 = tpl.indexOf("> What do you want to put in this project update?"), qa = tpl.indexOf("**Part A. Questions.**");
 ok("the first question is always what to put in the update, asked on its own before the rest",
    q1 > 0 && q1 < qa && /Question 1, always first and always on its own/.test(tpl) && /Ask exactly this first, nothing else, and wait for my answer/.test(tpl) &&
