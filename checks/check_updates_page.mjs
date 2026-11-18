@@ -193,6 +193,7 @@ ok("updates are part of the backup", await page.evaluate(() => window.TrackerSto
 await page.click('[data-pu="back"]');
 await page.click('[data-pu-project="adb"]');
 const october = { format: "tracker-update", version: 1, project: "ADB EDRMS", status: "",
+  monthly: [{ month: "2026-10", summary: ["October started with planning.", "Two decisions were made by the end of the month."] }],
   updates: ["2026-10-05", "2026-10-30"].map((date, i) => ({ date, headline: "October day " + (i + 1), releases: [
     { release: "General", summary: ["Something happened in October."], decisions: ["An October decision."], actions: [{ task: "Do an October thing.", owner: "", due: "" }], questions: [] } ] })) };
 await page.click('[data-pu="menu"][data-m="imp"]');
@@ -222,22 +223,51 @@ ok("Monthly shows one summary for the month", (await page.locator(".pu-month").c
 const mtext = await page.locator(".pu-month").innerText();
 ok("it gathers the month's days, decisions and open items", mtext.includes("October day 1") && mtext.includes("October day 2") &&
    mtext.includes("An October decision.") && /STILL OPEN · 2/i.test(mtext));
+ok("the monthly summary arrives with the import, as paragraphs",
+   (await page.locator(".pu-msum p").allInnerTexts()).join("|") === "October started with planning.|Two decisions were made by the end of the month.");
+ok("there is no AI or write-it-yourself button, only Edit",
+   (await page.locator('[data-pu="aimonth"]').count()) === 0 && !(await page.locator(".pu-month").innerText()).includes("Write it myself") &&
+   (await page.locator('.pu-msum [data-pu="editmonth"]').count()) === 1);
+ok("it says which update it was last written with", (await page.locator(".pu-msum").innerText()).includes("Updated with the 30 Oct update"));
 await page.click('[data-pu="editmonth"]');
 await page.fill('[data-pu-f="monthtext"]', "October was quiet.\n\nTwo small decisions were made.");
 await page.click('[data-pu="savemonth"]');
 const handP = (await page.locator(".pu-msum p").allInnerTexts()).join("|");
-ok("a summary can be written by hand and is kept as paragraphs", handP === "October was quiet.|Two small decisions were made.", handP);
-await page.evaluate(() => { window.__mt = null; window.TrackerAI.monthly = async (t) => { window.__mt = t; return "AI wrote this month."; }; });
-await page.click('[data-pu="aimonth"]');
-await page.waitForTimeout(150);
-const sentMonth = await page.evaluate(() => window.__mt);
-ok("the AI is given the month's records to write from", sentMonth.includes("October day 1") && sentMonth.includes("Decision: An October decision."));
-ok("its draft is shown for you to check before saving", (await page.inputValue('[data-pu-f="monthtext"]')) === "AI wrote this month.");
-await page.click('[data-pu="savemonth"]');
-ok("and saved once you choose to", (await data()).monthly.adb["2026-10"].text === "AI wrote this month.");
+ok("the summary can be edited, and is kept as paragraphs", handP === "October was quiet.|Two small decisions were made.", handP);
+// The template carries what is already recorded, so a new chat can write the whole month.
+const [tdl] = await Promise.all([page.waitForEvent("download"), page.click('.pu [data-pu="template"]')]);
+const tpl2 = readFileSync(await tdl.path(), "utf8");
+ok("the template asks for the monthly summary every time", /\*\*monthly\*\*: the monthly summary, ALWAYS included/.test(tpl2) && tpl2.includes('"monthly": ['));
+ok("and carries the month's current summary for Claude to build on",
+   tpl2.includes("## Already recorded (use this)") && tpl2.includes("Monthly summary for 2026-10:\nOctober was quiet.") && !tpl2.includes("GRA GLASS\n"));
+// A newer update for the month replaces the summary; an older catch-up does not.
+const importJson = async (obj) => {
+  await page.click('[data-pu="menu"][data-m="imp"]');
+  await page.click('[data-pu="importpaste"]');
+  await page.fill(".faq-paste", JSON.stringify(obj));
+  await page.click('.faq-modal [data-v="next"]');
+  const txt = await page.locator(".faq-modal").innerText();
+  await page.click('.faq-modal [data-v="go"]');
+  await page.waitForTimeout(150);
+  return txt;
+};
+const day = (date, h) => ({ date, headline: h, releases: [{ release: "General", summary: ["Text for " + h + "."], decisions: [], actions: [], questions: [] }] });
+let pv = await importJson({ format: "tracker-update", version: 1, project: "ADB EDRMS", status: "",
+  monthly: [{ month: "2026-10", summary: ["Rewritten for the whole of October, through the 31st."] }], updates: [day("2026-10-31", "Last day of October")] });
+ok("the import preview says the monthly summary will be updated", pv.includes("Monthly summary updated for October 2026"));
+ok("each new update rewrites the month's summary", (await data()).monthly.adb["2026-10"].text === "Rewritten for the whole of October, through the 31st.");
+await importJson({ format: "tracker-update", version: 1, project: "ADB EDRMS", status: "",
+  monthly: [{ month: "2026-10", summary: ["Only about the 6th."] }], updates: [day("2026-10-06", "A late catch-up")] });
+ok("a late catch-up for an earlier day does not overwrite a newer month summary",
+   (await data()).monthly.adb["2026-10"].text === "Rewritten for the whole of October, through the 31st.");
+pv = await importJson({ format: "tracker-update", version: 1, project: "ADB EDRMS", status: "", updates: [day("2026-10-31", "No monthly in this file")] });
+ok("a file with no monthly summary says so, and leaves the summary alone",
+   pv.includes("no monthly summary") && (await data()).monthly.adb["2026-10"].text === "Rewritten for the whole of October, through the 31st.");
+await page.selectOption("[data-pu-pick]", "2026-10");
+await page.click('[data-pu-mode="monthly"]');
 await page.click('.pu-dlink:has-text("30 Oct")');
 await page.waitForTimeout(100);
-ok("clicking a day in the summary opens it in Daily", (await page.locator(".pu-day").count()) === 2 && (await page.$eval('[data-pu-mode="daily"]', (b) => b.getAttribute("aria-pressed"))) === "true");
+ok("clicking a day in the summary opens it in Daily", (await page.locator(".pu-day").count()) === 4 && (await page.$eval('[data-pu-mode="daily"]', (b) => b.getAttribute("aria-pressed"))) === "true");
 
 /* --- images --- */
 const png = join(dir, "shot.png");

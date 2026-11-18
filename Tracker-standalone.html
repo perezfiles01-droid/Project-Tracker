@@ -2474,16 +2474,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
     "separated by commas, for example: 3, 7. If none of them answers it, reply with 0.",
     "Write nothing else.",
   ].join(" ");
-  /* Project updates' monthly summary: a month of daily records, as prose. */
-  const MONTHLY = [
-    "You write the monthly summary of a project from its daily records, for the person running the project.",
-    "Write 2 to 4 short paragraphs of plain prose, in the past tense, separated by a blank line.",
-    "Cover: what was achieved, what was decided or required by the client, and what is still open or at risk, naming releases and people as the records do.",
-    "Use only what is in the records. No headings, no bullet points, no markdown, no dates in a list, no closing remarks.",
-  ].join(" ");
   const prompt = (kind) =>
     kind === "report" ? REPORT
-    : kind === "monthly" ? MONTHLY
     : kind === "match" ? MATCH
                       : SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description);
 
@@ -3326,11 +3318,6 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   async function report(text) {
     return dispatch(text, "report");
   }
-  /** A month of project updates, written up as paragraphs. */
-  async function monthly(text) {
-    const out = await dispatch(text, "monthly");
-    return window.TrackerUI && window.TrackerUI.tidyDashes ? window.TrackerUI.tidyDashes(out) : out;
-  }
   /** Which FAQ titles answer this question? Replies with their numbers. */
   async function match(text) {
     return dispatch(text, "match");
@@ -3452,7 +3439,7 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
   /** The picker value that means "try them all". Not an engine id. */
   const AUTO = "auto";
 
-  window.TrackerAI = { standardize, report, match, monthly, hasKey, engine, PROVIDERS, ENGINES,
+  window.TrackerAI = { standardize, report, match, hasKey, engine, PROVIDERS, ENGINES,
                      DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt,
                      image, imageEngines, imageEngine, imageReady,
@@ -9902,7 +9889,6 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
   let mode = "daily";          // "daily" | "monthly"
   let month = null;            // "YYYY-MM" on screen; null means the newest month with days
   let writing = null;          // { ym, text } while a monthly summary is being edited
-  let busyAI = false;
   const projName = (id) => (PROJECTS.find((p) => p.id === id) || {}).name || id;
 
   /* ------------------------------------------------------------ releases */
@@ -9934,7 +9920,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
   }
 
   /* ------------------------------------------------------------ template */
-  const templateFor = () => `# Project update template
+  const templateFor = (only = project) => `# Project update template
 
 You are writing my daily project update. Follow every rule below exactly, in every chat, every time. Never change the format, the field names or the order.
 
@@ -9959,6 +9945,9 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
   "version": 1,
   "project": "",
   "status": "",
+  "monthly": [
+    { "month": "YYYY-MM", "summary": [""] }
+  ],
   "updates": [
     {
       "date": "YYYY-MM-DD",
@@ -9982,6 +9971,9 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 - **format** is always \`"tracker-update"\`, **version** is always \`1\`.
 - **project**: exactly \`"ADB EDRMS"\` or \`"GRA GLASS"\`.
 - **status**: "Where things stand". One paragraph of 2 to 4 sentences, at most 80 words, describing the project's overall position as of the LATEST date in this file: what is done, what is next, the main risk. Plain language.
+- **monthly**: the monthly summary, ALWAYS included. One entry per calendar month that any update in this file falls in.
+  - **month**: that month as YYYY-MM.
+  - **summary**: 2 to 4 paragraphs of plain prose, past tense, covering the WHOLE month so far, not just this file: what was achieved, what the client decided or asked for, and what is still open or at risk, naming releases and people. If the section "Already recorded" below has a summary for that month, rewrite it to include everything in it plus what is new in this chat; never drop what it says unless this chat corrects it.
 - **updates**: one entry per day, oldest first. Never two entries with the same date.
   - **date**: the day it happened, as YYYY-MM-DD.
   - **headline**: what the day was about, at most 10 words, sentence case, no full stop.
@@ -10005,6 +9997,15 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
   "version": 1,
   "project": "ADB EDRMS",
   "status": "The retention labels for email records are approved and ready to build. Migration testing of batch 2 is next. The main risk is the AvePoint licence renewal, which is still with IT.",
+  "monthly": [
+    {
+      "month": "2026-11",
+      "summary": [
+        "November focused on email records. The records team reviewed the proposed retention labels and approved a seven-year label for correspondence and a one-year label for newsletters.",
+        "A permissions error on the Finance library was fixed as a hotfix. Still open are the final label list for Maria and the question of who signs off the archive policy."
+      ]
+    }
+  ],
   "updates": [
     {
       "date": "2026-11-18",
@@ -10039,8 +10040,23 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 - [ ] Every release name is from the allowed list or follows the "R2026.x Name" pattern.
 - [ ] Every summary paragraph reads on its own as full sentences.
 - [ ] status describes the latest date in the file.
+- [ ] monthly has one entry for every month in the file, each covering the whole month so far.
 - [ ] The JSON is valid.
-`;
+${alreadyRecorded(only)}`;
+  /* What the app already holds, written into the template so a NEW chat can
+     still write a whole-month summary: Claude rewrites what is here plus what
+     is new, rather than summarising one day as if it were the month. */
+  function alreadyRecorded(only) {
+    const d = load();
+    const parts = PROJECTS.filter((p) => !only || p.id === only).map((p) => {
+      const months = Object.keys((d.monthly || {})[p.id] || {}).filter((k) => /^\d{4}-\d{2}$/.test(k)).sort().reverse().slice(0, 2);
+      const st = (d.status || {})[p.id];
+      if (!months.length && !(st && st.text)) return "";
+      return [`### ${p.name}`, st && st.text ? `Where things stand (as of ${st.asOf || "unknown"}): ${st.text}` : "",
+        ...months.map((m) => `Monthly summary for ${m}:\n${d.monthly[p.id][m].text}`)].filter(Boolean).join("\n\n");
+    }).filter(Boolean);
+    return parts.length ? `\n## Already recorded (use this)\n\nThis is what my tracker already holds. Build on it: the monthly summary you write must include it, updated with what is new.\n\n${parts.join("\n\n")}\n` : "";
+  }
   function downloadTemplate() {
     window.TrackerUI.saveBlob(new Blob([templateFor()], { type: "text/markdown" }), "Project-update-template.md");
   }
@@ -10088,7 +10104,11 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     if (!days.length) throw new Error("No days with any content were found in that.");
     const undated = days.filter((d) => !d.date).length;
     if (undated) throw new Error(`${undated === 1 ? "One day has" : undated + " days have"} no date. Ask Claude to add the date each update happened (YYYY-MM-DD).`);
-    return { project: proj, named: !!named, status: clean(data.status), days };
+    const monthly = list(data.monthly).map((m) => ({
+      ym: (String(m.month || "").match(/\d{4}-\d{2}/) || [])[0] || "",
+      text: list(m.summary).flatMap((x) => String(x).split(/\n\s*\n/)).map(clean).filter(Boolean).join("\n\n"),
+    })).filter((m) => m.ym && m.text);
+    return { project: proj, named: !!named, status: clean(data.status), monthly, days };
   }
 
   /* --------------------------------------------------------------- merge */
@@ -10118,6 +10138,13 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     const latest = p.days.map((x) => x.date).sort().pop();
     const st = d.status[p.project];
     if (p.status && (!st || !st.asOf || latest >= st.asOf)) d.status[p.project] = { text: p.status, asOf: latest };
+    d.monthly[p.project] = d.monthly[p.project] || {};
+    for (const m of p.monthly || []) {
+      const through = p.days.map((x) => x.date).filter((x) => x.startsWith(m.ym)).sort().pop() || m.ym + "-01";
+      const cur = d.monthly[p.project][m.ym];
+      if (cur && cur.through && through < cur.through) continue;   // a late catch-up never undoes a newer month summary
+      d.monthly[p.project][m.ym] = { text: m.text, at: new Date().toISOString(), through };
+    }
     save(d);
     return { added, merged, statusKept: !!(p.status && st && st.asOf && latest < st.asOf) };
   }
@@ -10227,24 +10254,8 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     }
     return byRel;
   }
-  /** The month as plain text, for the AI to turn into paragraphs. */
-  function monthText(ym, days) {
-    return [`Project: ${projName(project)}`, `Month: ${monthName(ym)}`, ...days.slice().sort((a, b) => a.date.localeCompare(b.date)).flatMap((e) =>
-      ["", `${e.date}: ${e.headline}`, ...e.blocks.filter((b) => rel === "All" || b.release === rel).flatMap((b) => [
-        `[${b.release}]`, ...b.summary, ...b.decisions.map((x) => "Decision: " + x),
-        ...b.actions.map((x) => `${x.done ? "Done" : "Open action"}: ${x.text}${x.owner ? " (" + x.owner + ")" : ""}`),
-        ...b.questions.filter((x) => !x.done).map((x) => "Open question: " + x.text)])])].join("\n");
-  }
-  async function writeWithAI(ym, days) {
-    busyAI = true; render();
-    try {
-      const text = await window.TrackerAI.monthly(monthText(ym, days));
-      writing = { ym, text: String(text).trim() };
-    } catch (err) { flash(String(err && err.message || err), 8000); }
-    busyAI = false; render();
-  }
-  /* A summary belongs to a month, and to the release chip it was written under. */
-  const sumKey = (ym) => (rel === "All" ? ym : ym + "|" + rel);
+  /* One summary per month, written by Claude with every import. */
+  const sumKey = (ym) => ym;
   function monthlyHtml(ym, days) {
     const d = load();
     const saved = ((d.monthly || {})[project] || {})[sumKey(ym)];
@@ -10259,12 +10270,11 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
          <div class="pu-mact"><button class="btn sm" data-pu="cancelmonth">Cancel</button><button class="btn sm primary" data-pu="savemonth">Save summary</button></div>`
       : saved && saved.text
         ? `${saved.text.split(/\n\s*\n/).map((p) => `<p>${esc(p)}</p>`).join("")}
-           ${stale ? `<p class="pu-stale">Days were added or changed after this was written.</p>` : ""}
-           <div class="pu-mact"><button class="btn sm" data-pu="editmonth">Edit</button>
-             <button class="btn sm" data-pu="aimonth"${busyAI ? " disabled" : ""}>${busyAI ? "Writing…" : "Rewrite with AI"}</button></div>`
-        : `<p class="pu-dim">No written summary for this month yet. Everything that happened is gathered below.</p>
-           <div class="pu-mact"><button class="btn sm primary" data-pu="aimonth"${busyAI ? " disabled" : ""}>${busyAI ? "Writing…" : "Write summary with AI"}</button>
-             <button class="btn sm" data-pu="editmonth">Write it myself</button></div>`;
+           ${stale ? `<p class="pu-stale">A day was edited by hand after this summary was last updated.</p>` : ""}
+           <div class="pu-mact">${saved.through ? `<small class="pu-dim">Updated with the ${esc(shortDate(saved.through))} update</small>` : ""}
+             <button class="btn sm" data-pu="editmonth">Edit</button></div>`
+        : `<p class="pu-dim">No summary for this month yet. It arrives with your next import.</p>
+           <div class="pu-mact"><button class="btn sm" data-pu="editmonth">Edit</button></div>`;
     return `<section class="pu-card pu-month">
       <div class="pu-dh"><span class="pu-date">${esc(monthName(ym))}${rel !== "All" ? " · " + esc(rel) : ""}</span>
         <span class="pu-dim">${days.length} day${days.length === 1 ? "" : "s"} recorded</span></div>
@@ -10489,6 +10499,8 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
         <span class="${exists ? "faq-dup" : "faq-new"}">${exists ? "Adds to this day" : "New day"}</span></div>`).join("")}</div>
       ${p.status ? `<p class="lede pu-dl">Where things stand will be ${(() => { const st = d.status[p.project]; const latest = p.days.map((x) => x.date).sort().pop();
           return st && st.asOf && latest < st.asOf ? `kept as it is (it is newer, ${esc(longDate(st.asOf))})` : "updated"; })()}.</p>` : ""}
+      ${(p.monthly || []).length ? `<p class="lede pu-dl">Monthly summary updated for ${p.monthly.map((m) => esc(monthName(m.ym))).join(", ")}.</p>`
+        : `<p class="faq-err">This file has no monthly summary, so the month's summary is left as it is. Download the template again to get the current one.</p>`}
       <div class="actions"><button class="btn" data-v="cancel">Cancel</button><button class="btn primary" data-v="go">Import</button></div>`);
     if (v !== "go") return;
     const r = importParsed(p);
@@ -10686,13 +10698,13 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       case "cancel": editing = null; return render();
       case "saveday": return saveDay();
       case "addimg": return pickImages(id);
-      case "aimonth": return writeWithAI(month, load().entries.filter((x) => x.project === project && ymOf(x.date) === month && (rel === "All" || x.blocks.some((b) => b.release === rel))));
       case "editmonth": { const sv = ((load().monthly[project] || {})[sumKey(month)] || {}); writing = { ym: month, text: sv.text || "" }; return render(); }
       case "cancelmonth": writing = null; return render();
       case "savemonth": {
         const ym = writing.ym, text = String(writing.text).trim();
         updateData((d) => { d.monthly[project] = d.monthly[project] || {};
-          if (text) d.monthly[project][sumKey(ym)] = { text, at: new Date().toISOString() }; else delete d.monthly[project][sumKey(ym)]; });
+          const cur = d.monthly[project][sumKey(ym)] || {};
+          if (text) d.monthly[project][sumKey(ym)] = { ...cur, text, at: new Date().toISOString() }; else delete d.monthly[project][sumKey(ym)]; });
         writing = null; return render();
       }
       case "addblock": editing.blocks.push({ release: rel !== "All" ? rel : "General", summary: [], decisions: [], actions: [], questions: [] }); return render();
@@ -10742,7 +10754,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     addImagesTo(editing.id, files);
   });
 
-  window.TrackerUpdates = { view, count, parse, templateFor, RELEASES, canonRelease, monthText, _state: () => ({ project, rel, mode, month, editing: !!editing }) };
+  window.TrackerUpdates = { view, count, parse, templateFor, RELEASES, canonRelease, _state: () => ({ project, rel, mode, month, editing: !!editing }) };
 })();
 
 </script>
