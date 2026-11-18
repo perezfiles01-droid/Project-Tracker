@@ -24,6 +24,7 @@ tasks = (root / "assets" / "tasks.js").read_text()
 export = (root / "assets" / "export.js").read_text()
 imagegen = (root / "assets" / "imagegen.js").read_text()
 editor = (root / "assets" / "editor.js").read_text()
+faq = (root / "assets" / "faq.js").read_text()
 links = (root / "assets" / "links.js").read_text()
 cfg = (root / "config.js").read_text()
 data = json.loads((root / "data" / "tracker.json").read_text())
@@ -44,6 +45,7 @@ html = html.replace(
     '<script src="assets/tasks.js"></script>\n<script src="assets/export.js"></script>\n'
     '<script src="assets/imagegen.js"></script>\n'
     '<script src="assets/editor.js"></script>\n'
+    '<script src="assets/faq.js"></script>\n'
     '<script src="assets/projects.js"></script>\n'
     '<script src="assets/links.js"></script>\n'
     '<script src="assets/app.js"></script>\n'
@@ -57,6 +59,7 @@ html = html.replace(
     "<script>\n" + export + "\n</script>\n"
     "<script>\n" + imagegen + "\n</script>\n"
     "<script>\n" + editor + "\n</script>\n"
+    "<script>\n" + faq + "\n</script>\n"
     "<script>\n" + projects + "\n</script>\n"
     "<script>\n" + links + "\n</script>\n"
     "<script>\n" + app + "\n</script>\n<script>\n" + drive + "\n</script>",
@@ -68,7 +71,7 @@ html = html.replace(
 # Checked by exact body, not by a marker line: every module ends with "})();"
 # so a last-line marker matches a sibling's copy and reports success while the
 # file is missing — which is how this check first failed to catch anything.
-inlined = {"store.js": store, "account.js": account, "auth.js": auth, "ai.js": ai, "ui.js": ui, "tasks.js": tasks, "export.js": export, "imagegen.js": imagegen, "editor.js": editor, "projects.js": projects,
+inlined = {"store.js": store, "account.js": account, "auth.js": auth, "ai.js": ai, "ui.js": ui, "tasks.js": tasks, "export.js": export, "imagegen.js": imagegen, "editor.js": editor, "faq.js": faq, "projects.js": projects,
            "links.js": links, "app.js": app, "drive.js": drive}
 for js in sorted((root / "assets").glob("*.js")):
     if js.name not in inlined:

@@ -137,8 +137,17 @@
     "TASK block for every task in the list.",
   ].join("\n");
 
+  /* The FAQ's "Ask AI to find it". It is sent the question and a numbered
+     list of TITLES only, never the steps, and answers with numbers. */
+  const MATCH = [
+    "You match a question to the titles of answers in a FAQ, by meaning rather than exact words.",
+    "Reply with only the numbers of up to three titles that answer the question, best first,",
+    "separated by commas, for example: 3, 7. If none of them answers it, reply with 0.",
+    "Write nothing else.",
+  ].join(" ");
   const prompt = (kind) =>
     kind === "report" ? REPORT
+    : kind === "match" ? MATCH
                       : SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description);
 
   /**
@@ -980,6 +989,10 @@
   async function report(text) {
     return dispatch(text, "report");
   }
+  /** Which FAQ titles answer this question? Replies with their numbers. */
+  async function match(text) {
+    return dispatch(text, "match");
+  }
 
   /**
    * Which engine draws, and whether it is usable at all.
@@ -1097,7 +1110,7 @@
   /** The picker value that means "try them all". Not an engine id. */
   const AUTO = "auto";
 
-  window.TrackerAI = { standardize, report, hasKey, engine, PROVIDERS, ENGINES,
+  window.TrackerAI = { standardize, report, match, hasKey, engine, PROVIDERS, ENGINES,
                      DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt,
                      image, imageEngines, imageEngine, imageReady,

@@ -377,6 +377,7 @@
 
     images() { return window.TrackerImages.view(window.TrackerLinks.findValue("images")); },
     editor() { return window.TrackerEditor.view(window.TrackerLinks.findValue("editor")); },
+    faq() { return window.TrackerFAQ.view(); },
   };
 
   /* ---------- shell ---------- */
@@ -405,10 +406,12 @@
 
   const navGroups = () => [
     { title: "Index", items: [
-      ["overview", "Overview", window.TrackerLinks.resolved().length],
-      // Asked for 17 Nov 2026: under Index, above the account box. No count;
-      // its drafts are per browser and listed on the page itself.
+      // No counts on these three, as asked on 18 Nov 2026.
+      ["overview", "Overview", null],
+      // Asked for 17 Nov 2026: under Index, above the account box.
       ["editor", "Image editor", null],
+      // Asked for 18 Nov 2026: a book of answers, per project.
+      ["faq", "FAQ", null],
     ] },
     { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [

@@ -103,6 +103,8 @@
       // their artifacts seeded from the workbook. Restoring artifacts without
       // it lets the seed run a second time and duplicate every one of them.
       "tracker.seeded",
+      // FAQ answers imported from Claude or written by hand, per project.
+      "tracker.faq",
     ],
     settings: [
       "tracker.theme",
