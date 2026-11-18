@@ -936,3 +936,41 @@ svg.ie-ci{fill:none;stroke:#333;stroke-width:1.7;stroke-linejoin:round}
 .pu-rd{font-size:12px;color:var(--dim);white-space:nowrap}
 .pu mark{background:rgba(250,204,21,.35);color:inherit;border-radius:3px;padding:0 1px}
 @media (max-width:820px){.pu-open,.pu-row2{grid-template-columns:1fr}}
+/* Project updates: month pages, daily/monthly switch, images. */
+.pu-pager{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px}
+.pu-mode{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.pu-mode button{background:none;border:0;border-radius:7px;padding:6px 14px;color:var(--muted);cursor:pointer;font:inherit;font-size:13.5px}
+.pu-mode button[aria-pressed="true"]{background:var(--panel-2);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
+.pu-mnav{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+.pu-mnav select{background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:6px 10px;font:inherit;font-size:14px;font-weight:600}
+.pu-mnav .btn:disabled{opacity:.35;cursor:default}
+.pu-tlm{padding-left:0}
+.pu-tlm::before{display:none}
+.pu-month .pu-msum p{font-size:15.5px;line-height:1.65;margin:6px 0 10px}
+.pu-mact{display:flex;gap:8px;margin:6px 0 14px}
+.pu-stale{color:var(--warn);font-size:13px}
+.pu-mdays{list-style:none;margin:6px 0 10px;padding:0;display:flex;flex-direction:column;gap:4px;font-size:14.5px}
+.pu-dlink{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;color:var(--accent);font:inherit;font-size:12px;font-weight:600;padding:1px 7px;cursor:pointer;margin-right:4px}
+.pu-dlink:hover{border-color:var(--accent)}
+.pu-mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 22px;margin:4px 0 6px}
+.pu-mgrid h4,.pu-h4{margin:4px 0 6px;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pu-mgrid ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.45}
+.pu-from{color:var(--dim);font-size:11.5px;white-space:nowrap}
+.pu-donei{color:var(--muted)}
+.pu-imgs{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 2px}
+.pu-th{position:relative}
+.pu-thb{display:block;width:132px;height:92px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel-2);cursor:zoom-in}
+.pu-thb img{width:100%;height:100%;object-fit:cover;display:block}
+.pu-thb:hover{border-color:var(--accent)}
+.pu-thx{position:absolute;top:4px;right:4px;width:22px;height:22px;border:0;border-radius:6px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;opacity:0;transition:opacity .15s}
+.pu-th:hover .pu-thx,.pu-thx:focus{opacity:1}
+.pu-month .pu-thx{display:none}
+.pu-thadd{width:132px;height:92px;border:1.5px dashed var(--line);border-radius:10px;background:none;color:var(--muted);cursor:pointer;font:inherit;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.pu-thadd small{color:var(--dim);font-size:11px}
+.pu-thadd:hover{border-color:var(--accent);color:var(--text)}
+.pu-imgl{margin:16px 0 0}
+.pu-day.pu-over .pu-card{outline:2px dashed var(--accent);outline-offset:3px}
+.pu-day.pu-flash .pu-card{box-shadow:0 0 0 3px var(--accent)}
+.pu-lb{display:flex;justify-content:center;max-height:72vh;overflow:auto;margin-bottom:12px}
+.pu-lb img{max-width:100%;max-height:72vh;border-radius:8px}
+.faq-modal .box:has(.pu-lb){max-width:min(1100px,92vw)}

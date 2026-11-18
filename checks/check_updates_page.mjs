@@ -189,6 +189,120 @@ ok("GRA GLASS has none of ADB's days", (await page.locator(".pu-day").count()) =
 ok("GRA has no release chips (it has no releases yet)", (await page.locator(".pu-chips").count()) === 0);
 ok("updates are part of the backup", await page.evaluate(() => window.TrackerStore.KEYS.data.includes("tracker.updates")));
 
+/* --- one month per page --- */
+await page.click('[data-pu="back"]');
+await page.click('[data-pu-project="adb"]');
+const october = { format: "tracker-update", version: 1, project: "ADB EDRMS", status: "",
+  updates: ["2026-10-05", "2026-10-30"].map((date, i) => ({ date, headline: "October day " + (i + 1), releases: [
+    { release: "General", summary: ["Something happened in October."], decisions: ["An October decision."], actions: [{ task: "Do an October thing.", owner: "", due: "" }], questions: [] } ] })) };
+await page.click('[data-pu="menu"][data-m="imp"]');
+await page.click('[data-pu="importpaste"]');
+await page.fill(".faq-paste", JSON.stringify(october));
+await page.click('.faq-modal [data-v="next"]');
+await page.click('.faq-modal [data-v="go"]');
+await page.waitForTimeout(150);
+ok("importing older days opens the month they belong to", (await page.$eval("[data-pu-pick]", (s) => s.value)) === "2026-10");
+ok("a page holds only that month's days", (await page.$$eval(".pu-date", (d) => d.map((x) => x.innerText))).join("|") === "Fri 30 Oct 2026|Mon 5 Oct 2026");
+ok("the month picker lists every month with days, newest first",
+   (await page.$$eval("[data-pu-pick] option", (o) => o.map((x) => x.textContent))).join("|") === "November 2026 (1)|October 2026 (2)");
+await page.click('[data-pu-month="2026-11"]');
+ok("› goes to the newer month", (await page.$$eval(".pu-date", (d) => d.map((x) => x.innerText))).join("|") === "Tue 10 Nov 2026");
+ok("and the newest month has no › further", await page.locator('.pu-mnav button[title="Newer month"]').isDisabled());
+await page.selectOption("[data-pu-pick]", "2026-10");
+ok("the picker jumps to a month", (await page.$$eval(".pu-date", (d) => d.length)) === 2);
+const pageCap = await page.evaluate(() => {
+  // A month never has more than 31 days, so a page can never pass 31 entries.
+  return Math.max(...[...document.querySelectorAll("[data-pu-pick] option")].map((o) => +o.textContent.match(/\((\d+)\)/)[1]));
+});
+ok("no month page holds more than 31 days", pageCap <= 31);
+
+/* --- monthly view --- */
+await page.click('[data-pu-mode="monthly"]');
+ok("Monthly shows one summary for the month", (await page.locator(".pu-month").count()) === 1 && (await page.locator(".pu-day").count()) === 0);
+const mtext = await page.locator(".pu-month").innerText();
+ok("it gathers the month's days, decisions and open items", mtext.includes("October day 1") && mtext.includes("October day 2") &&
+   mtext.includes("An October decision.") && /STILL OPEN · 2/i.test(mtext));
+await page.click('[data-pu="editmonth"]');
+await page.fill('[data-pu-f="monthtext"]', "October was quiet.\n\nTwo small decisions were made.");
+await page.click('[data-pu="savemonth"]');
+const handP = (await page.locator(".pu-msum p").allInnerTexts()).join("|");
+ok("a summary can be written by hand and is kept as paragraphs", handP === "October was quiet.|Two small decisions were made.", handP);
+await page.evaluate(() => { window.__mt = null; window.TrackerAI.monthly = async (t) => { window.__mt = t; return "AI wrote this month."; }; });
+await page.click('[data-pu="aimonth"]');
+await page.waitForTimeout(150);
+const sentMonth = await page.evaluate(() => window.__mt);
+ok("the AI is given the month's records to write from", sentMonth.includes("October day 1") && sentMonth.includes("Decision: An October decision."));
+ok("its draft is shown for you to check before saving", (await page.inputValue('[data-pu-f="monthtext"]')) === "AI wrote this month.");
+await page.click('[data-pu="savemonth"]');
+ok("and saved once you choose to", (await data()).monthly.adb["2026-10"].text === "AI wrote this month.");
+await page.click('.pu-dlink:has-text("30 Oct")');
+await page.waitForTimeout(100);
+ok("clicking a day in the summary opens it in Daily", (await page.locator(".pu-day").count()) === 2 && (await page.$eval('[data-pu-mode="daily"]', (b) => b.getAttribute("aria-pressed"))) === "true");
+
+/* --- images --- */
+const png = join(dir, "shot.png");
+writeFileSync(png, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEIGBmgDBgAAO8GBvy0tC0yAAAAAElFTkSuQmCC", "base64"));
+const day30 = '.pu-day:has-text("Fri 30 Oct")';
+const [ch] = await Promise.all([page.waitForEvent("filechooser"), page.click(`${day30} [data-pu="addimg"]`)]);
+await ch.setFiles(png);
+await page.waitForTimeout(300);
+let oct30 = (await data()).entries.find((e) => e.date === "2026-10-30");
+ok("Add image puts a picture on the day", (oct30.images || []).length === 1);
+ok("its thumbnail is drawn", await page.$eval(`${day30} .pu-thb img`, (i) => i.src.startsWith("blob:")));
+ok("no image bytes reach localStorage", await page.evaluate(() => !Object.values(localStorage).some((v) => /data:image|base64,/.test(v))));
+await page.click(`${day30} .pu-thb`);
+await page.waitForTimeout(100);
+ok("clicking a thumbnail opens it full size", (await page.locator(".pu-lb img").count()) === 1);
+await page.click('.faq-modal [data-v="cancel"]');
+// Drop a picture onto a day.
+await page.evaluate(async (sel) => {
+  const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEIGBmgDBgAAO8GBvy0tC0yAAAAAElFTkSuQmCC")).blob();
+  const dt = new DataTransfer(); dt.items.add(new File([blob], "dropped.png", { type: "image/png" }));
+  const card = document.querySelector(sel + " .pu-card") || [...document.querySelectorAll(".pu-day")].find((d) => d.innerText.includes("Fri 30 Oct")).querySelector(".pu-card");
+  card.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+}, "#none");
+await page.waitForTimeout(300);
+oct30 = (await data()).entries.find((e) => e.date === "2026-10-30");
+ok("dropping a picture on a day adds it", oct30.images.length === 2 && oct30.images[1].name === "dropped.png");
+// Paste while editing; remove one in the editor; save.
+await page.click(`${day30} [data-pu="edit"]`);
+await page.evaluate(async () => {
+  const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEIGBmgDBgAAO8GBvy0tC0yAAAAAElFTkSuQmCC")).blob();
+  const dt = new DataTransfer(); dt.items.add(new File([blob], "pasted.png", { type: "image/png" }));
+  document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+});
+await page.waitForTimeout(300);
+ok("pasting while editing adds the picture to the day being edited", (await page.locator(".pu-editing .pu-th").count()) === 3);
+await page.locator(".pu-editing .pu-th").first().hover();
+await page.locator(".pu-editing .pu-thx").first().click();
+await page.click('[data-pu="saveday"]');
+await page.waitForTimeout(150);
+oct30 = (await data()).entries.find((e) => e.date === "2026-10-30");
+ok("removing one in the editor and saving keeps the rest", oct30.images.map((x) => x.name).join("|") === "dropped.png|pasted.png");
+await page.click('[data-pu-mode="monthly"]');
+ok("the month's images are gathered in the monthly view", (await page.locator(".pu-month .pu-th").count()) === 2);
+await page.click('[data-pu-mode="daily"]');
+
+/* --- data saved before this change still opens, and is not rewritten by viewing it --- */
+const legacy = { entries: [{ id: "dlegacy", project: "gra", date: "2026-09-14", headline: "Saved by the earlier version",
+  blocks: [{ release: "General", summary: ["An older paragraph."], decisions: ["Old decision."], actions: [{ id: "alegacy", text: "Old action.", owner: "", due: "", done: false }], questions: [] }],
+  updated: "2026-09-14T10:00:00.000Z" }], status: { gra: { text: "Older status.", asOf: "2026-09-14" } } };
+const legacyKey = await page.evaluate((v) => {
+  const k = Object.keys(localStorage).find((x) => x.startsWith("tracker.updates")) || "tracker.updates";
+  localStorage.setItem(k, JSON.stringify(v)); return k;
+}, legacy);
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(400);
+await page.click('#nav button[data-route="updates"]');
+await page.click('[data-pu-project="gra"]');
+await page.waitForTimeout(150);
+ok("data saved by the earlier version still shows its day and status",
+   (await page.locator(".pu-head").first().innerText()) === "Saved by the earlier version" && (await page.locator(".pu-stp").innerText()) === "Older status.");
+await page.click('[data-pu-mode="monthly"]');
+ok("and opens in the monthly view too", (await page.locator(".pu-month").innerText()).includes("Old decision."));
+ok("viewing it changes nothing that was saved", await page.evaluate((k) => localStorage.getItem(k), legacyKey) === JSON.stringify(legacy));
+await page.click('[data-pu-mode="daily"]');
+
 if (process.env.SHOT) {
   await page.click('[data-pu="back"]');
   await page.click('[data-pu-project="adb"]');

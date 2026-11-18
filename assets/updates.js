@@ -34,8 +34,14 @@
   const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
   const norm = (s) => clean(s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-  const blank = () => ({ entries: [], status: {} });
-  const load = () => { const d = S().get(KEY, null); return d && Array.isArray(d.entries) ? { status: {}, ...d } : blank(); };
+  /* Added 18 Nov 2026: monthly (saved monthly summaries) and, per day,
+     images. Both are optional, so data saved before them loads unchanged:
+     nothing is migrated or rewritten, a missing field simply reads as empty. */
+  const blank = () => ({ entries: [], status: {}, monthly: {} });
+  const load = () => {
+    const d = S().get(KEY, null);
+    return d && Array.isArray(d.entries) ? { ...d, status: d.status || {}, monthly: d.monthly || {} } : blank();
+  };
   const save = (d) => S().set(KEY, d);
 
   /* --------------------------------------------------------------- state */
@@ -44,6 +50,10 @@
   let editing = null;        // a day being edited: deep copy, or { status: true, text }
   let ai = null;
   let notice = "";
+  let mode = "daily";          // "daily" | "monthly"
+  let month = null;            // "YYYY-MM" on screen; null means the newest month with days
+  let writing = null;          // { ym, text } while a monthly summary is being edited
+  let busyAI = false;
   const projName = (id) => (PROJECTS.find((p) => p.id === id) || {}).name || id;
 
   /* ------------------------------------------------------------ releases */
@@ -284,6 +294,147 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     render();
   }
 
+  /* -------------------------------------------------------------- months */
+  /* One page per calendar month, so a page never holds more than 31 days. */
+  const ymOf = (iso) => String(iso || "").slice(0, 7);
+  const FULLMONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const monthName = (ym) => { const [y, m] = ym.split("-").map(Number); return `${FULLMONTHS[m - 1]} ${y}`; };
+  /** Months that have days, newest first. */
+  const monthsOf = (days) => [...new Set(days.map((e) => ymOf(e.date)))].sort().reverse();
+
+  /* -------------------------------------------------------------- images */
+  /* Bytes go to IndexedDB through TrackerUI.storeImage, exactly like task
+     attachments; a day keeps only the ids. So they ride in the backup file
+     the same way (the backup packs every picture the data refers to). */
+  async function storeFiles(files) {
+    const out = [], errs = [];
+    for (const f of files) {
+      if (!/^image\//.test(f.type || "")) continue;
+      const r = await window.TrackerUI.storeImage(f);
+      if (r && r.error) { errs.push(r.error); continue; }
+      const id = r && (r.html.match(/data-blob="([^"]+)"/) || [])[1];
+      if (id) out.push({ id, name: f.name || "image" });
+    }
+    if (errs.length) flash(errs[0], 6000);
+    return out;
+  }
+  async function addImagesTo(dayId, files) {
+    const imgs = await storeFiles(files);
+    if (!imgs.length) return;
+    if (editing && !editing.status && editing.id === dayId) {
+      editing.images = [...(editing.images || []), ...imgs];
+      return render();
+    }
+    updateData((d) => { const e = d.entries.find((x) => x.id === dayId); if (e) e.images = [...(e.images || []), ...imgs]; });
+    flash(`Added ${imgs.length} image${imgs.length === 1 ? "" : "s"}.`, 2500);
+  }
+  function pickImages(dayId) {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/*"; inp.multiple = true;
+    inp.onchange = () => addImagesTo(dayId, [...inp.files]);
+    inp.click();
+  }
+  async function removeImage(dayId, imgId) {
+    if (editing && !editing.status && editing.id === dayId) {
+      editing.images = (editing.images || []).filter((x) => x.id !== imgId);
+      return render();          // the bytes go when the edit is saved
+    }
+    const yes = await window.TrackerUI.confirmDialog({ title: "Remove this image?", intro: "It will be taken off this day.", confirmLabel: "Remove" });
+    if (!yes) return;
+    updateData((d) => { const e = d.entries.find((x) => x.id === dayId); if (e) e.images = (e.images || []).filter((x) => x.id !== imgId); });
+    window.TrackerStore.holdBlobs([imgId]);   // deleted for real only once undo can no longer bring it back
+  }
+  async function viewImage(id, name) {
+    const blob = await window.TrackerBlobs.get(id);
+    if (!blob) return flash("That image is not in this browser.");
+    const url = URL.createObjectURL(blob);
+    await modal(`<div class="pu-lb"><img src="${url}" alt="${esc(name)}"></div>
+      <div class="actions"><button class="btn" data-v="open" data-self="1">Open in new tab</button><button class="btn primary" data-v="cancel">Close</button></div>`,
+      (m) => m.querySelector('[data-v="open"]').addEventListener("click", () => window.TrackerUI.openBlob(blob)));
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const imagesHtml = (e, editable) => {
+    const imgs = e.images || [];
+    if (!imgs.length && !editable) return "";
+    return `<div class="pu-imgs">${imgs.map((x) => `<span class="pu-th">
+        <button class="pu-thb" data-pu-view="${esc(x.id)}" data-name="${esc(x.name)}" title="${esc(x.name)}"><img data-blob="${esc(x.id)}" alt="${esc(x.name)}"></button>
+        <button class="pu-thx" data-pu-imgdel="${esc(x.id)}" data-day="${esc(e.id)}" title="Remove image" aria-label="Remove image">✕</button></span>`).join("")}
+      ${editable ? `<button class="pu-thadd" data-pu="addimg" data-id="${esc(e.id)}">+ Add image<small>or drop / paste</small></button>` : ""}</div>`;
+  };
+
+  /* ------------------------------------------------------- monthly view */
+  /** Everything a month holds, gathered by release. Always current: nothing is stored. */
+  function monthData(days) {
+    const byRel = {};
+    for (const e of days.slice().sort((a, b) => a.date.localeCompare(b.date))) {
+      for (const b of e.blocks) {
+        if (rel !== "All" && b.release !== rel) continue;
+        const r = byRel[b.release] = byRel[b.release] || { days: [], decisions: [], done: [], open: [], questions: [] };
+        r.days.push(e);
+        b.decisions.forEach((x) => r.decisions.push({ x, e }));
+        b.actions.forEach((x) => r[x.done ? "done" : "open"].push({ x, e }));
+        b.questions.filter((x) => !x.done).forEach((x) => r.questions.push({ x, e }));
+      }
+    }
+    return byRel;
+  }
+  /** The month as plain text, for the AI to turn into paragraphs. */
+  function monthText(ym, days) {
+    return [`Project: ${projName(project)}`, `Month: ${monthName(ym)}`, ...days.slice().sort((a, b) => a.date.localeCompare(b.date)).flatMap((e) =>
+      ["", `${e.date}: ${e.headline}`, ...e.blocks.filter((b) => rel === "All" || b.release === rel).flatMap((b) => [
+        `[${b.release}]`, ...b.summary, ...b.decisions.map((x) => "Decision: " + x),
+        ...b.actions.map((x) => `${x.done ? "Done" : "Open action"}: ${x.text}${x.owner ? " (" + x.owner + ")" : ""}`),
+        ...b.questions.filter((x) => !x.done).map((x) => "Open question: " + x.text)])])].join("\n");
+  }
+  async function writeWithAI(ym, days) {
+    busyAI = true; render();
+    try {
+      const text = await window.TrackerAI.monthly(monthText(ym, days));
+      writing = { ym, text: String(text).trim() };
+    } catch (err) { flash(String(err && err.message || err), 8000); }
+    busyAI = false; render();
+  }
+  /* A summary belongs to a month, and to the release chip it was written under. */
+  const sumKey = (ym) => (rel === "All" ? ym : ym + "|" + rel);
+  function monthlyHtml(ym, days) {
+    const d = load();
+    const saved = ((d.monthly || {})[project] || {})[sumKey(ym)];
+    const lastChange = days.map((e) => e.updated || "").sort().pop() || "";
+    const stale = saved && saved.at && lastChange > saved.at;
+    const data = monthData(days);
+    const rels = releasesOf(project, d.entries).filter((r) => data[r]);
+    const when = (e) => `<small class="pu-from">${esc(shortDate(e.date))}</small>`;
+    const imgs = days.flatMap((e) => (e.images || []).map((x) => ({ ...x, e })));
+    const summary = writing && writing.ym === ym
+      ? `<textarea class="pu-sta" data-pu-f="monthtext" rows="7">${esc(writing.text)}</textarea>
+         <div class="pu-mact"><button class="btn sm" data-pu="cancelmonth">Cancel</button><button class="btn sm primary" data-pu="savemonth">Save summary</button></div>`
+      : saved && saved.text
+        ? `${saved.text.split(/\n\s*\n/).map((p) => `<p>${esc(p)}</p>`).join("")}
+           ${stale ? `<p class="pu-stale">Days were added or changed after this was written.</p>` : ""}
+           <div class="pu-mact"><button class="btn sm" data-pu="editmonth">Edit</button>
+             <button class="btn sm" data-pu="aimonth"${busyAI ? " disabled" : ""}>${busyAI ? "Writing…" : "Rewrite with AI"}</button></div>`
+        : `<p class="pu-dim">No written summary for this month yet. Everything that happened is gathered below.</p>
+           <div class="pu-mact"><button class="btn sm primary" data-pu="aimonth"${busyAI ? " disabled" : ""}>${busyAI ? "Writing…" : "Write summary with AI"}</button>
+             <button class="btn sm" data-pu="editmonth">Write it myself</button></div>`;
+    return `<section class="pu-card pu-month">
+      <div class="pu-dh"><span class="pu-date">${esc(monthName(ym))}${rel !== "All" ? " · " + esc(rel) : ""}</span>
+        <span class="pu-dim">${days.length} day${days.length === 1 ? "" : "s"} recorded</span></div>
+      <h3 class="pu-head">Monthly summary</h3>
+      <div class="pu-msum">${summary}</div>
+      ${rels.map((r) => { const x = data[r]; return `<div class="pu-block">
+        ${project === "adb" || r !== "General" ? relTag(r) : ""}
+        <ul class="pu-mdays">${[...new Set(x.days)].map((e) => `<li><button class="pu-dlink" data-pu-day="${e.id}">${esc(shortDate(e.date))}</button> ${esc(e.headline)}</li>`).join("")}</ul>
+        <div class="pu-mgrid">
+          ${x.decisions.length ? `<div><h4>Decisions &amp; requirements · ${x.decisions.length}</h4><ul>${x.decisions.map(({ x: t, e }) => `<li>${esc(t)} ${when(e)}</li>`).join("")}</ul></div>` : ""}
+          ${x.done.length ? `<div><h4>Done · ${x.done.length}</h4><ul>${x.done.map(({ x: t, e }) => `<li class="pu-donei">${esc(t.text)} ${when(e)}</li>`).join("")}</ul></div>` : ""}
+          ${x.open.length ? `<div><h4>Still open · ${x.open.length}</h4><ul>${x.open.map(({ x: t, e }) => `<li>${esc(t.text)}${t.owner ? " (" + esc(t.owner) + ")" : ""} ${when(e)}</li>`).join("")}</ul></div>` : ""}
+          ${x.questions.length ? `<div><h4>Open questions · ${x.questions.length}</h4><ul>${x.questions.map(({ x: t, e }) => `<li>${esc(t.text)} ${when(e)}</li>`).join("")}</ul></div>` : ""}
+        </div></div>`; }).join("")}
+      ${imgs.length ? `<div class="pu-block"><h4 class="pu-h4">Images · ${imgs.length}</h4><div class="pu-imgs">${imgs.map((x) => `<span class="pu-th">
+        <button class="pu-thb" data-pu-view="${esc(x.id)}" data-name="${esc(x.name)}" title="${esc(shortDate(x.e.date))} · ${esc(x.name)}"><img data-blob="${esc(x.id)}" alt="${esc(x.name)}"></button></span>`).join("")}</div></div>` : ""}
+    </section>`;
+  }
+
   /* -------------------------------------------------------------- render */
   const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function longDate(iso) {
@@ -365,7 +516,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
   function dayEditor(e) {
     const rels = releasesOf(project, load().entries);
     const lines = (a, f) => a.map(f).join("\n");
-    return `<div class="pu-day pu-editing"><span class="pu-dot"></span><div class="pu-card faq-ed">
+    return `<div class="pu-day pu-editing" data-pu-dropday="${esc(e.id)}"><span class="pu-dot"></span><div class="pu-card faq-ed">
       <div class="faq-meta"><span class="faq-cat">Editing</span><span class="faq-acts">
         <button class="btn sm" data-pu="cancel">Cancel</button><button class="btn sm primary" data-pu="saveday">Save</button></span></div>
       <div class="pu-row2"><label class="faq-l">Date it happened<input type="date" data-pu-f="date" value="${esc(e.date)}"></label>
@@ -380,6 +531,8 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
         <label class="faq-l">Open questions <small>one per line</small><textarea data-pu-f="que:${i}" rows="2">${esc(lines(b.questions, (x) => x.text))}</textarea></label>
       </div>`).join("")}
       <button class="btn sm" data-pu="addblock">+ Add release</button>
+      <div class="faq-l pu-imgl">Images <small>drop pictures here, paste with Ctrl+V, or use the button</small></div>
+      ${imagesHtml(e, true)}
     </div></div>`;
   }
 
@@ -390,6 +543,8 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     if (rel !== "All" && !rels.includes(rel)) rel = "All";
     const inRel = (e) => rel === "All" || e.blocks.some((b) => b.release === rel);
     let days = all.filter(inRel).sort((a, b) => b.date.localeCompare(a.date));
+    const months = monthsOf(days);
+    if (!month || !months.includes(month)) month = months[0] || null;
     let weak = false;
     const aiFor = ai && ai.q === q ? ai : null;
     if (q) {
@@ -397,18 +552,33 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       weak = !hits.length || hits[0].cover < 0.5;
       const ids = [...(aiFor ? aiFor.ids : []), ...hits.map((h) => h.id)];
       days = days.filter((e) => ids.includes(e.id));
+    } else if (month) {
+      days = days.filter((e) => ymOf(e.date) === month);   // one month per page
     }
     const edId = editing && !editing.status ? editing.id : null;
-    const tl = days.length ? days.map((e) => e.id === edId ? dayEditor(editing) : `<div class="pu-day" id="pu-${e.id}">
+    const mi = months.indexOf(month);
+    const pager = q ? `<div class="pu-pager"><span class="pu-dim">Showing matches from every month.</span></div>`
+      : months.length ? `<div class="pu-pager">
+        <span class="seg pu-mode" role="group" aria-label="View">
+          <button data-pu-mode="daily" aria-pressed="${mode === "daily"}">Daily</button>
+          <button data-pu-mode="monthly" aria-pressed="${mode === "monthly"}">Monthly</button></span>
+        <span class="pu-mnav">
+          <button class="btn sm" data-pu-month="${esc(months[mi + 1] || "")}"${mi < months.length - 1 ? "" : " disabled"} title="Older month" aria-label="Older month">‹</button>
+          <select data-pu-pick aria-label="Month">${months.map((m) => `<option value="${m}"${m === month ? " selected" : ""}>${esc(monthName(m))} (${all.filter(inRel).filter((e) => ymOf(e.date) === m).length})</option>`).join("")}</select>
+          <button class="btn sm" data-pu-month="${esc(months[mi - 1] || "")}"${mi > 0 ? "" : " disabled"} title="Newer month" aria-label="Newer month">›</button>
+        </span></div>` : "";
+    const tl = !q && mode === "monthly" && month ? monthlyHtml(month, days) : days.length ? days.map((e) => e.id === edId ? dayEditor(editing) : `<div class="pu-day" id="pu-${e.id}" data-pu-dropday="${esc(e.id)}">
         <span class="pu-dot"></span>
         <div class="pu-card">
           <div class="pu-dh"><span class="pu-date">${esc(longDate(e.date))}</span>
             ${aiFor && aiFor.ids.includes(e.id) ? `<span class="faq-aitag">AI match</span>` : ""}
             <span class="faq-acts"><button class="btn sm" data-pu="copy" data-id="${e.id}">Copy</button>
+              <button class="btn sm" data-pu="addimg" data-id="${e.id}">Add image</button>
               <button class="btn sm" data-pu="edit" data-id="${e.id}">Edit</button>
               <button class="btn sm" data-pu="delete" data-id="${e.id}">Delete</button></span></div>
           <h3 class="pu-head">${hl(e.headline, q)}</h3>
           ${e.blocks.filter((b) => rel === "All" || b.release === rel).map((b) => blockHtml(b, q)).join("")}
+          ${imagesHtml(e, false)}
         </div></div>`).join("")
       : `<div class="faq-none">${all.length ? (q ? "No day matches that." : "Nothing under this release yet.") : "No updates yet. Download the template, give it to Claude at the end of the day, and import what it sends back."}</div>`;
     const chipCount = (r) => (r === "All" ? all.length : all.filter((e) => e.blocks.some((b) => b.release === r)).length);
@@ -431,11 +601,16 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       ${rels.length > 1 ? `<div class="chips pu-chips">${["All", ...rels].map((r) => `<button class="chip" data-pu-rel="${esc(r)}" aria-pressed="${rel === r}">${esc(r)} <span class="pu-n">${chipCount(r)}</span></button>`).join("")}</div>` : ""}
       ${statusCard(all)}
       <h3 class="pu-tlh">Timeline</h3>
-      <div class="pu-tl">${tl}</div>
+      ${pager}
+      <div class="pu-tl${!q && mode === "monthly" ? " pu-tlm" : ""}">${tl}</div>
     </div>`;
   }
 
-  const view = () => (project ? projectView() : cards());
+  const view = () => {
+    // Pictures are filled in after the markup lands, as every other view does.
+    setTimeout(() => window.TrackerUI.paintImages(document.getElementById("view") || document), 0);
+    return project ? projectView() : cards();
+  };
   const count = () => load().entries.length;
 
   /* ------------------------------------------------------------- dialogs */
@@ -469,6 +644,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     if (v !== "go") return;
     const r = importParsed(p);
     project = p.project; rel = "All"; editing = null;
+    month = ymOf(p.days.map((x) => x.date).sort().pop());
     flash(`Imported: ${[r.added && `${r.added} new day${r.added === 1 ? "" : "s"}`, r.merged && `${r.merged} added to existing day${r.merged === 1 ? "" : "s"}`].filter(Boolean).join(", ")}.`);
   }
 
@@ -533,6 +709,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       intro: `"${e.headline}" and everything recorded for that day will be removed.`, confirmLabel: "Delete day" });
     if (!yes) return;
     updateData((d) => { d.entries = d.entries.filter((x) => x.id !== id); });
+    if ((e.images || []).length) window.TrackerStore.holdBlobs(e.images.map((x) => x.id));
   }
 
   /* --------------------------------------------------------- copy, export */
@@ -581,13 +758,19 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     const blocks = e.blocks.map((b) => ({ ...b, release: canonRelease(project, b.release) }))
       .filter((b) => b.summary.length || b.decisions.length || b.actions.length || b.questions.length);
     if (!blocks.length) return flash("A day needs at least one paragraph or item.");
+    const before = (load().entries.find((x) => x.id === e.id) || {}).images || [];
+    const gone = before.filter((x) => !(e.images || []).some((y) => y.id === x.id)).map((x) => x.id);
     updateData((d) => {
       const clash = d.entries.find((x) => x.project === project && x.date === date && x.id !== e.id);
       const merged = clash ? mergeBlocks(clash.blocks, blocks) : blocks;
       d.entries = d.entries.filter((x) => x.id !== e.id && x !== clash);
-      d.entries.push({ id: clash ? clash.id : e.id, project, date, headline: clean(e.headline) || (clash && clash.headline) || "", blocks: merged, updated: new Date().toISOString() });
+      const images = [...((clash && clash.images) || []), ...(e.images || [])];
+      d.entries.push({ id: clash ? clash.id : e.id, project, date, headline: clean(e.headline) || (clash && clash.headline) || "", blocks: merged,
+        ...(images.length ? { images } : {}), updated: new Date().toISOString() });
       if (clash) notice = `${longDate(date)} already had an entry, so the two were merged.`;
     });
+    if (gone.length) window.TrackerStore.holdBlobs(gone);
+    month = ymOf(date);
     editing = null; render();
   }
 
@@ -615,6 +798,21 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     if (pj) { project = pj.dataset.puProject || pj.dataset.puGoto; rel = "All"; editing = null; ai = null; return render(); }
     const rc = e.target.closest("[data-pu-rel]");
     if (rc) { rel = rc.dataset.puRel; return render(); }
+    const md = e.target.closest("[data-pu-mode]");
+    if (md) { mode = md.dataset.puMode; writing = null; return render(); }
+    const mn = e.target.closest("[data-pu-month]");
+    if (mn && !mn.disabled && mn.dataset.puMonth) { month = mn.dataset.puMonth; writing = null; return render(); }
+    const dl = e.target.closest("[data-pu-day]");
+    if (dl) {   // from the monthly view, straight to that day
+      mode = "daily"; render();
+      const el = document.getElementById("pu-" + dl.dataset.puDay);
+      if (el) { el.scrollIntoView({ block: "start", behavior: "smooth" }); el.classList.add("pu-flash"); setTimeout(() => el.classList.remove("pu-flash"), 1600); }
+      return;
+    }
+    const iv = e.target.closest("[data-pu-view]");
+    if (iv) return viewImage(iv.dataset.puView, iv.dataset.name);
+    const ix = e.target.closest("[data-pu-imgdel]");
+    if (ix) return removeImage(ix.dataset.day, ix.dataset.puImgdel);
     const ied = e.target.closest("[data-pu-ied]"); if (ied) return editItem(ied.dataset.puIed);
     const idl = e.target.closest("[data-pu-idel]"); if (idl) return deleteItem(idl.dataset.puIdel);
     document.querySelectorAll(".pu .faq-menu").forEach((m) => { if (!m.hidden && !e.target.closest(".faq-menuwrap")) m.hidden = true; });
@@ -638,23 +836,62 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       case "savestatus": updateData((d) => { d.status[project] = { text: clean(editing.text), asOf: toISO(editing.asOf) }; }); editing = null; return render();
       case "cancel": editing = null; return render();
       case "saveday": return saveDay();
+      case "addimg": return pickImages(id);
+      case "aimonth": return writeWithAI(month, load().entries.filter((x) => x.project === project && ymOf(x.date) === month && (rel === "All" || x.blocks.some((b) => b.release === rel))));
+      case "editmonth": { const sv = ((load().monthly[project] || {})[sumKey(month)] || {}); writing = { ym: month, text: sv.text || "" }; return render(); }
+      case "cancelmonth": writing = null; return render();
+      case "savemonth": {
+        const ym = writing.ym, text = String(writing.text).trim();
+        updateData((d) => { d.monthly[project] = d.monthly[project] || {};
+          if (text) d.monthly[project][sumKey(ym)] = { text, at: new Date().toISOString() }; else delete d.monthly[project][sumKey(ym)]; });
+        writing = null; return render();
+      }
       case "addblock": editing.blocks.push({ release: rel !== "All" ? rel : "General", summary: [], decisions: [], actions: [], questions: [] }); return render();
       case "delblock": editing.blocks.splice(+b.dataset.i, 1); return render();
     }
   });
   document.addEventListener("change", (e) => {
+    const pk = e.target.closest("[data-pu-pick]");
+    if (pk) { month = pk.value; writing = null; return render(); }
     const t = e.target.closest("[data-pu-tick]");
     if (!t) return;
     updateData((d) => { const h = findItem(t.dataset.puTick, d); if (h) h.x.done = t.checked; });
   });
   document.addEventListener("input", (e) => {
     const f = e.target.closest("[data-pu-f]");
-    if (!f || !editing) return;
+    if (!f) return;
     const k = f.dataset.puF;
+    // The monthly summary is written outside a day's edit, so it is read first.
+    if (k === "monthtext") { if (writing) writing.text = f.value; return; }
+    if (!editing) return;
     const m = k.match(/^(rel|sum|dec|act|que):(\d+)$/);
     if (m) setBlockField(+m[2], m[1], f.value);
     else editing[k] = f.value;
   });
 
-  window.TrackerUpdates = { view, count, parse, templateFor, RELEASES, canonRelease, _state: () => ({ project, rel, editing: !!editing }) };
+  /* Drop pictures on a day; paste them while editing one. */
+  document.addEventListener("dragover", (e) => {
+    const day = e.target.closest && e.target.closest("[data-pu-dropday]");
+    if (!day || ![...(e.dataTransfer.types || [])].includes("Files")) return;
+    e.preventDefault(); day.classList.add("pu-over");
+  });
+  document.addEventListener("dragleave", (e) => {
+    const day = e.target.closest && e.target.closest("[data-pu-dropday]");
+    if (day && !day.contains(e.relatedTarget)) day.classList.remove("pu-over");
+  });
+  document.addEventListener("drop", (e) => {
+    const day = e.target.closest && e.target.closest("[data-pu-dropday]");
+    if (!day || !e.dataTransfer.files.length) return;
+    e.preventDefault(); day.classList.remove("pu-over");
+    addImagesTo(day.dataset.puDropday, [...e.dataTransfer.files]);
+  });
+  document.addEventListener("paste", (e) => {
+    if (!editing || editing.status || !document.querySelector(".pu-editing")) return;
+    const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => /^image\//.test(f.type));
+    if (!files.length) return;
+    e.preventDefault();
+    addImagesTo(editing.id, files);
+  });
+
+  window.TrackerUpdates = { view, count, parse, templateFor, RELEASES, canonRelease, monthText, _state: () => ({ project, rel, mode, month, editing: !!editing }) };
 })();
