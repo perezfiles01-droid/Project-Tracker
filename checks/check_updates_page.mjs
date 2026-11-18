@@ -44,6 +44,13 @@ const tpl = readFileSync(await dl.path(), "utf8");
 ok("the template downloads", dl.suggestedFilename() === "Project-update-template.md");
 ok("it tells Claude to date each update by when it happened",
    /the day the things in it HAPPENED, not today/.test(tpl) && /ask me before answering/.test(tpl));
+ok("it makes Claude check with you before sending the file",
+   /TWO steps\. Never skip step 1/.test(tpl) && /## Step 1: Check with me first/.test(tpl) && /## Step 2: After I choose A, send the file/.test(tpl));
+ok("its questions are multiple choice, best guess first, with an Other option",
+   /2 to 4 lettered options/.test(tpl) && /\(my guess\)/.test(tpl) && /Other: tell me/.test(tpl));
+ok("it shows the summary in plain words and asks Is this right? A / B / C",
+   /Part B\. The summary in plain words/.test(tpl) && /> Is this right\?\n> A\. Yes, send me the file\.\n> B\. Change something/.test(tpl) && /Then STOP and wait/.test(tpl));
+ok("it sets rules for simple wording", /How to write so it is simple to understand/.test(tpl) && /Short sentences/.test(tpl));
 ok("it lists every ADB release, plus Hotfix and General",
    ["R2026.1 Multiple Records", "R2026.2 Centralized", "R2026.3 Email Records", "R2026.3.1 Email Records Enhancement",
     "R2026.4 Utilization Report", "Hotfix", "General"].every((r) => tpl.includes(r)));
