@@ -101,20 +101,39 @@ This always happens in TWO steps. Never skip step 1, even if everything looks cl
 
 ## Step 1: Check with me first
 
-Before writing any JSON, reply with exactly these three parts and nothing else.
+### How to ask: clickable choices
 
-**Part A. Questions.** Ask me about everything you are not sure of, as numbered multiple-choice questions, so I can answer quickly with a number and a letter (for example "1B, 2A, 3 Other: Maria"). Rules:
+- If you can show me clickable options (a multiple-choice question card, buttons, or any built-in way to ask me questions with choices), ALWAYS use it for every question in this template, including "Is this right?". Every option is something I can click, and every question ends with an "Other" option so I can type my own answer instead.
+- Only if you cannot show clickable options: ask ONE question per message, with the options lettered A, B, C, D and a last line "Other: tell me", so I can reply with a single letter or type my own answer.
+- Never write the JSON or the file during Step 1.
+
+### Question 1, always first and always on its own
+
+Ask exactly this first, nothing else, and wait for my answer:
+
+> What do you want to put in this project update?
+> A. Everything we discussed in this chat (my guess)
+> B. Only one meeting or topic from this chat (tell me which)
+> C. Something new that I will type or paste now
+> D. A catch-up for days I have not recorded yet
+> Other: tell me
+
+My answer decides what goes in the update. Record only that. If I choose B, C, D or Other, wait until I have given you what you need before going on.
+
+### Then the follow-up questions
+
+**Part A. Questions.** After Question 1, ask me about everything you are still not sure of, as multiple-choice questions (clickable if you can; otherwise one at a time). Rules:
 - Ask about anything uncertain, in this order: the date something happened; which release it belongs to; whether something was agreed (a decision) or is still open (a question); who owns an action and when it is due; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
 - Every question has 2 to 4 lettered options (A, B, C, D) written as complete answers, put your best guess first and mark it "(my guess)", and always end with "Other: tell me".
-- One thing per question. At most 8 questions. Plain words, no jargon.
-- If you are genuinely sure about everything, write "No questions." instead, but you must still do Part B and Part C.
+- One thing per question. At most 8 questions after Question 1. Plain words, no jargon.
+- If you are genuinely sure about everything, skip straight to Part B, but you must still do Part B and Part C.
 
 **Part B. The summary in plain words.** Show me what you will record, written so anyone could understand it in one read:
 - **Where things stand:** the status paragraph exactly as you will save it.
 - **This month:** the monthly summary exactly as you will save it.
 - **Each day:** the date, the headline, and for each release 1 to 3 short bullet points of what happened, then the decisions, action items (with owner and due date) and open questions.
 
-**Part C. Confirm.** End with exactly this question:
+**Part C. Confirm.** End with exactly this question (as clickable choices if you can):
 
 > Is this right?
 > A. Yes, send me the file.
