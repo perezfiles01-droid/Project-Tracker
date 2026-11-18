@@ -50,6 +50,12 @@ ok("its questions are multiple choice, best guess first, with an Other option",
    /2 to 4 lettered options/.test(tpl) && /\(my guess\)/.test(tpl) && /Other: tell me/.test(tpl));
 ok("it shows the summary in plain words and asks Is this right? A / B / C",
    /Part B\. The summary in plain words/.test(tpl) && /> Is this right\?\n> A\. Yes, send me the file\.\n> B\. Change something/.test(tpl) && /Then STOP and wait/.test(tpl));
+ok("it asks for clickable choices, with Other to type an answer, and one at a time otherwise",
+   /ALWAYS use it for every question in this template/.test(tpl) && /an "Other" option so I can type my own answer/.test(tpl) && /ask ONE question per message/.test(tpl));
+const q1 = tpl.indexOf("> What do you want to put in this project update?"), qa = tpl.indexOf("**Part A. Questions.**");
+ok("the first question is always what to put in the update, asked on its own before the rest",
+   q1 > 0 && q1 < qa && /Question 1, always first and always on its own/.test(tpl) && /Ask exactly this first, nothing else, and wait for my answer/.test(tpl) &&
+   /> A\. Everything we discussed in this chat \(my guess\)/.test(tpl));
 ok("it sets rules for simple wording", /How to write so it is simple to understand/.test(tpl) && /Short sentences/.test(tpl));
 ok("it lists every ADB release, plus Hotfix and General",
    ["R2026.1 Multiple Records", "R2026.2 Centralized", "R2026.3 Email Records", "R2026.3.1 Email Records Enhancement",
