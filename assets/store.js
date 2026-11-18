@@ -105,6 +105,8 @@
       "tracker.seeded",
       // FAQ answers imported from Claude or written by hand, per project.
       "tracker.faq",
+      // Project updates: the timeline and "where things stand", per project.
+      "tracker.updates",
     ],
     settings: [
       "tracker.theme",

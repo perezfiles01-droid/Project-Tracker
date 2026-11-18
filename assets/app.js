@@ -378,6 +378,7 @@
     images() { return window.TrackerImages.view(window.TrackerLinks.findValue("images")); },
     editor() { return window.TrackerEditor.view(window.TrackerLinks.findValue("editor")); },
     faq() { return window.TrackerFAQ.view(); },
+    updates() { return window.TrackerUpdates.view(); },
   };
 
   /* ---------- shell ---------- */
@@ -412,6 +413,8 @@
       ["editor", "Image editor", null],
       // Asked for 18 Nov 2026: a book of answers, per project.
       ["faq", "FAQ", null],
+      // Asked for 18 Nov 2026: the day-by-day record of each project.
+      ["updates", "Project updates", null],
     ] },
     { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
@@ -558,7 +561,9 @@
       return render();
     }
 
-    const chip = e.target.closest(".chip");
+    // Only the chips this handler owns. FAQ and Project updates draw their
+    // own chips with their own handlers, and a bare ".chip" here threw on them.
+    const chip = e.target.closest("[data-chips] .chip");
     if (chip) {
       state.filters[chip.closest("[data-chips]").dataset.chips] = chip.dataset.value;
       return render();

@@ -899,6 +899,54 @@ svg.ie-ci{fill:none;stroke:#333;stroke-width:1.7;stroke-linejoin:round}
 .faq-new{font-size:12px;color:var(--ok)}
 @media (max-width:820px){.faq-split{grid-template-columns:1fr}.faq-list{position:static;max-height:none}}
 
+/* ---------- Project updates ---------- */
+.pu-chips .pu-n{color:var(--dim);margin-left:2px}
+.pu-stand{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin-bottom:22px;box-shadow:inset 3px 0 0 var(--accent)}
+.pu-sh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.pu-sh b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.pu-asof{font-size:12.5px;color:var(--dim)}
+.pu-stp{font-size:16px;line-height:1.6;margin:0 0 14px;color:var(--text)}
+.pu-sta{width:100%;box-sizing:border-box;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px;font:inherit;font-size:15px;line-height:1.55;resize:vertical}
+.pu-dl{max-width:220px}
+.pu-dim{color:var(--dim);font-size:13.5px}
+.pu-open{display:grid;grid-template-columns:1fr 1fr;gap:18px;border-top:1px solid var(--line);padding-top:12px}
+.pu-open h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pu-open ul,.pu-det ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pu-item{display:flex;align-items:flex-start;gap:6px}
+.pu-item label{display:flex;gap:9px;align-items:flex-start;flex:1;cursor:pointer;line-height:1.45;font-size:14px}
+.pu-item input{margin-top:3px;accent-color:var(--accent)}
+.pu-item small{display:block;color:var(--dim);font-size:12px}
+.pu-it.done{text-decoration:line-through;color:var(--dim)}
+.pu-ia{display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.pu-item:hover .pu-ia,.pu-ia:focus-within{opacity:1}
+.pu-ia button{width:24px;height:24px;background:none;border:1px solid transparent;border-radius:6px;color:var(--muted);cursor:pointer}
+.pu-ia button:hover{border-color:var(--line);color:var(--text)}
+.pu-tlh{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 12px}
+.pu-tl{position:relative;padding-left:26px}
+.pu-tl::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line)}
+.pu-day{position:relative;margin-bottom:18px}
+.pu-dot{position:absolute;left:-25px;top:18px;width:12px;height:12px;border-radius:50%;background:var(--panel);border:3px solid var(--accent)}
+.pu-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 22px 18px}
+.pu-dh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pu-date{font-size:13px;font-weight:600;color:var(--accent)}
+.pu-head{font-size:19px;margin:6px 0 10px;letter-spacing:-.2px;line-height:1.3}
+.pu-block{padding:10px 0 4px;border-top:1px dashed var(--line)}
+.pu-block:first-of-type{border-top:0;padding-top:0}
+.pu-block p{font-size:15.5px;line-height:1.65;margin:6px 0 10px;color:var(--text)}
+.pu-rel{display:inline-block;font-size:11.5px;font-weight:600;border:1px solid var(--line);background:var(--panel-2);color:var(--text);border-radius:999px;padding:3px 10px;margin:4px 0 2px}
+.pu-rel[data-rel="Hotfix"]{border-color:var(--warn);color:var(--warn)}
+.pu-dets{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.pu-det summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0;user-select:none}
+.pu-det summary:hover{color:var(--text)}
+.pu-det ul{margin:6px 0 8px 4px}
+.pu-det li{font-size:14px;line-height:1.5}
+.pu-det > ul > li:not(.pu-item){padding-left:14px;position:relative}
+.pu-det > ul > li:not(.pu-item)::before{content:"•";position:absolute;left:2px;color:var(--dim)}
+.pu-row2{display:grid;grid-template-columns:200px 1fr;gap:12px}
+.pu-rd{font-size:12px;color:var(--dim);white-space:nowrap}
+.pu mark{background:rgba(250,204,21,.35);color:inherit;border-radius:3px;padding:0 1px}
+@media (max-width:820px){.pu-open,.pu-row2{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -1145,6 +1193,8 @@ window.TRACKER_DATA = {"generatedAt": "2026-09-03 05:25 UTC", "source": "BA_Mast
       "tracker.seeded",
       // FAQ answers imported from Claude or written by hand, per project.
       "tracker.faq",
+      // Project updates: the timeline and "where things stand", per project.
+      "tracker.updates",
     ],
     settings: [
       "tracker.theme",
@@ -9746,6 +9796,669 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 
 </script>
 <script>
+/* Project updates — the running record of a project, day by day.
+
+   Asked for 18 Nov 2026. At the end of a day (or later, catching up), the
+   template goes to Claude, Claude writes the day's update from the chat in
+   one fixed JSON shape, and the file is imported under its project. Each
+   import adds to a timeline; the newest "where things stand" paragraph sits
+   on top, with every action item and question still open from every day.
+
+   Rules that came with the request:
+   - The day an entry belongs to is the day things HAPPENED, written by
+     Claude in the file, never the day it was imported. One file may carry
+     several days, so a late catch-up lands on the right dates.
+   - A second import for a day that already exists merges into it.
+   - Everything in "where things stand" is editable: the paragraph, and each
+     open item and question (reword, tick, delete).
+   - ADB work is grouped by release (R2026.1, R2026.2, ...), with Hotfix and
+     General for what belongs to none.
+
+   Stored in tracker.updates, a KEYS.data key: backed up, synced, on undo. */
+(() => {
+  const KEY = "tracker.updates";
+  const PROJECTS = [{ id: "adb", name: "ADB EDRMS" }, { id: "gra", name: "GRA GLASS" }];
+  /* ADB's releases, in order. Claude may add a new one in the same pattern. */
+  const RELEASES = {
+    adb: ["R2026.1 Multiple Records", "R2026.2 Centralized", "R2026.3 Email Records",
+      "R2026.3.1 Email Records Enhancement", "R2026.4 Utilization Report", "Hotfix", "General"],
+    gra: ["General"],
+  };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const S = () => window.TrackerStore;
+  const render = () => window.TrackerRender();
+  const uid = (p = "u") => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+  const norm = (s) => clean(s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+  const blank = () => ({ entries: [], status: {} });
+  const load = () => { const d = S().get(KEY, null); return d && Array.isArray(d.entries) ? { status: {}, ...d } : blank(); };
+  const save = (d) => S().set(KEY, d);
+
+  /* --------------------------------------------------------------- state */
+  let project = null;
+  let rel = "All";
+  let editing = null;        // a day being edited: deep copy, or { status: true, text }
+  let ai = null;
+  let notice = "";
+  const projName = (id) => (PROJECTS.find((p) => p.id === id) || {}).name || id;
+
+  /* ------------------------------------------------------------ releases */
+  /** Order: the known list first, then anything new Claude introduced, sorted by number. */
+  function releasesOf(p, entries) {
+    const known = RELEASES[p] || ["General"];
+    const seen = [...new Set(entries.filter((e) => e.project === p).flatMap((e) => e.blocks.map((b) => b.release)))];
+    const extra = seen.filter((r) => !known.includes(r)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const head = known.filter((r) => r !== "Hotfix" && r !== "General");
+    return [...head, ...extra, ...known.filter((r) => r === "Hotfix" || r === "General")];
+  }
+  /** Match what Claude wrote to a known release: "R2026.4", "2026.4", "utilization report" all land on one. */
+  function canonRelease(p, raw) {
+    const r = clean(raw);
+    if (!r) return "General";
+    const list = RELEASES[p] || ["General"];
+    const num = (r.match(/\d{4}(?:\.\d+)+/) || [])[0];
+    if (num) {
+      const hit = list.find((x) => (x.match(/\d{4}(?:\.\d+)+/) || [])[0] === num);
+      if (hit) return hit;
+      // A release not in the list yet, written in the list's own pattern.
+      const name = r.replace(/^.*?\d{4}(?:\.\d+)+\s*[-:–]?\s*/, "").trim();
+      return "R" + num + (name ? " " + name : "");
+    }
+    const byName = list.find((x) => norm(x).includes(norm(r)) || norm(r).includes(norm(x.replace(/^R[\d.]+\s*/, ""))));
+    if (byName) return byName;
+    if (/hot\s*fix|patch|urgent fix/i.test(r)) return "Hotfix";
+    return r.length > 40 ? "General" : r;
+  }
+
+  /* ------------------------------------------------------------ template */
+  const templateFor = () => `# Project update template
+
+You are writing my daily project update. Follow every rule below exactly, in every chat, every time. Never change the format, the field names or the order.
+
+## Where the content comes from
+
+- Use everything we discussed in THIS chat about the project: meetings, client requests, requirements, decisions, progress, problems and next steps.
+- Do not invent anything that was not discussed. If something is unclear, leave it out.
+- **Dates:** every update belongs to the day the things in it HAPPENED, not today. If the chat covers several days, write one update per day. If you cannot tell which day something happened, ask me before answering.
+
+## What to send back
+
+Reply with exactly these two things, in this order, and nothing else (no greeting, no explanation):
+
+1. A downloadable file named \`update.json\` containing the JSON. If you cannot create files, skip this item.
+2. The same JSON in a single code block marked \`json\`.
+
+## The JSON shape
+
+\`\`\`json
+{
+  "format": "tracker-update",
+  "version": 1,
+  "project": "",
+  "status": "",
+  "updates": [
+    {
+      "date": "YYYY-MM-DD",
+      "headline": "",
+      "releases": [
+        {
+          "release": "",
+          "summary": [""],
+          "decisions": [],
+          "actions": [ { "task": "", "owner": "", "due": "" } ],
+          "questions": []
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+## Rules for every field
+
+- **format** is always \`"tracker-update"\`, **version** is always \`1\`.
+- **project**: exactly \`"ADB EDRMS"\` or \`"GRA GLASS"\`.
+- **status**: "Where things stand". One paragraph of 2 to 4 sentences, at most 80 words, describing the project's overall position as of the LATEST date in this file: what is done, what is next, the main risk. Plain language.
+- **updates**: one entry per day, oldest first. Never two entries with the same date.
+  - **date**: the day it happened, as YYYY-MM-DD.
+  - **headline**: what the day was about, at most 10 words, sentence case, no full stop.
+  - **releases**: one block per release the day touched. Never two blocks for the same release in one day.
+    - **release**: for ADB EDRMS, exactly one of these names:
+      R2026.1 Multiple Records, R2026.2 Centralized, R2026.3 Email Records, R2026.3.1 Email Records Enhancement, R2026.4 Utilization Report, Hotfix, General.
+      Use **Hotfix** for urgent fixes outside a release, and **General** for anything belonging to no release. If the work is clearly for a NEW release, name it in the same pattern, for example "R2026.5 Short Name".
+      For GRA GLASS, use **General** unless the chat names a release.
+    - **summary**: 1 to 3 paragraphs, each a string of 2 to 5 full sentences, in plain past tense, readable on its own like meeting minutes: who met or asked, what was discussed, what came of it. Name people as they were named in the chat.
+    - **decisions**: requirements the client asked for and things agreed. Each one sentence, ending with a full stop. Empty list if none.
+    - **actions**: things someone must do. **task** starts with a verb and ends with a full stop; **owner** is the person's name or "" if unknown; **due** is YYYY-MM-DD or "" if no date was given. Empty list if none.
+    - **questions**: things still unclear, blocked or risky, each one sentence ending with a question mark or full stop, naming who it waits on if known. Empty list if none.
+- No markdown, no bold, no emoji, no line breaks inside any string.
+- Valid JSON only: double quotes, no comments, no trailing commas.
+
+## Example (copy this structure exactly)
+
+\`\`\`json
+{
+  "format": "tracker-update",
+  "version": 1,
+  "project": "ADB EDRMS",
+  "status": "The retention labels for email records are approved and ready to build. Migration testing of batch 2 is next. The main risk is the AvePoint licence renewal, which is still with IT.",
+  "updates": [
+    {
+      "date": "2026-11-18",
+      "headline": "Email retention labels approved by the client",
+      "releases": [
+        {
+          "release": "R2026.3 Email Records",
+          "summary": [
+            "Maria and the records team reviewed the proposed retention labels for email records. They accepted the seven-year label for correspondence and asked for a shorter one for newsletters."
+          ],
+          "decisions": ["Correspondence keeps a seven-year retention label.", "Newsletters get a one-year retention label."],
+          "actions": [{ "task": "Send the final label list to Maria.", "owner": "Me", "due": "2026-11-20" }],
+          "questions": ["Who signs off the archive policy, Maria or the legal team?"]
+        },
+        {
+          "release": "Hotfix",
+          "summary": ["A permissions error on the Finance library was reported in the morning and fixed by resetting the inherited permissions."],
+          "decisions": [],
+          "actions": [],
+          "questions": []
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+## Check before you send
+
+- [ ] Only the file and one \`json\` code block, nothing else.
+- [ ] Every date is the day it happened, as YYYY-MM-DD, oldest first, none repeated.
+- [ ] Every release name is from the allowed list or follows the "R2026.x Name" pattern.
+- [ ] Every summary paragraph reads on its own as full sentences.
+- [ ] status describes the latest date in the file.
+- [ ] The JSON is valid.
+`;
+  function downloadTemplate() {
+    window.TrackerUI.saveBlob(new Blob([templateFor()], { type: "text/markdown" }), "Project-update-template.md");
+  }
+
+  /* --------------------------------------------------------------- parse */
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  function toISO(d) {
+    const s = clean(d);
+    if (ISO.test(s)) return s;
+    const t = Date.parse(s);
+    if (isNaN(t)) return "";
+    const x = new Date(t);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  }
+  const list = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+  const sentence = (s) => clean(s).replace(/^(\d+[.)]|[-*•])\s+/, "").replace(/\*\*/g, "");
+
+  /** Claude's reply to { project, status, days: [{ date, headline, blocks }] }. */
+  function parse(text, fallbackProject) {
+    let t = String(text || "").replace(/^﻿/, "");
+    const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence && /[{[]/.test(fence[1])) t = fence[1];
+    const a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a < 0 || b < a) throw new Error("No update was found in that. Paste the whole json block Claude gave you.");
+    let data;
+    try { data = JSON.parse(t.slice(a, b + 1).replace(/[“”]/g, '"')); }
+    catch { throw new Error("That is not complete JSON. Copy the whole code block from Claude, from the first { to the last }."); }
+    const named = PROJECTS.find((p) => norm(p.name) === norm(data.project) || norm(data.project).includes(p.id));
+    const proj = named ? named.id : fallbackProject;
+    const raw = data.updates || data.days || (data.date ? [data] : []);
+    const days = list(raw).map((u) => {
+      const date = toISO(u.date);
+      const blocks = list(u.releases || u.blocks || (u.summary ? [u] : [])).map((r) => ({
+        release: canonRelease(proj, r.release),
+        summary: list(r.summary).flatMap((p) => String(p).split(/\n\s*\n/)).map(clean).filter(Boolean),
+        decisions: list(r.decisions).map(sentence).filter(Boolean),
+        actions: list(r.actions).map((x) => (typeof x === "string" ? { task: sentence(x) } : x))
+          .map((x) => ({ id: uid("a"), text: sentence(x.task || x.text), owner: clean(x.owner), due: toISO(x.due), done: false }))
+          .filter((x) => x.text),
+        questions: list(r.questions).map((x) => (typeof x === "string" ? x : x.text))
+          .map((x) => ({ id: uid("k"), text: sentence(x), done: false })).filter((x) => x.text),
+      })).filter((r) => r.summary.length || r.decisions.length || r.actions.length || r.questions.length);
+      return { date, headline: clean(u.headline).replace(/\.$/, ""), blocks: mergeBlocks([], blocks) };
+    }).filter((d) => d.blocks.length);
+    if (!days.length) throw new Error("No days with any content were found in that.");
+    const undated = days.filter((d) => !d.date).length;
+    if (undated) throw new Error(`${undated === 1 ? "One day has" : undated + " days have"} no date. Ask Claude to add the date each update happened (YYYY-MM-DD).`);
+    return { project: proj, named: !!named, status: clean(data.status), days };
+  }
+
+  /* --------------------------------------------------------------- merge */
+  const dedupe = (a, b, key) => { const out = [...a]; for (const x of b) if (!out.some((y) => norm(key(y)) === norm(key(x)))) out.push(x); return out; };
+  /** Blocks of the same release become one: newer paragraphs win, lists are combined. */
+  function mergeBlocks(old, add) {
+    const out = old.map((b) => ({ ...b }));
+    for (const b of add) {
+      const cur = out.find((x) => x.release === b.release);
+      if (!cur) { out.push({ ...b }); continue; }
+      if (b.summary.length) cur.summary = b.summary;
+      cur.decisions = dedupe(cur.decisions, b.decisions, (x) => x);
+      cur.actions = dedupe(cur.actions, b.actions, (x) => x.text);
+      cur.questions = dedupe(cur.questions, b.questions, (x) => x.text);
+    }
+    return out;
+  }
+  function importParsed(p) {
+    const d = load();
+    let added = 0, merged = 0;
+    for (const day of p.days) {
+      const cur = d.entries.find((e) => e.project === p.project && e.date === day.date);
+      if (cur) { cur.blocks = mergeBlocks(cur.blocks, day.blocks); if (day.headline) cur.headline = day.headline; cur.updated = new Date().toISOString(); merged++; }
+      else { d.entries.push({ id: uid("d"), project: p.project, ...day, updated: new Date().toISOString() }); added++; }
+    }
+    // The status is replaced only by a file at least as recent as the one it came from.
+    const latest = p.days.map((x) => x.date).sort().pop();
+    const st = d.status[p.project];
+    if (p.status && (!st || !st.asOf || latest >= st.asOf)) d.status[p.project] = { text: p.status, asOf: latest };
+    save(d);
+    return { added, merged, statusKept: !!(p.status && st && st.asOf && latest < st.asOf) };
+  }
+
+  /* -------------------------------------------------------------- search */
+  /* Reuses the FAQ's meaning-aware ranking by giving each day the same shape. */
+  const asDoc = (e) => ({
+    id: e.id, title: e.headline, category: e.blocks.map((b) => b.release).join(" "), keywords: [],
+    summary: e.blocks.flatMap((b) => b.summary).join(" "),
+    sections: e.blocks.map((b) => ({ heading: b.release, steps: [...b.decisions, ...b.actions.map((x) => x.text + " " + x.owner), ...b.questions.map((x) => x.text)] })),
+  });
+  const searchDays = (q, entries) => window.TrackerFAQ.search(q, entries.map(asDoc)).map((r) => ({ id: r.q.id, cover: r.cover }));
+
+  async function askAI(query, entries) {
+    ai = { q: query, ids: [], busy: true, note: "" };
+    render();
+    const titles = entries.map((e, i) => `${i + 1}. ${e.date}: ${e.headline}`).join("\n");
+    try {
+      const reply = await window.TrackerAI.match(`Question: ${query}\n\nTitles:\n${titles}`);
+      const nums = [...new Set((String(reply).match(/\d+/g) || []).map(Number))].filter((n) => n >= 1 && n <= entries.length).slice(0, 3);
+      ai = { q: query, ids: nums.map((n) => entries[n - 1].id), busy: false, note: nums.length ? "" : "The AI found no day that covers that." };
+    } catch (err) { ai = { q: query, ids: [], busy: false, note: String(err && err.message || err) }; }
+    render();
+  }
+
+  /* -------------------------------------------------------------- render */
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function longDate(iso) {
+    if (!ISO.test(iso || "")) return iso || "";
+    const [y, m, d] = iso.split("-").map(Number), x = new Date(y, m - 1, d);
+    return `${DAYS[x.getDay()]} ${d} ${MONTHS[m - 1]} ${y}`;
+  }
+  const shortDate = (iso) => { if (!ISO.test(iso || "")) return iso || ""; const [, m, d] = iso.split("-").map(Number); return `${d} ${MONTHS[m - 1]}`; };
+  function hl(text, q) {
+    const html = esc(text);
+    const ws = (q || "").toLowerCase().match(/[a-z0-9]{3,}/g);
+    if (!ws) return html;
+    return html.replace(/[A-Za-z0-9]+/g, (w) => (ws.some((t) => w.toLowerCase().startsWith(t.slice(0, Math.max(3, t.length - 2)))) ? `<mark>${w}</mark>` : w));
+  }
+  const relTag = (r) => `<span class="pu-rel" data-rel="${esc(r)}">${esc(r)}</span>`;
+
+  function cards() {
+    const q = window.TrackerLinks.findValue("updates");
+    let body;
+    if (q) {
+      const all = load().entries;
+      const hits = searchDays(q, all);
+      body = hits.length ? `<div class="faq-all">${hits.map(({ id }) => { const e = all.find((x) => x.id === id);
+        return `<button class="faq-row" data-pu-goto="${e.project}"><span class="faq-pj">${esc(projName(e.project))}</span>
+          <span class="pu-rd">${esc(longDate(e.date))}</span><b>${hl(e.headline, q)}</b></button>`; }).join("")}</div>`
+        : `<div class="empty">No update in either project matches that.</div>`;
+    } else body = `<div class="faq-cards">${PROJECTS.map((p) => `<button class="faq-card" data-pu-project="${p.id}"><span>${esc(p.name)}</span></button>`).join("")}</div>`;
+    return `<h2 class="page">Project updates</h2>
+      <div class="pagetools">${window.TrackerLinks.searchBox("updates", "Search all updates…")}
+        <button class="btn" data-pu="template">⤓ Download template</button></div>${body}`;
+  }
+
+  /** Every action and question still open, from every day, newest day first. */
+  function openItems(entries, kind) {
+    return entries.slice().sort((a, b) => b.date.localeCompare(a.date)).flatMap((e) =>
+      e.blocks.filter((b) => rel === "All" || b.release === rel)
+        .flatMap((b) => b[kind].filter((x) => !x.done).map((x) => ({ x, e, b }))));
+  }
+  function itemHtml({ x, e, b }, kind) {
+    const meta = [kind === "actions" && x.owner ? esc(x.owner) : "", kind === "actions" && x.due ? "due " + esc(shortDate(x.due)) : "",
+      "from " + esc(shortDate(e.date)), project === "adb" && rel === "All" ? esc(b.release.split(" ")[0]) : ""].filter(Boolean).join(" · ");
+    return `<li class="pu-item"><label><input type="checkbox" data-pu-tick="${x.id}"${x.done ? " checked" : ""}>
+        <span><span class="pu-it">${esc(x.text)}</span><small>${meta}</small></span></label>
+      <span class="pu-ia"><button data-pu-ied="${x.id}" title="Edit" aria-label="Edit">✎</button><button data-pu-idel="${x.id}" title="Delete" aria-label="Delete">✕</button></span></li>`;
+  }
+
+  function statusCard(entries) {
+    const st = load().status[project] || {};
+    if (editing && editing.status) return `<section class="pu-stand"><div class="pu-sh"><b>Where things stand</b>
+        <span class="faq-acts"><button class="btn sm" data-pu="cancel">Cancel</button><button class="btn sm primary" data-pu="savestatus">Save</button></span></div>
+        <label class="faq-l pu-dl">As of<input type="date" data-pu-f="asOf" value="${esc(editing.asOf || "")}"></label>
+        <textarea class="pu-sta" data-pu-f="text" rows="4">${esc(editing.text)}</textarea></section>`;
+    const acts = openItems(entries, "actions"), qs = openItems(entries, "questions");
+    return `<section class="pu-stand">
+      <div class="pu-sh"><b>Where things stand</b>${st.asOf ? `<span class="pu-asof">as of ${esc(longDate(st.asOf))}</span>` : ""}
+        <span class="faq-acts"><button class="btn sm" data-pu="editstatus">Edit</button></span></div>
+      <p class="pu-stp">${st.text ? esc(st.text) : `<span class="pu-dim">Nothing yet. Import an update from Claude and its status paragraph appears here.</span>`}</p>
+      <div class="pu-open">
+        <div><h4>Still open · ${acts.length}</h4>${acts.length ? `<ul>${acts.map((i) => itemHtml(i, "actions")).join("")}</ul>` : `<p class="pu-dim">No open action items.</p>`}</div>
+        <div><h4>Open questions · ${qs.length}</h4>${qs.length ? `<ul>${qs.map((i) => itemHtml(i, "questions")).join("")}</ul>` : `<p class="pu-dim">No open questions.</p>`}</div>
+      </div></section>`;
+  }
+
+  function blockHtml(b, q) {
+    const n = (k) => b[k].length;
+    const list = (k, f) => (n(k) ? `<details class="pu-det"><summary>${{ decisions: "Decisions & requirements", actions: "Action items", questions: "Open questions" }[k]} (${n(k)})</summary><ul>${b[k].map(f).join("")}</ul></details>` : "");
+    return `<div class="pu-block">
+      ${project === "adb" || b.release !== "General" ? relTag(b.release) : ""}
+      ${b.summary.map((p) => `<p>${hl(p, q)}</p>`).join("")}
+      <div class="pu-dets">
+        ${list("decisions", (x) => `<li>${hl(x, q)}</li>`)}
+        ${list("actions", (x) => `<li class="pu-item"><label><input type="checkbox" data-pu-tick="${x.id}"${x.done ? " checked" : ""}>
+          <span><span class="pu-it${x.done ? " done" : ""}">${hl(x.text, q)}</span>${x.owner || x.due ? `<small>${[esc(x.owner), x.due ? "due " + esc(shortDate(x.due)) : ""].filter(Boolean).join(" · ")}</small>` : ""}</span></label></li>`)}
+        ${list("questions", (x) => `<li class="pu-item"><label><input type="checkbox" data-pu-tick="${x.id}"${x.done ? " checked" : ""}>
+          <span class="pu-it${x.done ? " done" : ""}">${hl(x.text, q)}</span></label></li>`)}
+      </div></div>`;
+  }
+
+  function dayEditor(e) {
+    const rels = releasesOf(project, load().entries);
+    const lines = (a, f) => a.map(f).join("\n");
+    return `<div class="pu-day pu-editing"><span class="pu-dot"></span><div class="pu-card faq-ed">
+      <div class="faq-meta"><span class="faq-cat">Editing</span><span class="faq-acts">
+        <button class="btn sm" data-pu="cancel">Cancel</button><button class="btn sm primary" data-pu="saveday">Save</button></span></div>
+      <div class="pu-row2"><label class="faq-l">Date it happened<input type="date" data-pu-f="date" value="${esc(e.date)}"></label>
+        <label class="faq-l">Headline<input data-pu-f="headline" value="${esc(e.headline)}"></label></div>
+      <datalist id="puRels">${rels.map((r) => `<option value="${esc(r)}">`).join("")}</datalist>
+      ${e.blocks.map((b, i) => `<div class="faq-eds">
+        <div class="faq-edh"><input data-pu-f="rel:${i}" value="${esc(b.release)}" list="puRels" aria-label="Release">
+          <button class="btn sm" data-pu="delblock" data-i="${i}"${e.blocks.length < 2 ? " disabled" : ""}>Remove</button></div>
+        <label class="faq-l">Summary <small>a blank line starts a new paragraph</small><textarea data-pu-f="sum:${i}" rows="5">${esc(b.summary.join("\n\n"))}</textarea></label>
+        <label class="faq-l">Decisions &amp; requirements <small>one per line</small><textarea data-pu-f="dec:${i}" rows="3">${esc(lines(b.decisions, (x) => x))}</textarea></label>
+        <label class="faq-l">Action items <small>one per line: task | owner | due (YYYY-MM-DD)</small><textarea data-pu-f="act:${i}" rows="3">${esc(lines(b.actions, (x) => [x.text, x.owner, x.due].join(" | ").replace(/( \| )+$/, "")))}</textarea></label>
+        <label class="faq-l">Open questions <small>one per line</small><textarea data-pu-f="que:${i}" rows="2">${esc(lines(b.questions, (x) => x.text))}</textarea></label>
+      </div>`).join("")}
+      <button class="btn sm" data-pu="addblock">+ Add release</button>
+    </div></div>`;
+  }
+
+  function projectView() {
+    const q = window.TrackerLinks.findValue("updates");
+    const all = load().entries.filter((e) => e.project === project);
+    const rels = releasesOf(project, load().entries);
+    if (rel !== "All" && !rels.includes(rel)) rel = "All";
+    const inRel = (e) => rel === "All" || e.blocks.some((b) => b.release === rel);
+    let days = all.filter(inRel).sort((a, b) => b.date.localeCompare(a.date));
+    let weak = false;
+    const aiFor = ai && ai.q === q ? ai : null;
+    if (q) {
+      const hits = searchDays(q, days);
+      weak = !hits.length || hits[0].cover < 0.5;
+      const ids = [...(aiFor ? aiFor.ids : []), ...hits.map((h) => h.id)];
+      days = days.filter((e) => ids.includes(e.id));
+    }
+    const edId = editing && !editing.status ? editing.id : null;
+    const tl = days.length ? days.map((e) => e.id === edId ? dayEditor(editing) : `<div class="pu-day" id="pu-${e.id}">
+        <span class="pu-dot"></span>
+        <div class="pu-card">
+          <div class="pu-dh"><span class="pu-date">${esc(longDate(e.date))}</span>
+            ${aiFor && aiFor.ids.includes(e.id) ? `<span class="faq-aitag">AI match</span>` : ""}
+            <span class="faq-acts"><button class="btn sm" data-pu="copy" data-id="${e.id}">Copy</button>
+              <button class="btn sm" data-pu="edit" data-id="${e.id}">Edit</button>
+              <button class="btn sm" data-pu="delete" data-id="${e.id}">Delete</button></span></div>
+          <h3 class="pu-head">${hl(e.headline, q)}</h3>
+          ${e.blocks.filter((b) => rel === "All" || b.release === rel).map((b) => blockHtml(b, q)).join("")}
+        </div></div>`).join("")
+      : `<div class="faq-none">${all.length ? (q ? "No day matches that." : "Nothing under this release yet.") : "No updates yet. Download the template, give it to Claude at the end of the day, and import what it sends back."}</div>`;
+    const chipCount = (r) => (r === "All" ? all.length : all.filter((e) => e.blocks.some((b) => b.release === r)).length);
+    return `<div class="faq pu">
+      <div class="faq-head">
+        <button class="btn sm" data-pu="back">← Projects</button>
+        <h2 class="page">${esc(projName(project))} · Project updates</h2>
+        <span class="faq-tools">
+          <button class="btn sm" data-pu="template">⤓ Template</button>
+          <span class="faq-menuwrap"><button class="btn sm" data-pu="menu" data-m="imp">+ Import ▾</button>
+            <span class="faq-menu" data-menu="imp" hidden><button data-pu="importfile">Import file…</button><button data-pu="importpaste">Paste text…</button></span></span>
+          <span class="faq-menuwrap"><button class="btn sm" data-pu="menu" data-m="exp">Export ▾</button>
+            <span class="faq-menu" data-menu="exp" hidden><button data-pu="exportdoc">Readable document (.doc)</button><button data-pu="exportjson">Data file (.json)</button></span></span>
+        </span>
+      </div>
+      <div class="pagetools faq-search">${window.TrackerLinks.searchBox("updates", "Search updates in your own words…")}</div>
+      ${notice ? `<div class="faq-notice">${esc(notice)}</div>` : ""}
+      ${q && weak ? `<div class="faq-ai">${aiFor && aiFor.busy ? "Asking the AI…" : aiFor && aiFor.note ? esc(aiFor.note)
+        : aiFor ? "The AI's matches are included below." : `No close match. <button class="btn sm" data-pu="ai">Ask AI to find it</button>`}</div>` : ""}
+      ${rels.length > 1 ? `<div class="chips pu-chips">${["All", ...rels].map((r) => `<button class="chip" data-pu-rel="${esc(r)}" aria-pressed="${rel === r}">${esc(r)} <span class="pu-n">${chipCount(r)}</span></button>`).join("")}</div>` : ""}
+      ${statusCard(all)}
+      <h3 class="pu-tlh">Timeline</h3>
+      <div class="pu-tl">${tl}</div>
+    </div>`;
+  }
+
+  const view = () => (project ? projectView() : cards());
+  const count = () => load().entries.length;
+
+  /* ------------------------------------------------------------- dialogs */
+  function modal(html, wire) {
+    return new Promise((resolve) => {
+      const m = document.createElement("div");
+      m.className = "modal faq-modal"; m.innerHTML = `<div class="box">${html}</div>`;
+      document.body.appendChild(m);
+      const done = (v) => { obs.disconnect(); m.remove(); resolve(v); };
+      const obs = new MutationObserver(() => { if (m.hidden) done(null); });
+      obs.observe(m, { attributes: true, attributeFilter: ["hidden"] });
+      m.addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (b && !b.disabled && !b.dataset.self) done(b.dataset.v === "cancel" ? null : b.dataset.v); });
+      if (wire) wire(m, done);
+      const f = m.querySelector("textarea,input,select,button.primary"); if (f) f.focus();
+    });
+  }
+
+  async function confirmImport(p) {
+    const d = load();
+    const rows = p.days.map((day) => ({ day, exists: d.entries.some((e) => e.project === p.project && e.date === day.date) }));
+    const other = p.named && p.project !== project;
+    const v = await modal(`<h3>Import into ${esc(projName(p.project))}</h3>
+      ${other ? `<p class="faq-err">This file says it is for ${esc(projName(p.project))}, not ${esc(projName(project))}. It will be filed under ${esc(projName(p.project))}.</p>` : ""}
+      <p class="lede">${p.days.length === 1 ? "One day" : p.days.length + " days"} found. Each goes on the day it happened.</p>
+      <div class="faq-prev">${rows.map(({ day, exists }) => `<div class="faq-pr"><div><b>${esc(longDate(day.date))}</b>
+        <small>${esc(day.headline)}</small><small>${day.blocks.map((b) => esc(b.release)).join(" · ")}</small></div>
+        <span class="${exists ? "faq-dup" : "faq-new"}">${exists ? "Adds to this day" : "New day"}</span></div>`).join("")}</div>
+      ${p.status ? `<p class="lede pu-dl">Where things stand will be ${(() => { const st = d.status[p.project]; const latest = p.days.map((x) => x.date).sort().pop();
+          return st && st.asOf && latest < st.asOf ? `kept as it is (it is newer, ${esc(longDate(st.asOf))})` : "updated"; })()}.</p>` : ""}
+      <div class="actions"><button class="btn" data-v="cancel">Cancel</button><button class="btn primary" data-v="go">Import</button></div>`);
+    if (v !== "go") return;
+    const r = importParsed(p);
+    project = p.project; rel = "All"; editing = null;
+    flash(`Imported: ${[r.added && `${r.added} new day${r.added === 1 ? "" : "s"}`, r.merged && `${r.merged} added to existing day${r.merged === 1 ? "" : "s"}`].filter(Boolean).join(", ")}.`);
+  }
+
+  async function pasteDialog() {
+    let parsed = null;
+    const v = await modal(`<h3>Paste Claude's update</h3>
+      <p class="lede">Paste the json code block from Claude. Extra text around it is ignored.</p>
+      <textarea class="faq-paste" rows="12" spellcheck="false" placeholder='{ "format": "tracker-update", … }'></textarea>
+      <p class="faq-err" hidden></p>
+      <div class="actions"><button class="btn" data-v="cancel">Cancel</button><button class="btn primary" data-v="next" data-self="1">Next</button></div>`,
+      (m, done) => m.querySelector('[data-v="next"]').addEventListener("click", () => {
+        try { parsed = parse(m.querySelector(".faq-paste").value, project); done("next"); }
+        catch (err) { const p = m.querySelector(".faq-err"); p.hidden = false; p.textContent = err.message; }
+      }));
+    if (v === "next") await confirmImport(parsed);
+  }
+  function importFile() {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = ".json,.txt,.md,application/json,text/plain";
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      try { await confirmImport(parse(await f.text(), project)); }
+      catch (err) { flash(`${f.name}: ${err.message}`, 8000); }
+    };
+    inp.click();
+  }
+
+  /* An item's text, one field, in a small dialog. */
+  async function editItem(id) {
+    const hit = findItem(id); if (!hit) return;
+    const { x, kind } = hit;
+    let out = null;
+    const v = await modal(`<h3>Edit ${kind === "actions" ? "action item" : "open question"}</h3>
+      <label class="faq-l">${kind === "actions" ? "Task" : "Question"}<textarea data-k="text" rows="3">${esc(x.text)}</textarea></label>
+      ${kind === "actions" ? `<div class="pu-row2"><label class="faq-l">Owner<input data-k="owner" value="${esc(x.owner || "")}"></label>
+        <label class="faq-l">Due<input type="date" data-k="due" value="${esc(x.due || "")}"></label></div>` : ""}
+      <div class="actions"><button class="btn" data-v="cancel">Cancel</button><button class="btn primary" data-v="save" data-self="1">Save</button></div>`,
+      (m, done) => m.querySelector('[data-v="save"]').addEventListener("click", () => {
+        out = {}; m.querySelectorAll("[data-k]").forEach((i) => { out[i.dataset.k] = i.value; }); done("save");
+      }));
+    if (v !== "save" || !clean(out.text)) return;
+    updateData((d) => { const h = findItem(id, d); h.x.text = sentence(out.text); if (kind === "actions") { h.x.owner = clean(out.owner); h.x.due = out.due; } });
+  }
+  async function deleteItem(id) {
+    const hit = findItem(id); if (!hit) return;
+    const yes = await window.TrackerUI.confirmDialog({ title: `Delete this ${hit.kind === "actions" ? "action item" : "question"}?`,
+      intro: `"${hit.x.text}" will be removed from ${longDate(hit.e.date)}.`, confirmLabel: "Delete" });
+    if (!yes) return;
+    updateData((d) => { const h = findItem(id, d); h.b[h.kind] = h.b[h.kind].filter((y) => y.id !== id); });
+  }
+  function findItem(id, d = load()) {
+    for (const e of d.entries) for (const b of e.blocks) for (const kind of ["actions", "questions"]) {
+      const x = b[kind].find((y) => y.id === id); if (x) return { x, b, e, kind };
+    }
+    return null;
+  }
+  function updateData(fn) { const d = load(); fn(d); save(d); render(); }
+
+  async function deleteDay(id) {
+    const e = load().entries.find((x) => x.id === id); if (!e) return;
+    const yes = await window.TrackerUI.confirmDialog({ title: `Delete ${longDate(e.date)}?`,
+      intro: `"${e.headline}" and everything recorded for that day will be removed.`, confirmLabel: "Delete day" });
+    if (!yes) return;
+    updateData((d) => { d.entries = d.entries.filter((x) => x.id !== id); });
+  }
+
+  /* --------------------------------------------------------- copy, export */
+  function dayText(e) {
+    return [longDate(e.date) + " — " + e.headline, ...e.blocks.flatMap((b) => [
+      "", (project === "adb" || b.release !== "General") ? b.release : "", ...b.summary,
+      ...(b.decisions.length ? ["", "Decisions & requirements:", ...b.decisions.map((x) => "• " + x)] : []),
+      ...(b.actions.length ? ["", "Action items:", ...b.actions.map((x) => `${x.done ? "☑" : "☐"} ${x.text}${x.owner ? " (" + x.owner + ")" : ""}${x.due ? " due " + longDate(x.due) : ""}`)] : []),
+      ...(b.questions.length ? ["", "Open questions:", ...b.questions.map((x) => `${x.done ? "☑" : "?"} ${x.text}`)] : []),
+    ].filter((l, i, a) => l !== "" || a[i - 1] !== ""))].join("\n");
+  }
+  function flash(msg, ms = 4000) { notice = msg; render(); setTimeout(() => { if (notice === msg) { notice = ""; if (project) render(); } }, ms); }
+  function copyDay(id) {
+    const e = load().entries.find((x) => x.id === id); if (!e) return;
+    const done = () => flash("Copied.", 2500);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(dayText(e)).then(done, done);
+  }
+  const fileStem = () => `${projName(project)} project updates ${new Date().toISOString().slice(0, 10)}`;
+  function exportDoc() {
+    const d = load(), st = d.status[project] || {};
+    const days = d.entries.filter((e) => e.project === project).sort((a, b) => b.date.localeCompare(a.date));
+    const body = `<h1>${esc(projName(project))} · Project updates</h1>
+      ${st.text ? `<h2>Where things stand${st.asOf ? ", as of " + esc(longDate(st.asOf)) : ""}</h2><p>${esc(st.text)}</p>` : ""}
+      ${days.map((e) => `<h2>${esc(longDate(e.date))}: ${esc(e.headline)}</h2>${e.blocks.map((b) => `
+        ${project === "adb" || b.release !== "General" ? `<h3>${esc(b.release)}</h3>` : ""}${b.summary.map((p) => `<p>${esc(p)}</p>`).join("")}
+        ${b.decisions.length ? `<p><b>Decisions &amp; requirements</b></p><ul>${b.decisions.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+        ${b.actions.length ? `<p><b>Action items</b></p><ul>${b.actions.map((x) => `<li>${x.done ? "&#9745;" : "&#9744;"} ${esc(x.text)}${x.owner ? " (" + esc(x.owner) + ")" : ""}${x.due ? ", due " + esc(longDate(x.due)) : ""}</li>`).join("")}</ul>` : ""}
+        ${b.questions.length ? `<p><b>Open questions</b></p><ul>${b.questions.map((x) => `<li>${x.done ? "&#9745;" : "?"} ${esc(x.text)}</li>`).join("")}</ul>` : ""}`).join("")}`).join("")}`;
+    const html = `<html><head><meta charset="utf-8"><title>${esc(fileStem())}</title><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.45}h1{font-size:20pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt;color:#1F4E79}</style></head><body>${body}</body></html>`;
+    window.TrackerUI.saveBlob(new Blob(["﻿" + html], { type: "application/msword" }), fileStem() + ".doc");
+  }
+  function exportJson() {
+    const d = load();
+    const out = { format: "tracker-update", version: 1, project: projName(project), status: (d.status[project] || {}).text || "",
+      updates: d.entries.filter((e) => e.project === project).sort((a, b) => a.date.localeCompare(b.date)).map((e) => ({
+        date: e.date, headline: e.headline, releases: e.blocks.map((b) => ({ release: b.release, summary: b.summary, decisions: b.decisions,
+          actions: b.actions.map((x) => ({ task: x.text, owner: x.owner, due: x.due, done: x.done })), questions: b.questions.map((x) => x.text) })) })) };
+    window.TrackerUI.saveBlob(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }), fileStem() + ".json");
+  }
+
+  /* ------------------------------------------------------------- editing */
+  function saveDay() {
+    const e = editing;
+    const date = toISO(e.date);
+    if (!date) return flash("Give the day a date before saving.");
+    const blocks = e.blocks.map((b) => ({ ...b, release: canonRelease(project, b.release) }))
+      .filter((b) => b.summary.length || b.decisions.length || b.actions.length || b.questions.length);
+    if (!blocks.length) return flash("A day needs at least one paragraph or item.");
+    updateData((d) => {
+      const clash = d.entries.find((x) => x.project === project && x.date === date && x.id !== e.id);
+      const merged = clash ? mergeBlocks(clash.blocks, blocks) : blocks;
+      d.entries = d.entries.filter((x) => x.id !== e.id && x !== clash);
+      d.entries.push({ id: clash ? clash.id : e.id, project, date, headline: clean(e.headline) || (clash && clash.headline) || "", blocks: merged, updated: new Date().toISOString() });
+      if (clash) notice = `${longDate(date)} already had an entry, so the two were merged.`;
+    });
+    editing = null; render();
+  }
+
+  /* Action lines keep their ticks and ids when their text is unchanged. */
+  function readLines(v) { return String(v).split("\n").map((s) => s.trim()).filter(Boolean); }
+  function setBlockField(i, k, v) {
+    const b = editing.blocks[i];
+    if (k === "rel") b.release = v;
+    else if (k === "sum") b.summary = String(v).split(/\n\s*\n/).map(clean).filter(Boolean);
+    else if (k === "dec") b.decisions = readLines(v).map(sentence);
+    else if (k === "act") b.actions = readLines(v).map((l) => {
+      const [text, owner = "", due = ""] = l.split("|").map((s) => s.trim());
+      const old = b.actions.find((x) => norm(x.text) === norm(text));
+      return { id: old ? old.id : uid("a"), text: sentence(text), owner: clean(owner), due: toISO(due), done: old ? old.done : false };
+    });
+    else if (k === "que") b.questions = readLines(v).map((t) => {
+      const old = b.questions.find((x) => norm(x.text) === norm(t));
+      return { id: old ? old.id : uid("k"), text: sentence(t), done: old ? old.done : false };
+    });
+  }
+
+  /* -------------------------------------------------------------- events */
+  document.addEventListener("click", (e) => {
+    const pj = e.target.closest("[data-pu-project], [data-pu-goto]");
+    if (pj) { project = pj.dataset.puProject || pj.dataset.puGoto; rel = "All"; editing = null; ai = null; return render(); }
+    const rc = e.target.closest("[data-pu-rel]");
+    if (rc) { rel = rc.dataset.puRel; return render(); }
+    const ied = e.target.closest("[data-pu-ied]"); if (ied) return editItem(ied.dataset.puIed);
+    const idl = e.target.closest("[data-pu-idel]"); if (idl) return deleteItem(idl.dataset.puIdel);
+    document.querySelectorAll(".pu .faq-menu").forEach((m) => { if (!m.hidden && !e.target.closest(".faq-menuwrap")) m.hidden = true; });
+    const b = e.target.closest("[data-pu]");
+    if (!b || b.disabled) return;
+    const id = b.dataset.id;
+    switch (b.dataset.pu) {
+      case "template": return downloadTemplate();
+      case "back": project = null; editing = null; ai = null; return render();
+      case "menu": { const m = b.parentElement.querySelector(".faq-menu"); const was = m.hidden;
+        document.querySelectorAll(".pu .faq-menu").forEach((x) => (x.hidden = true)); m.hidden = !was; return; }
+      case "importfile": b.closest(".faq-menu").hidden = true; return importFile();
+      case "importpaste": b.closest(".faq-menu").hidden = true; return pasteDialog();
+      case "exportdoc": b.closest(".faq-menu").hidden = true; return exportDoc();
+      case "exportjson": b.closest(".faq-menu").hidden = true; return exportJson();
+      case "ai": return askAI(window.TrackerLinks.findValue("updates"), load().entries.filter((x) => x.project === project));
+      case "copy": return copyDay(id);
+      case "delete": return deleteDay(id);
+      case "edit": { const d = load().entries.find((x) => x.id === id); editing = JSON.parse(JSON.stringify(d)); return render(); }
+      case "editstatus": { const st = load().status[project] || {}; editing = { status: true, text: st.text || "", asOf: st.asOf || "" }; return render(); }
+      case "savestatus": updateData((d) => { d.status[project] = { text: clean(editing.text), asOf: toISO(editing.asOf) }; }); editing = null; return render();
+      case "cancel": editing = null; return render();
+      case "saveday": return saveDay();
+      case "addblock": editing.blocks.push({ release: rel !== "All" ? rel : "General", summary: [], decisions: [], actions: [], questions: [] }); return render();
+      case "delblock": editing.blocks.splice(+b.dataset.i, 1); return render();
+    }
+  });
+  document.addEventListener("change", (e) => {
+    const t = e.target.closest("[data-pu-tick]");
+    if (!t) return;
+    updateData((d) => { const h = findItem(t.dataset.puTick, d); if (h) h.x.done = t.checked; });
+  });
+  document.addEventListener("input", (e) => {
+    const f = e.target.closest("[data-pu-f]");
+    if (!f || !editing) return;
+    const k = f.dataset.puF;
+    const m = k.match(/^(rel|sum|dec|act|que):(\d+)$/);
+    if (m) setBlockField(+m[2], m[1], f.value);
+    else editing[k] = f.value;
+  });
+
+  window.TrackerUpdates = { view, count, parse, templateFor, RELEASES, canonRelease, _state: () => ({ project, rel, editing: !!editing }) };
+})();
+
+</script>
+<script>
 /* Artifacts and timeline for each project.
  *
  * The link tables answer "where is it". These two answer "what are we
@@ -11165,6 +11878,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
     images() { return window.TrackerImages.view(window.TrackerLinks.findValue("images")); },
     editor() { return window.TrackerEditor.view(window.TrackerLinks.findValue("editor")); },
     faq() { return window.TrackerFAQ.view(); },
+    updates() { return window.TrackerUpdates.view(); },
   };
 
   /* ---------- shell ---------- */
@@ -11199,6 +11913,8 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       ["editor", "Image editor", null],
       // Asked for 18 Nov 2026: a book of answers, per project.
       ["faq", "FAQ", null],
+      // Asked for 18 Nov 2026: the day-by-day record of each project.
+      ["updates", "Project updates", null],
     ] },
     { title: "Projects", items: projectNav(), scroll: true },
     { title: "Task", items: [
@@ -11345,7 +12061,9 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       return render();
     }
 
-    const chip = e.target.closest(".chip");
+    // Only the chips this handler owns. FAQ and Project updates draw their
+    // own chips with their own handlers, and a bare ".chip" here threw on them.
+    const chip = e.target.closest("[data-chips] .chip");
     if (chip) {
       state.filters[chip.closest("[data-chips]").dataset.chips] = chip.dataset.value;
       return render();
