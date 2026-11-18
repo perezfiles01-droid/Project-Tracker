@@ -148,3 +148,9 @@ jobs:
       # cannot drift apart.
       - name: The FAQ imports, finds, edits and deletes answers per project
         run: node checks/check_faq.mjs
+      # Days land on the date they happened (not the import date), a late
+      # import never overwrites a newer status, same-day imports merge and
+      # keep ticks, ADB sorts into releases, and the template's own example
+      # imports.
+      - name: Project updates date, merge, sort by release and stay editable
+        run: node checks/check_updates_page.mjs

@@ -109,6 +109,9 @@ let list = await adb();
 ok("Keep both keeps both copies", list.filter((q) => q.title.startsWith("How to change versioning")).length === 2, String(list.length));
 ok("a step number the model added anyway is dropped", list.find((q) => q.title.startsWith("How to restore")).sections[0].steps[0] === "Open the site.");
 ok("a category in the wrong case is corrected", list.find((q) => q.title.startsWith("How to refresh")).category === "Power BI");
+await page.click('[data-faq-cat="Power BI"]');
+ok("a category chip narrows the list to that category", (await page.$$eval(".faq-row", (r) => r.length)) === 1);
+await page.click('[data-faq-cat="All"]');
 ok("the list is grouped by category", (await page.$$eval(".faq-group", (g) => g.map((x) => x.innerText.trim().toLowerCase()))).join("|") === "sharepoint|power bi");
 
 // Replace: import the example once more and replace.
