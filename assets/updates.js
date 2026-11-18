@@ -50,6 +50,9 @@
   let editing = null;        // a day being edited: deep copy, or { status: true, text }
   let ai = null;
   let notice = "";
+  /* Which header menu is open. Held here, not only in the DOM, because a
+     render (a notice clearing itself) would otherwise shut it under the mouse. */
+  let openMenu = null;
   let mode = "daily";          // "daily" | "monthly"
   let month = null;            // "YYYY-MM" on screen; null means the newest month with days
   let writing = null;          // { ym, text } while a monthly summary is being edited
@@ -131,7 +134,8 @@ My answer decides what goes in the update. Record only that. If I choose B, C, D
 ### Then the follow-up questions
 
 **Part A. Questions.** After Question 1, ask me about everything you are still not sure of, as multiple-choice questions (clickable if you can; otherwise one at a time). Rules:
-- Ask about anything uncertain, in this order: the date something happened; which release it belongs to; who was involved; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
+- **Always ask which release each update belongs to, even when you feel sure.** One question per update (or per part of a day, if it touches more than one release). If it fits a release I already have (see the list under "release" below and the data file), offer that release first marked "(my guess)", plus any other release that could also fit. If none of my releases fits, say so in the question ("This does not fit any release you have yet") and offer "Other (none of these is right, I will type my answer)" so I can type the name of a NEW release. Use exactly the name I type from then on.
+- Then ask about anything else uncertain, in this order: the date something happened; who was involved; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
 - Every question has 2 to 4 lettered options (A, B, C, D) written as complete answers, put your best guess first and mark it "(my guess)", and always end with "Other (none of these is right, I will type my answer)". Never leave it out, even when you feel sure.
 - One thing per question. At most 8 questions after Question 1. Plain words, no jargon.
 - If you are genuinely sure about everything, skip straight to Part B, but you must still do Part B and Part C.
@@ -204,10 +208,9 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
   - **date**: the day it happened, as YYYY-MM-DD.
   - **headline**: what the day was about, at most 10 words, sentence case, no full stop.
   - **releases**: one block per release the day touched. Never two blocks for the same release in one day.
-    - **release**: for ADB EDRMS, exactly one of these names:
-      R2026.1 Multiple Records, R2026.2 Centralized, R2026.3 Email Records, R2026.3.1 Email Records Enhancement, R2026.4 Utilization Report, Hotfix, General.
-      Use **Hotfix** for urgent fixes outside a release, and **General** for anything belonging to no release. If the work is clearly for a NEW release, name it in the same pattern, for example "R2026.5 Short Name".
-      For GRA GLASS, use **General** unless the chat names a release.
+    - **release**: the release I confirmed in my answers. My releases so far:
+${releaseLines(only)}
+      **Hotfix** is for urgent fixes outside a release, **General** for anything belonging to no release. A NEW release is only ever one I named in my answers; never invent one.
     - **summary**: 1 to 3 paragraphs, each a string of 2 to 5 full sentences, in plain past tense, readable on its own like meeting minutes: who met or asked, what was discussed, what came of it. Name people as they were named in the chat.
     - Only these two fields per release. Do NOT add decisions, action items, open questions or any other lists: everything goes into the summary paragraphs as plain prose.
 - No markdown, no bold, no emoji, no line breaks inside any string.
@@ -258,12 +261,19 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 
 - [ ] Only the file and one \`json\` code block, nothing else.
 - [ ] Every date is the day it happened, as YYYY-MM-DD, oldest first, none repeated.
-- [ ] Every release name is from the allowed list or follows the "R2026.x Name" pattern.
+- [ ] Every release is one I confirmed in my answers: an existing one, or a new one I typed.
 - [ ] Every summary paragraph reads on its own as full sentences.
 - [ ] status describes the latest date in the file.
 - [ ] monthly has one entry for every month in the file, each covering the whole month so far.
 - [ ] The JSON is valid.
 ${alreadyRecorded(only)}`;
+  /* The releases each project has: its starting list plus every release an
+     update has used, so a release you created last week is offered today. */
+  function releaseLines(only) {
+    const all = load().entries;
+    return PROJECTS.filter((p) => !only || p.id === only)
+      .map((p) => `      - For ${p.name}: ${releasesOf(p.id, all).join(", ")}.`).join("\n");
+  }
   /* What the app already holds, written into the template so a NEW chat can
      still write a whole-month summary: Claude rewrites what is here plus what
      is new, rather than summarising one day as if it were the month. */
@@ -477,7 +487,7 @@ ${alreadyRecorded(only)}`;
     return `<div class="pu-imgs">${imgs.map((x) => `<span class="pu-th">
         <button class="pu-thb" data-pu-view="${esc(x.id)}" data-name="${esc(x.name)}" title="${esc(x.name)}"><img data-blob="${esc(x.id)}" alt="${esc(x.name)}"></button>
         <button class="pu-thx" data-pu-imgdel="${esc(x.id)}" data-day="${esc(e.id)}" title="Remove image" aria-label="Remove image">✕</button></span>`).join("")}
-      ${editable ? `<button class="pu-thadd" data-pu="addimg" data-id="${esc(e.id)}">+ Add image<small>or drop / paste</small></button>` : ""}</div>`;
+      ${editable ? `<button class="pu-thadd" data-pu="addimg" data-id="${esc(e.id)}">+ Add image<small>click, drop or paste</small></button>` : ""}</div>`;
   };
 
   /* ------------------------------------------------------- monthly view */
@@ -646,7 +656,7 @@ ${alreadyRecorded(only)}`;
               <button class="btn sm" data-pu="delete" data-id="${e.id}">Delete</button></span></div>
           <h3 class="pu-head">${hl(e.headline, q)}</h3>
           ${e.blocks.filter((b) => rel === "All" || b.release === rel).map((b) => blockHtml(b, q)).join("")}
-          ${imagesHtml(e, false)}
+          ${imagesHtml(e, true)}
         </div></div>`).join("")
       : `<div class="faq-none">${all.length ? (q ? "No day matches that." : "Nothing under this release yet.") : "No updates yet. Download the template, give it to Claude at the end of the day, and import what it sends back."}</div>`;
     const chipCount = (r) => (r === "All" ? all.length : all.filter((e) => e.blocks.some((b) => b.release === r)).length);
@@ -657,16 +667,17 @@ ${alreadyRecorded(only)}`;
         <span class="faq-tools">
           <button class="btn sm" data-pu="template">⤓ Template</button>
           <span class="faq-menuwrap"><button class="btn sm" data-pu="menu" data-m="imp">+ Import ▾</button>
-            <span class="faq-menu" data-menu="imp" hidden><button data-pu="importfile">Import file…</button><button data-pu="importpaste">Paste text…</button></span></span>
+            <span class="faq-menu" data-menu="imp"${openMenu === "imp" ? "" : " hidden"}><button data-pu="importfile">Import file…</button><button data-pu="importpaste">Paste text…</button></span></span>
           <span class="faq-menuwrap"><button class="btn sm" data-pu="menu" data-m="exp">Export ▾</button>
-            <span class="faq-menu" data-menu="exp" hidden><button data-pu="exportdoc">Readable document (.doc)</button><button data-pu="exportjson">Data file (.json)</button></span></span>
+            <span class="faq-menu" data-menu="exp"${openMenu === "exp" ? "" : " hidden"}><button data-pu="exportdoc">Readable document (.doc)</button><button data-pu="exportjson">Data file (.json)</button></span></span>
         </span>
       </div>
       <div class="pagetools faq-search">${window.TrackerLinks.searchBox("updates", "Search updates in your own words…")}</div>
       ${notice ? `<div class="faq-notice">${esc(notice)}</div>` : ""}
       ${q && weak ? `<div class="faq-ai">${aiFor && aiFor.busy ? "Asking the AI…" : aiFor && aiFor.note ? esc(aiFor.note)
         : aiFor ? "The AI's matches are included below." : `No close match. <button class="btn sm" data-pu="ai">Ask AI to find it</button>`}</div>` : ""}
-      ${rels.length > 1 ? `<div class="chips pu-chips">${["All", ...rels].map((r) => `<button class="chip" data-pu-rel="${esc(r)}" aria-pressed="${rel === r}">${esc(r)} <span class="pu-n">${chipCount(r)}</span></button>`).join("")}</div>` : ""}
+      ${/* Only releases that hold updates (18 Nov 2026); an empty release has no chip. */ ""}
+      ${rels.some((r) => chipCount(r)) ? `<div class="chips pu-chips">${["All", ...rels.filter((r) => chipCount(r) || r === rel)].map((r) => `<button class="chip" data-pu-rel="${esc(r)}" aria-pressed="${rel === r}">${esc(r)} <span class="pu-n">${chipCount(r)}</span></button>`).join("")}</div>` : ""}
       ${statusCard(all)}
       <h3 class="pu-tlh">Timeline</h3>
       ${pager}
@@ -849,19 +860,19 @@ ${alreadyRecorded(only)}`;
     if (iv) return viewImage(iv.dataset.puView, iv.dataset.name);
     const ix = e.target.closest("[data-pu-imgdel]");
     if (ix) return removeImage(ix.dataset.day, ix.dataset.puImgdel);
-    document.querySelectorAll(".pu .faq-menu").forEach((m) => { if (!m.hidden && !e.target.closest(".faq-menuwrap")) m.hidden = true; });
+    if (openMenu && !e.target.closest(".faq-menuwrap")) { openMenu = null; document.querySelectorAll(".pu .faq-menu").forEach((m) => (m.hidden = true)); }
     const b = e.target.closest("[data-pu]");
     if (!b || b.disabled) return;
     const id = b.dataset.id;
     switch (b.dataset.pu) {
       case "template": return downloadTemplate();
       case "back": project = null; editing = null; ai = null; return render();
-      case "menu": { const m = b.parentElement.querySelector(".faq-menu"); const was = m.hidden;
-        document.querySelectorAll(".pu .faq-menu").forEach((x) => (x.hidden = true)); m.hidden = !was; return; }
-      case "importfile": b.closest(".faq-menu").hidden = true; return importFile();
-      case "importpaste": b.closest(".faq-menu").hidden = true; return pasteDialog();
-      case "exportdoc": b.closest(".faq-menu").hidden = true; return exportDoc();
-      case "exportjson": b.closest(".faq-menu").hidden = true; return exportJson();
+      case "menu": { const which = b.dataset.m; openMenu = openMenu === which ? null : which;
+        document.querySelectorAll(".pu .faq-menu").forEach((x) => (x.hidden = x.dataset.menu !== openMenu)); return; }
+      case "importfile": openMenu = null; b.closest(".faq-menu").hidden = true; return importFile();
+      case "importpaste": openMenu = null; b.closest(".faq-menu").hidden = true; return pasteDialog();
+      case "exportdoc": openMenu = null; b.closest(".faq-menu").hidden = true; return exportDoc();
+      case "exportjson": openMenu = null; b.closest(".faq-menu").hidden = true; return exportJson();
       case "ai": return askAI(window.TrackerLinks.findValue("updates"), load().entries.filter((x) => x.project === project));
       case "copy": return copyDay(id);
       case "delete": return deleteDay(id);
@@ -916,7 +927,20 @@ ${alreadyRecorded(only)}`;
     e.preventDefault(); day.classList.remove("pu-over");
     addImagesTo(day.dataset.puDropday, [...e.dataTransfer.files]);
   });
+  /* The image area replaced the decision, action and question lists (18 Nov
+     2026), so it is on every day: click its tile, drop on the day, or click
+     the day and paste. */
+  let pasteDay = null;
+  document.addEventListener("pointerdown", (e) => {
+    const d = e.target.closest && e.target.closest(".pu-day[data-pu-dropday]");
+    pasteDay = d ? d.dataset.puDropday : null;
+  }, true);
   document.addEventListener("paste", (e) => {
+    const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || "");
+    if (pasteDay && !editing && !typing && document.getElementById("pu-" + pasteDay)) {
+      const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => /^image\//.test(f.type));
+      if (files.length) { e.preventDefault(); return addImagesTo(pasteDay, files); }
+    }
     if (!editing || editing.status || !document.querySelector(".pu-editing")) return;
     const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => /^image\//.test(f.type));
     if (!files.length) return;

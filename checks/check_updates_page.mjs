@@ -64,6 +64,9 @@ ok("the template asks for updates only: no decisions, actions or questions field
    shape.includes('"summary": [""]') && !/decisions|actions|questions/.test(shape) && !/"decisions"|"actions"|"questions"/.test(tpl.split("## Example")[1] || "x") &&
    /Do NOT add decisions, action items, open questions/.test(tpl) && !/who owns an action/.test(tpl));
 ok("it sets rules for simple wording", /How to write so it is simple to understand/.test(tpl) && /Short sentences/.test(tpl));
+ok("it always asks which release each update belongs to, offering a fitting one or Other for a new one",
+   /Always ask which release each update belongs to, even when you feel sure/.test(tpl) && /This does not fit any release you have yet/.test(tpl) &&
+   /type the name of a NEW release/.test(tpl) && /never invent one/.test(tpl));
 ok("it lists every ADB release, plus Hotfix and General",
    ["R2026.1 Multiple Records", "R2026.2 Centralized", "R2026.3 Email Records", "R2026.3.1 Email Records Enhancement",
     "R2026.4 Utilization Report", "Hotfix", "General"].every((r) => tpl.includes(r)));
@@ -116,9 +119,8 @@ ok("only the updates are shown: no open items, questions, decisions or action li
 
 /* --- releases --- */
 const chips = await page.$$eval(".pu-chips .chip", (c) => c.map((x) => x.innerText.replace(/\s+\d+$/, "").trim()));
-ok("ADB has a chip for every release, in order, then Hotfix and General",
-   chips.join("|") === "All|R2026.1 Multiple Records|R2026.2 Centralized|R2026.3 Email Records|R2026.3.1 Email Records Enhancement|R2026.4 Utilization Report|Hotfix|General",
-   chips.join("|"));
+ok("chips show All plus only the releases that hold updates, in release order",
+   chips.join("|") === "All|R2026.3 Email Records|R2026.4 Utilization Report|Hotfix", chips.join("|"));
 await page.click('[data-pu-rel="R2026.4 Utilization Report"]');
 ok("a release chip narrows the timeline to that release", (await page.$$eval(".pu-date", (d) => d.length)) === 1);
 await page.click('[data-pu-rel="All"]');
@@ -188,6 +190,13 @@ await page.click('[data-pu-project="gra"]');
 ok("GRA GLASS has none of ADB's days", (await page.locator(".pu-day").count()) === 0);
 ok("GRA has no release chips (it has no releases yet)", (await page.locator(".pu-chips").count()) === 0);
 ok("updates are part of the backup", await page.evaluate(() => window.TrackerStore.KEYS.data.includes("tracker.updates")));
+
+/* --- an open menu survives a redraw (a notice clearing itself used to shut it) --- */
+await page.click('[data-pu="menu"][data-m="imp"]');
+await page.evaluate(() => window.TrackerRender());
+ok("the Import menu stays open when the page redraws", await page.locator('[data-menu="imp"]').isVisible());
+await page.mouse.click(5, 5);
+ok("and closes on a click elsewhere", !(await page.locator('[data-menu="imp"]').isVisible()));
 
 /* --- one month per page --- */
 await page.click('[data-pu="back"]');
@@ -283,6 +292,11 @@ ok("a late catch-up for an earlier day does not overwrite a newer month summary"
 pv = await importJson({ format: "tracker-update", version: 1, project: "ADB EDRMS", status: "", updates: [day("2026-10-31", "No monthly in this file")] });
 ok("a file with no monthly summary says so, and leaves the summary alone",
    pv.includes("no monthly summary") && (await data()).monthly.adb["2026-10"].text === "Rewritten for the whole of October, through the 31st.");
+await importJson({ format: "tracker-update", version: 1, project: "ADB EDRMS", status: "", monthly: [],
+  updates: [{ date: "2026-10-31", headline: "Last day of October", releases: [{ release: "Archive Migration", summary: ["A release I named myself."] }] }] });
+const tpl3 = await page.evaluate(() => window.TrackerUpdates.templateFor("adb"));
+ok("a release you name yourself becomes a category, offered in the next template",
+   /For ADB EDRMS: .*Archive Migration/.test(tpl3) && (await page.locator('.pu-chips [data-pu-rel="Archive Migration"]').count()) === 1);
 await page.selectOption("[data-pu-pick]", "2026-10");
 await page.click('[data-pu-mode="monthly"]');
 await page.click('.pu-dlink:has-text("30 Oct")');
@@ -313,7 +327,23 @@ await page.evaluate(async (sel) => {
 }, "#none");
 await page.waitForTimeout(300);
 oct30 = (await data()).entries.find((e) => e.date === "2026-10-30");
+ok("every day has an image area with an Add image tile where the lists used to be",
+   (await page.locator(".pu-day:not(.pu-editing)").count()) === (await page.locator(".pu-day:not(.pu-editing) .pu-thadd").count()));
 ok("dropping a picture on a day adds it", oct30.images.length === 2 && oct30.images[1].name === "dropped.png");
+// Click a day, then paste: it lands on that day.
+await page.click(`${day30} .pu-head`);
+await page.evaluate(async () => {
+  const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEIGBmgDBgAAO8GBvy0tC0yAAAAAElFTkSuQmCC")).blob();
+  const dt = new DataTransfer(); dt.items.add(new File([blob], "clicked-paste.png", { type: "image/png" }));
+  document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+});
+await page.waitForTimeout(300);
+oct30 = (await data()).entries.find((e) => e.date === "2026-10-30");
+ok("clicking a day and pasting adds the picture to that day", oct30.images.some((x) => x.name === "clicked-paste.png"));
+await page.locator(`${day30} .pu-th`, { hasText: "" }).last().hover();
+await page.locator(`${day30} .pu-thx`).last().click();
+await page.click('#formDialog [data-value="confirm"]');
+await page.waitForTimeout(150);
 // Paste while editing; remove one in the editor; save.
 await page.click(`${day30} [data-pu="edit"]`);
 await page.evaluate(async () => {
