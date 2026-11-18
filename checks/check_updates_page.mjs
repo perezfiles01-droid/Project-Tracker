@@ -5,7 +5,8 @@
  * The rules this protects were stated outright, and each fails silently:
  *   - a day belongs to the date things happened, not the date of import
  *   - a late import of an older day must not overwrite a newer status
- *   - a second import for the same day merges, keeping ticks
+ *   - a second import for the same day merges into it
+ *   - only the updates are shown: no decision, action or question lists
  *   - everything in "where things stand" can be edited
  *   - ADB work sorts into releases, with Hotfix and General for the rest
  *   - the template's own example imports, so instructions and parser agree
@@ -58,6 +59,10 @@ const q1 = tpl.indexOf("> What do you want to put in this project update?"), qa 
 ok("the first question is always what to put in the update, asked on its own before the rest",
    q1 > 0 && q1 < qa && /Question 1, always first and always on its own/.test(tpl) && /Ask exactly this first, nothing else, and wait for my answer/.test(tpl) &&
    /> A\. Everything we discussed in this chat \(my guess\)/.test(tpl));
+const shape = (tpl.match(/## The JSON shape\n\n```json\n([\s\S]*?)```/) || [])[1] || "";
+ok("the template asks for updates only: no decisions, actions or questions fields",
+   shape.includes('"summary": [""]') && !/decisions|actions|questions/.test(shape) && !/"decisions"|"actions"|"questions"/.test(tpl.split("## Example")[1] || "x") &&
+   /Do NOT add decisions, action items, open questions/.test(tpl) && !/who owns an action/.test(tpl));
 ok("it sets rules for simple wording", /How to write so it is simple to understand/.test(tpl) && /Short sentences/.test(tpl));
 ok("it lists every ADB release, plus Hotfix and General",
    ["R2026.1 Multiple Records", "R2026.2 Centralized", "R2026.3 Email Records", "R2026.3.1 Email Records Enhancement",
@@ -104,8 +109,10 @@ ok("both days land on their own dates, newest first", dates.join("|") === "Thu 1
 ok("the summary reads as paragraphs", (await page.locator(".pu-block p").count()) >= 4);
 ok("Where things stand shows the status and its date", (await page.locator(".pu-stp").innerText()) === "Status as of the 12th." &&
    (await page.locator(".pu-asof").innerText()).includes("12 Nov 2026"));
-ok("open action items from every day are gathered at the top", (await page.locator(".pu-open > div:first-child .pu-item").count()) === 2);
-ok("open questions are gathered too", (await page.locator(".pu-open > div:last-child .pu-item").count()) === 1);
+const pageText = await page.locator(".pu").innerText();
+ok("only the updates are shown: no open items, questions, decisions or action lists",
+   (await page.locator(".pu-open, .pu-det, .pu-item, .pu-mgrid").count()) === 0 &&
+   !/still open|open questions|decisions|action items/i.test(pageText), "");
 
 /* --- releases --- */
 const chips = await page.$$eval(".pu-chips .chip", (c) => c.map((x) => x.innerText.replace(/\s+\d+$/, "").trim()));
@@ -113,18 +120,10 @@ ok("ADB has a chip for every release, in order, then Hotfix and General",
    chips.join("|") === "All|R2026.1 Multiple Records|R2026.2 Centralized|R2026.3 Email Records|R2026.3.1 Email Records Enhancement|R2026.4 Utilization Report|Hotfix|General",
    chips.join("|"));
 await page.click('[data-pu-rel="R2026.4 Utilization Report"]');
-ok("a release chip narrows the timeline and the open items to that release",
-   (await page.$$eval(".pu-date", (d) => d.length)) === 1 && (await page.locator(".pu-open > div:first-child .pu-item").count()) === 1);
+ok("a release chip narrows the timeline to that release", (await page.$$eval(".pu-date", (d) => d.length)) === 1);
 await page.click('[data-pu-rel="All"]');
 
-/* --- tick carries everywhere --- */
-await page.locator(".pu-open .pu-item", { hasText: "Draft the KPI list." }).locator("input").click();
-await page.waitForTimeout(100);
-ok("ticking an item done removes it from Still open", (await page.locator(".pu-open > div:first-child .pu-item").count()) === 1);
-await page.locator('.pu-day:has-text("Tue 10 Nov") summary:has-text("Action items")').click();
-ok("and it shows done on its own day", await page.locator('.pu-day:has-text("Tue 10 Nov") .pu-det input:checked').count() === 1);
-
-/* --- same day again: merges, keeps ticks; an older day does not replace a newer status --- */
+/* --- same day again: merges; an older day does not replace a newer status --- */
 const later = { format: "tracker-update", version: 1, project: "ADB EDRMS", status: "Old status from the 10th.",
   updates: [{ date: "2026-11-10", headline: "Kick-off for utilization report", releases: [
     { release: "R2026.4 Utilization Report", summary: ["Rewritten paragraph for the 10th."], decisions: ["Monthly figures are required.", "Quarterly roll-up too."],
@@ -142,9 +141,8 @@ const data = () => page.evaluate(() => JSON.parse(localStorage.getItem(Object.ke
 let d = await data();
 const tenth = d.entries.find((e) => e.date === "2026-11-10");
 ok("a second import for the day merges into it, not a second day", d.entries.length === 2);
-ok("newer paragraphs replace, lists combine without duplicates",
-   tenth.blocks[0].summary.join() === "Rewritten paragraph for the 10th." && tenth.blocks[0].decisions.length === 2 && tenth.blocks[0].actions.length === 1);
-ok("a ticked item stays ticked after the merge", tenth.blocks[0].actions[0].done === true);
+ok("newer paragraphs replace the day's paragraphs", tenth.blocks[0].summary.join() === "Rewritten paragraph for the 10th.");
+ok("lists sent by an older template are kept in the saved data, not thrown away", tenth.blocks[0].decisions.length === 2);
 ok("an older day imported late does not overwrite the newer status", d.status.adb.text === "Status as of the 12th.");
 
 /* --- where things stand is editable --- */
@@ -152,35 +150,22 @@ await page.click('[data-pu="editstatus"]');
 await page.fill('[data-pu-f="text"]', "Edited status by hand.");
 await page.click('[data-pu="savestatus"]');
 ok("the status paragraph can be edited", (await page.locator(".pu-stp").innerText()) === "Edited status by hand.");
-await page.locator(".pu-open .pu-item").first().hover();
-await page.locator(".pu-open .pu-item").first().locator("[data-pu-ied]").click();
-await page.fill('.faq-modal [data-k="text"]', "Send the final label list to Maria");
-await page.fill('.faq-modal [data-k="due"]', "2026-11-21");
-await page.click('.faq-modal [data-v="save"]');
-await page.waitForTimeout(100);
-const firstOpen = await page.locator(".pu-open .pu-item").first().innerText();
-ok("an open item can be reworded and given a date",
-   (await page.locator(".pu-open .pu-item").first().innerText()).includes("Send the final label list to Maria") &&
-   (await page.locator(".pu-open .pu-item").first().innerText()).includes("21 Nov"), firstOpen.replace(/\s+/g, " "));
-await page.locator(".pu-open > div:last-child .pu-item").first().hover();
-await page.locator(".pu-open > div:last-child [data-pu-idel]").first().click();
-await page.click('#formDialog [data-value="confirm"]');
-await page.waitForTimeout(100);
-ok("an open question can be deleted, after confirming", (await page.locator(".pu-open > div:last-child .pu-item").count()) === 0);
 
 /* --- edit a day, including moving it to another date --- */
 await page.click('.pu-day:has-text("Thu 12 Nov") [data-pu="edit"]');
 await page.fill('[data-pu-f="date"]', "2026-11-11");
-await page.fill('[data-pu-f="dec:0"]', "Seven years for correspondence.");
+const editorBoxes = await page.locator('[data-pu-f^="dec:"], [data-pu-f^="act:"], [data-pu-f^="que:"]').count();
+await page.fill('[data-pu-f="sum:0"]', "The labels were reviewed again.\n\nMaria agreed seven years for correspondence.");
 await page.click('[data-pu="saveday"]');
 await page.waitForTimeout(100);
 d = await data();
 const moved = d.entries.find((e) => e.date === "2026-11-11");
 ok("editing can move a day to the date it really happened", !!moved && !d.entries.some((e) => e.date === "2026-11-12"));
-ok("and edits its lists", moved && moved.blocks[0].decisions[0] === "Seven years for correspondence.");
+ok("and edits its paragraphs", moved && moved.blocks[0].summary.join("|") === "The labels were reviewed again.|Maria agreed seven years for correspondence.");
+ok("the day editor has no decision, action or question boxes", editorBoxes === 0, String(editorBoxes));
 
 /* --- search, copy, export, delete --- */
-await page.fill('#view [data-search="updates"]', "monthly kpi figures");
+await page.fill('#view [data-search="updates"]', "kick off utilisation report");
 await page.waitForTimeout(150);
 ok("search finds the day by meaning", (await page.$$eval(".pu-date", (x) => x.map((y) => y.innerText))).join() === "Tue 10 Nov 2026");
 await page.fill('#view [data-search="updates"]', "");
@@ -219,25 +204,27 @@ await page.click('.faq-modal [data-v="go"]');
 await page.waitForTimeout(150);
 ok("importing older days opens the month they belong to", (await page.$eval("[data-pu-pick]", (s) => s.value)) === "2026-10");
 ok("a page holds only that month's days", (await page.$$eval(".pu-date", (d) => d.map((x) => x.innerText))).join("|") === "Fri 30 Oct 2026|Mon 5 Oct 2026");
-ok("the month picker lists every month with days, newest first",
-   (await page.$$eval("[data-pu-pick] option", (o) => o.map((x) => x.textContent))).join("|") === "November 2026 (1)|October 2026 (2)");
+ok("the month picker lists every month with days, newest first, with no count after it",
+   (await page.$$eval("[data-pu-pick] option", (o) => o.map((x) => x.textContent))).join("|") === "November 2026|October 2026");
 await page.click('[data-pu-month="2026-11"]');
 ok("› goes to the newer month", (await page.$$eval(".pu-date", (d) => d.map((x) => x.innerText))).join("|") === "Tue 10 Nov 2026");
 ok("and the newest month has no › further", await page.locator('.pu-mnav button[title="Newer month"]').isDisabled());
 await page.selectOption("[data-pu-pick]", "2026-10");
 ok("the picker jumps to a month", (await page.$$eval(".pu-date", (d) => d.length)) === 2);
-const pageCap = await page.evaluate(() => {
+const pageCap = await (async () => {
   // A month never has more than 31 days, so a page can never pass 31 entries.
-  return Math.max(...[...document.querySelectorAll("[data-pu-pick] option")].map((o) => +o.textContent.match(/\((\d+)\)/)[1]));
-});
+  const per = {};
+  for (const e of (await data()).entries.filter((x) => x.project === "adb")) per[e.date.slice(0, 7)] = (per[e.date.slice(0, 7)] || 0) + 1;
+  return Math.max(...Object.values(per));
+})();
 ok("no month page holds more than 31 days", pageCap <= 31);
 
 /* --- monthly view --- */
 await page.click('[data-pu-mode="monthly"]');
 ok("Monthly shows one summary for the month", (await page.locator(".pu-month").count()) === 1 && (await page.locator(".pu-day").count()) === 0);
 const mtext = await page.locator(".pu-month").innerText();
-ok("it gathers the month's days, decisions and open items", mtext.includes("October day 1") && mtext.includes("October day 2") &&
-   mtext.includes("An October decision.") && /STILL OPEN · 2/i.test(mtext));
+ok("it lists the month's days", mtext.includes("October day 1") && mtext.includes("October day 2"));
+ok("and no decisions, done, still open or open questions", !mtext.includes("An October decision.") && !/still open|open questions|decisions &|done ·/i.test(mtext));
 ok("the monthly summary arrives with the import, as paragraphs",
    (await page.locator(".pu-msum p").allInnerTexts()).join("|") === "October started with planning.|Two decisions were made by the end of the month.");
 ok("there is no AI or write-it-yourself button, only Edit",
@@ -252,6 +239,24 @@ ok("the summary can be edited, and is kept as paragraphs", handP === "October wa
 // The template carries what is already recorded, so a new chat can write the whole month.
 const [tdl] = await Promise.all([page.waitForEvent("download"), page.click('.pu [data-pu="template"]')]);
 const tpl2 = readFileSync(await tdl.path(), "utf8");
+/* Two files: the instructions and the record so far, as data. */
+const both = [];
+const listen = (dl) => both.push(dl);
+page.on("download", listen);
+await page.click('.pu [data-pu="template"]');
+await page.waitForTimeout(1200);
+page.off("download", listen);
+const names = both.map((x) => x.suggestedFilename());
+ok("Download template saves two files: the template and the data file",
+   names.includes("Project-update-template.md") && names.includes("ADB EDRMS - project updates data.json"), names.join(", "));
+const dataJson = JSON.parse(readFileSync(await both.find((x) => x.suggestedFilename().endsWith(".json")).path(), "utf8"));
+const adbData = dataJson.projects[0];
+ok("the data file holds this project's status, monthly summaries and every day",
+   dataJson.format === "tracker-update-data" && dataJson.projects.length === 1 && adbData.project === "ADB EDRMS" &&
+   adbData.monthly.some((m) => m.month === "2026-10") && adbData.updates.some((u) => u.date === "2026-10-30") && adbData.updates.every((u, i, a) => !i || a[i - 1].date <= u.date));
+ok("and only updates, never the old lists", !/"decisions"|"actions"|"questions"/.test(JSON.stringify(dataJson)));
+ok("the template tells Claude to read the data file first and never send it back",
+   /## The data file that comes with this template/.test(tpl2) && /Read it FIRST, before asking me anything/.test(tpl2) && /Never send the data file back/.test(tpl2));
 ok("the template asks for the monthly summary every time", /\*\*monthly\*\*: the monthly summary, ALWAYS included/.test(tpl2) && tpl2.includes('"monthly": ['));
 ok("and carries the month's current summary for Claude to build on",
    tpl2.includes("## Already recorded (use this)") && tpl2.includes("Monthly summary for 2026-10:\nOctober was quiet.") && !tpl2.includes("GRA GLASS\n"));
@@ -344,7 +349,8 @@ await page.waitForTimeout(150);
 ok("data saved by the earlier version still shows its day and status",
    (await page.locator(".pu-head").first().innerText()) === "Saved by the earlier version" && (await page.locator(".pu-stp").innerText()) === "Older status.");
 await page.click('[data-pu-mode="monthly"]');
-ok("and opens in the monthly view too", (await page.locator(".pu-month").innerText()).includes("Old decision."));
+ok("and opens in the monthly view too, without its old lists",
+   (await page.locator(".pu-month").innerText()).includes("Saved by the earlier version") && !(await page.locator(".pu-month").innerText()).includes("Old decision."));
 ok("viewing it changes nothing that was saved", await page.evaluate((k) => localStorage.getItem(k), legacyKey) === JSON.stringify(legacy));
 await page.click('[data-pu-mode="daily"]');
 
