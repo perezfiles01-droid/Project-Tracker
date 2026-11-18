@@ -145,8 +145,16 @@
     "separated by commas, for example: 3, 7. If none of them answers it, reply with 0.",
     "Write nothing else.",
   ].join(" ");
+  /* Project updates' monthly summary: a month of daily records, as prose. */
+  const MONTHLY = [
+    "You write the monthly summary of a project from its daily records, for the person running the project.",
+    "Write 2 to 4 short paragraphs of plain prose, in the past tense, separated by a blank line.",
+    "Cover: what was achieved, what was decided or required by the client, and what is still open or at risk, naming releases and people as the records do.",
+    "Use only what is in the records. No headings, no bullet points, no markdown, no dates in a list, no closing remarks.",
+  ].join(" ");
   const prompt = (kind) =>
     kind === "report" ? REPORT
+    : kind === "monthly" ? MONTHLY
     : kind === "match" ? MATCH
                       : SYSTEM + "\n\n" + (KIND_HINT[kind] || KIND_HINT.description);
 
@@ -989,6 +997,11 @@
   async function report(text) {
     return dispatch(text, "report");
   }
+  /** A month of project updates, written up as paragraphs. */
+  async function monthly(text) {
+    const out = await dispatch(text, "monthly");
+    return window.TrackerUI && window.TrackerUI.tidyDashes ? window.TrackerUI.tidyDashes(out) : out;
+  }
   /** Which FAQ titles answer this question? Replies with their numbers. */
   async function match(text) {
     return dispatch(text, "match");
@@ -1110,7 +1123,7 @@
   /** The picker value that means "try them all". Not an engine id. */
   const AUTO = "auto";
 
-  window.TrackerAI = { standardize, report, match, hasKey, engine, PROVIDERS, ENGINES,
+  window.TrackerAI = { standardize, report, match, monthly, hasKey, engine, PROVIDERS, ENGINES,
                      DEFAULT_ENGINE, adopt, retire,
                      classify, PURPOSE_ORDER, PURPOSE_LABEL, prompt,
                      image, imageEngines, imageEngine, imageReady,
