@@ -50,6 +50,9 @@
   let editing = null;        // a day being edited: deep copy, or { status: true, text }
   let ai = null;
   let notice = "";
+  /* Which header menu is open. Held here, not only in the DOM, because a
+     render (a notice clearing itself) would otherwise shut it under the mouse. */
+  let openMenu = null;
   let mode = "daily";          // "daily" | "monthly"
   let month = null;            // "YYYY-MM" on screen; null means the newest month with days
   let writing = null;          // { ym, text } while a monthly summary is being edited
@@ -93,6 +96,14 @@ This always happens in TWO steps. Never skip step 1, even if everything looks cl
 1. **Check with me first** (below): ask me your questions with options, then show me the summary in plain words and wait for my answer.
 2. **Only after I confirm**, send the file.
 
+## The data file that comes with this template
+
+I will usually upload a second file with this one, named like \`ADB EDRMS - project updates data.json\`. It is my tracker's record so far: "where things stand", the monthly summaries, and every day already recorded, by date and release. Read it FIRST, before asking me anything.
+- Treat it as what is already recorded. Do not repeat a day already in it unless I ask you to change that day.
+- Use it to write better questions (for example, which release something belongs to, or whether something new continues an earlier day) and to keep the monthly summary and "where things stand" complete.
+- Never send the data file back. Your reply is only the update, in the shape below.
+- If there is no data file, use the "Already recorded" section at the end of this template, if there is one.
+
 ## Where the content comes from
 
 - Use everything we discussed in THIS chat about the project: meetings, client requests, requirements, decisions, progress, problems and next steps.
@@ -123,7 +134,8 @@ My answer decides what goes in the update. Record only that. If I choose B, C, D
 ### Then the follow-up questions
 
 **Part A. Questions.** After Question 1, ask me about everything you are still not sure of, as multiple-choice questions (clickable if you can; otherwise one at a time). Rules:
-- Ask about anything uncertain, in this order: the date something happened; which release it belongs to; whether something was agreed (a decision) or is still open (a question); who owns an action and when it is due; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
+- **Always ask which release each update belongs to, even when you feel sure.** One question per update (or per part of a day, if it touches more than one release). If it fits a release I already have (see the list under "release" below and the data file), offer that release first marked "(my guess)", plus any other release that could also fit. If none of my releases fits, say so in the question ("This does not fit any release you have yet") and offer "Other (none of these is right, I will type my answer)" so I can type the name of a NEW release. Use exactly the name I type from then on.
+- Then ask about anything else uncertain, in this order: the date something happened; who was involved; anything that might be wrong or missing in the "Already recorded" section; and anything I said that could be read two ways.
 - Every question has 2 to 4 lettered options (A, B, C, D) written as complete answers, put your best guess first and mark it "(my guess)", and always end with "Other (none of these is right, I will type my answer)". Never leave it out, even when you feel sure.
 - One thing per question. At most 8 questions after Question 1. Plain words, no jargon.
 - If you are genuinely sure about everything, skip straight to Part B, but you must still do Part B and Part C.
@@ -131,7 +143,7 @@ My answer decides what goes in the update. Record only that. If I choose B, C, D
 **Part B. The summary in plain words.** Show me what you will record, written so anyone could understand it in one read:
 - **Where things stand:** the status paragraph exactly as you will save it.
 - **This month:** the monthly summary exactly as you will save it.
-- **Each day:** the date, the headline, and for each release 1 to 3 short bullet points of what happened, then the decisions, action items (with owner and due date) and open questions.
+- **Each day:** the date, the headline, and for each release 1 to 3 short bullet points of what happened.
 
 **Part C. Confirm.** End with exactly this question (as clickable choices if you can):
 
@@ -176,10 +188,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       "releases": [
         {
           "release": "",
-          "summary": [""],
-          "decisions": [],
-          "actions": [ { "task": "", "owner": "", "due": "" } ],
-          "questions": []
+          "summary": [""]
         }
       ]
     }
@@ -194,19 +203,16 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 - **status**: "Where things stand". One paragraph of 2 to 4 sentences, at most 80 words, describing the project's overall position as of the LATEST date in this file: what is done, what is next, the main risk. Plain language.
 - **monthly**: the monthly summary, ALWAYS included. One entry per calendar month that any update in this file falls in.
   - **month**: that month as YYYY-MM.
-  - **summary**: 2 to 4 paragraphs of plain prose, past tense, covering the WHOLE month so far, not just this file: what was achieved, what the client decided or asked for, and what is still open or at risk, naming releases and people. If the section "Already recorded" below has a summary for that month, rewrite it to include everything in it plus what is new in this chat; never drop what it says unless this chat corrects it.
+  - **summary**: 2 to 4 paragraphs of plain prose, past tense, covering the WHOLE month so far, not just this file: what happened, what was achieved, what the client asked for or agreed, and what comes next, naming releases and people. If the section "Already recorded" below has a summary for that month, rewrite it to include everything in it plus what is new in this chat; never drop what it says unless this chat corrects it.
 - **updates**: one entry per day, oldest first. Never two entries with the same date.
   - **date**: the day it happened, as YYYY-MM-DD.
   - **headline**: what the day was about, at most 10 words, sentence case, no full stop.
   - **releases**: one block per release the day touched. Never two blocks for the same release in one day.
-    - **release**: for ADB EDRMS, exactly one of these names:
-      R2026.1 Multiple Records, R2026.2 Centralized, R2026.3 Email Records, R2026.3.1 Email Records Enhancement, R2026.4 Utilization Report, Hotfix, General.
-      Use **Hotfix** for urgent fixes outside a release, and **General** for anything belonging to no release. If the work is clearly for a NEW release, name it in the same pattern, for example "R2026.5 Short Name".
-      For GRA GLASS, use **General** unless the chat names a release.
+    - **release**: the release I confirmed in my answers. My releases so far:
+${releaseLines(only)}
+      **Hotfix** is for urgent fixes outside a release, **General** for anything belonging to no release. A NEW release is only ever one I named in my answers; never invent one.
     - **summary**: 1 to 3 paragraphs, each a string of 2 to 5 full sentences, in plain past tense, readable on its own like meeting minutes: who met or asked, what was discussed, what came of it. Name people as they were named in the chat.
-    - **decisions**: requirements the client asked for and things agreed. Each one sentence, ending with a full stop. Empty list if none.
-    - **actions**: things someone must do. **task** starts with a verb and ends with a full stop; **owner** is the person's name or "" if unknown; **due** is YYYY-MM-DD or "" if no date was given. Empty list if none.
-    - **questions**: things still unclear, blocked or risky, each one sentence ending with a question mark or full stop, naming who it waits on if known. Empty list if none.
+    - Only these two fields per release. Do NOT add decisions, action items, open questions or any other lists: everything goes into the summary paragraphs as plain prose.
 - No markdown, no bold, no emoji, no line breaks inside any string.
 - Valid JSON only: double quotes, no comments, no trailing commas.
 
@@ -223,7 +229,7 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
       "month": "2026-11",
       "summary": [
         "November focused on email records. The records team reviewed the proposed retention labels and approved a seven-year label for correspondence and a one-year label for newsletters.",
-        "A permissions error on the Finance library was fixed as a hotfix. Still open are the final label list for Maria and the question of who signs off the archive policy."
+        "A permissions error on the Finance library was fixed as a hotfix. The final label list goes to Maria next."
       ]
     }
   ],
@@ -236,17 +242,11 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
           "release": "R2026.3 Email Records",
           "summary": [
             "Maria and the records team reviewed the proposed retention labels for email records. They accepted the seven-year label for correspondence and asked for a shorter one for newsletters."
-          ],
-          "decisions": ["Correspondence keeps a seven-year retention label.", "Newsletters get a one-year retention label."],
-          "actions": [{ "task": "Send the final label list to Maria.", "owner": "Me", "due": "2026-11-20" }],
-          "questions": ["Who signs off the archive policy, Maria or the legal team?"]
+          ]
         },
         {
           "release": "Hotfix",
-          "summary": ["A permissions error on the Finance library was reported in the morning and fixed by resetting the inherited permissions."],
-          "decisions": [],
-          "actions": [],
-          "questions": []
+          "summary": ["A permissions error on the Finance library was reported in the morning and fixed by resetting the inherited permissions."]
         }
       ]
     }
@@ -261,12 +261,19 @@ Reply with exactly these two things, in this order, and nothing else (no greetin
 
 - [ ] Only the file and one \`json\` code block, nothing else.
 - [ ] Every date is the day it happened, as YYYY-MM-DD, oldest first, none repeated.
-- [ ] Every release name is from the allowed list or follows the "R2026.x Name" pattern.
+- [ ] Every release is one I confirmed in my answers: an existing one, or a new one I typed.
 - [ ] Every summary paragraph reads on its own as full sentences.
 - [ ] status describes the latest date in the file.
 - [ ] monthly has one entry for every month in the file, each covering the whole month so far.
 - [ ] The JSON is valid.
 ${alreadyRecorded(only)}`;
+  /* The releases each project has: its starting list plus every release an
+     update has used, so a release you created last week is offered today. */
+  function releaseLines(only) {
+    const all = load().entries;
+    return PROJECTS.filter((p) => !only || p.id === only)
+      .map((p) => `      - For ${p.name}: ${releasesOf(p.id, all).join(", ")}.`).join("\n");
+  }
   /* What the app already holds, written into the template so a NEW chat can
      still write a whole-month summary: Claude rewrites what is here plus what
      is new, rather than summarising one day as if it were the month. */
@@ -281,8 +288,29 @@ ${alreadyRecorded(only)}`;
     }).filter(Boolean);
     return parts.length ? `\n## Already recorded (use this)\n\nThis is what my tracker already holds. Build on it: the monthly summary you write must include it, updated with what is new.\n\n${parts.join("\n\n")}\n` : "";
   }
+  /* Two files, asked for 18 Nov 2026: the instructions, and the record so
+     far as data, so any new chat can read the project's history before
+     asking what to add. Updates only: the paragraphs, never the lists an
+     older version kept. */
+  function dataFile(only = project) {
+    const d = load();
+    const projects = PROJECTS.filter((p) => !only || p.id === only).map((p) => ({
+      project: p.name,
+      status: ((d.status || {})[p.id] || {}).text || "",
+      statusAsOf: ((d.status || {})[p.id] || {}).asOf || "",
+      monthly: Object.entries((d.monthly || {})[p.id] || {}).filter(([k]) => /^\d{4}-\d{2}$/.test(k)).sort()
+        .map(([month, v]) => ({ month, summary: String(v.text || "").split(/\n\s*\n/).filter(Boolean) })),
+      updates: d.entries.filter((e) => e.project === p.id).sort((a, b) => a.date.localeCompare(b.date))
+        .map((e) => ({ date: e.date, headline: e.headline, releases: e.blocks.filter((b) => b.summary.length).map((b) => ({ release: b.release, summary: b.summary })) })),
+    }));
+    return { format: "tracker-update-data", version: 1, note: "What my tracker already holds. Read it, do not send it back.",
+      exported: new Date().toISOString().slice(0, 10), projects };
+  }
+  const dataName = (only = project) => (only ? projName(only) : "All projects") + " - project updates data.json";
   function downloadTemplate() {
     window.TrackerUI.saveBlob(new Blob([templateFor()], { type: "text/markdown" }), "Project-update-template.md");
+    // A short gap: browsers drop a second download fired in the same instant.
+    setTimeout(() => window.TrackerUI.saveBlob(new Blob([JSON.stringify(dataFile(), null, 2)], { type: "application/json" }), dataName()), 400);
   }
 
   /* --------------------------------------------------------------- parse */
@@ -378,7 +406,7 @@ ${alreadyRecorded(only)}`;
   const asDoc = (e) => ({
     id: e.id, title: e.headline, category: e.blocks.map((b) => b.release).join(" "), keywords: [],
     summary: e.blocks.flatMap((b) => b.summary).join(" "),
-    sections: e.blocks.map((b) => ({ heading: b.release, steps: [...b.decisions, ...b.actions.map((x) => x.text + " " + x.owner), ...b.questions.map((x) => x.text)] })),
+    sections: e.blocks.map((b) => ({ heading: b.release, steps: [] })),
   });
   const searchDays = (q, entries) => window.TrackerFAQ.search(q, entries.map(asDoc)).map((r) => ({ id: r.q.id, cover: r.cover }));
 
@@ -459,7 +487,7 @@ ${alreadyRecorded(only)}`;
     return `<div class="pu-imgs">${imgs.map((x) => `<span class="pu-th">
         <button class="pu-thb" data-pu-view="${esc(x.id)}" data-name="${esc(x.name)}" title="${esc(x.name)}"><img data-blob="${esc(x.id)}" alt="${esc(x.name)}"></button>
         <button class="pu-thx" data-pu-imgdel="${esc(x.id)}" data-day="${esc(e.id)}" title="Remove image" aria-label="Remove image">✕</button></span>`).join("")}
-      ${editable ? `<button class="pu-thadd" data-pu="addimg" data-id="${esc(e.id)}">+ Add image<small>or drop / paste</small></button>` : ""}</div>`;
+      ${editable ? `<button class="pu-thadd" data-pu="addimg" data-id="${esc(e.id)}">+ Add image<small>click, drop or paste</small></button>` : ""}</div>`;
   };
 
   /* ------------------------------------------------------- monthly view */
@@ -507,12 +535,7 @@ ${alreadyRecorded(only)}`;
       ${rels.map((r) => { const x = data[r]; return `<div class="pu-block">
         ${project === "adb" || r !== "General" ? relTag(r) : ""}
         <ul class="pu-mdays">${[...new Set(x.days)].map((e) => `<li><button class="pu-dlink" data-pu-day="${e.id}">${esc(shortDate(e.date))}</button> ${esc(e.headline)}</li>`).join("")}</ul>
-        <div class="pu-mgrid">
-          ${x.decisions.length ? `<div><h4>Decisions &amp; requirements · ${x.decisions.length}</h4><ul>${x.decisions.map(({ x: t, e }) => `<li>${esc(t)} ${when(e)}</li>`).join("")}</ul></div>` : ""}
-          ${x.done.length ? `<div><h4>Done · ${x.done.length}</h4><ul>${x.done.map(({ x: t, e }) => `<li class="pu-donei">${esc(t.text)} ${when(e)}</li>`).join("")}</ul></div>` : ""}
-          ${x.open.length ? `<div><h4>Still open · ${x.open.length}</h4><ul>${x.open.map(({ x: t, e }) => `<li>${esc(t.text)}${t.owner ? " (" + esc(t.owner) + ")" : ""} ${when(e)}</li>`).join("")}</ul></div>` : ""}
-          ${x.questions.length ? `<div><h4>Open questions · ${x.questions.length}</h4><ul>${x.questions.map(({ x: t, e }) => `<li>${esc(t.text)} ${when(e)}</li>`).join("")}</ul></div>` : ""}
-        </div></div>`; }).join("")}
+        </div>`; }).join("")}
       ${imgs.length ? `<div class="pu-block"><h4 class="pu-h4">Images · ${imgs.length}</h4><div class="pu-imgs">${imgs.map((x) => `<span class="pu-th">
         <button class="pu-thb" data-pu-view="${esc(x.id)}" data-name="${esc(x.name)}" title="${esc(shortDate(x.e.date))} · ${esc(x.name)}"><img data-blob="${esc(x.id)}" alt="${esc(x.name)}"></button></span>`).join("")}</div></div>` : ""}
     </section>`;
@@ -550,55 +573,30 @@ ${alreadyRecorded(only)}`;
         <button class="btn" data-pu="template">⤓ Download template</button></div>${body}`;
   }
 
-  /** Every action and question still open, from every day, newest day first. */
-  function openItems(entries, kind) {
-    return entries.slice().sort((a, b) => b.date.localeCompare(a.date)).flatMap((e) =>
-      e.blocks.filter((b) => rel === "All" || b.release === rel)
-        .flatMap((b) => b[kind].filter((x) => !x.done).map((x) => ({ x, e, b }))));
-  }
-  function itemHtml({ x, e, b }, kind) {
-    const meta = [kind === "actions" && x.owner ? esc(x.owner) : "", kind === "actions" && x.due ? "due " + esc(shortDate(x.due)) : "",
-      "from " + esc(shortDate(e.date)), project === "adb" && rel === "All" ? esc(b.release.split(" ")[0]) : ""].filter(Boolean).join(" · ");
-    return `<li class="pu-item"><label><input type="checkbox" data-pu-tick="${x.id}"${x.done ? " checked" : ""}>
-        <span><span class="pu-it">${esc(x.text)}</span><small>${meta}</small></span></label>
-      <span class="pu-ia"><button data-pu-ied="${x.id}" title="Edit" aria-label="Edit">✎</button><button data-pu-idel="${x.id}" title="Delete" aria-label="Delete">✕</button></span></li>`;
-  }
-
   function statusCard(entries) {
     const st = load().status[project] || {};
     if (editing && editing.status) return `<section class="pu-stand"><div class="pu-sh"><b>Where things stand</b>
         <span class="faq-acts"><button class="btn sm" data-pu="cancel">Cancel</button><button class="btn sm primary" data-pu="savestatus">Save</button></span></div>
         <label class="faq-l pu-dl">As of<input type="date" data-pu-f="asOf" value="${esc(editing.asOf || "")}"></label>
         <textarea class="pu-sta" data-pu-f="text" rows="4">${esc(editing.text)}</textarea></section>`;
-    const acts = openItems(entries, "actions"), qs = openItems(entries, "questions");
     return `<section class="pu-stand">
       <div class="pu-sh"><b>Where things stand</b>${st.asOf ? `<span class="pu-asof">as of ${esc(longDate(st.asOf))}</span>` : ""}
         <span class="faq-acts"><button class="btn sm" data-pu="editstatus">Edit</button></span></div>
       <p class="pu-stp">${st.text ? esc(st.text) : `<span class="pu-dim">Nothing yet. Import an update from Claude and its status paragraph appears here.</span>`}</p>
-      <div class="pu-open">
-        <div><h4>Still open · ${acts.length}</h4>${acts.length ? `<ul>${acts.map((i) => itemHtml(i, "actions")).join("")}</ul>` : `<p class="pu-dim">No open action items.</p>`}</div>
-        <div><h4>Open questions · ${qs.length}</h4>${qs.length ? `<ul>${qs.map((i) => itemHtml(i, "questions")).join("")}</ul>` : `<p class="pu-dim">No open questions.</p>`}</div>
-      </div></section>`;
+      </section>`;
   }
 
+  /* Updates only (18 Nov 2026): a release block is its paragraphs. Lists an
+     earlier version recorded stay in the saved data, untouched, but are not shown. */
   function blockHtml(b, q) {
-    const n = (k) => b[k].length;
-    const list = (k, f) => (n(k) ? `<details class="pu-det"><summary>${{ decisions: "Decisions & requirements", actions: "Action items", questions: "Open questions" }[k]} (${n(k)})</summary><ul>${b[k].map(f).join("")}</ul></details>` : "");
     return `<div class="pu-block">
       ${project === "adb" || b.release !== "General" ? relTag(b.release) : ""}
       ${b.summary.map((p) => `<p>${hl(p, q)}</p>`).join("")}
-      <div class="pu-dets">
-        ${list("decisions", (x) => `<li>${hl(x, q)}</li>`)}
-        ${list("actions", (x) => `<li class="pu-item"><label><input type="checkbox" data-pu-tick="${x.id}"${x.done ? " checked" : ""}>
-          <span><span class="pu-it${x.done ? " done" : ""}">${hl(x.text, q)}</span>${x.owner || x.due ? `<small>${[esc(x.owner), x.due ? "due " + esc(shortDate(x.due)) : ""].filter(Boolean).join(" · ")}</small>` : ""}</span></label></li>`)}
-        ${list("questions", (x) => `<li class="pu-item"><label><input type="checkbox" data-pu-tick="${x.id}"${x.done ? " checked" : ""}>
-          <span class="pu-it${x.done ? " done" : ""}">${hl(x.text, q)}</span></label></li>`)}
-      </div></div>`;
+    </div>`;
   }
 
   function dayEditor(e) {
     const rels = releasesOf(project, load().entries);
-    const lines = (a, f) => a.map(f).join("\n");
     return `<div class="pu-day pu-editing" data-pu-dropday="${esc(e.id)}"><span class="pu-dot"></span><div class="pu-card faq-ed">
       <div class="faq-meta"><span class="faq-cat">Editing</span><span class="faq-acts">
         <button class="btn sm" data-pu="cancel">Cancel</button><button class="btn sm primary" data-pu="saveday">Save</button></span></div>
@@ -609,9 +607,6 @@ ${alreadyRecorded(only)}`;
         <div class="faq-edh"><input data-pu-f="rel:${i}" value="${esc(b.release)}" list="puRels" aria-label="Release">
           <button class="btn sm" data-pu="delblock" data-i="${i}"${e.blocks.length < 2 ? " disabled" : ""}>Remove</button></div>
         <label class="faq-l">Summary <small>a blank line starts a new paragraph</small><textarea data-pu-f="sum:${i}" rows="5">${esc(b.summary.join("\n\n"))}</textarea></label>
-        <label class="faq-l">Decisions &amp; requirements <small>one per line</small><textarea data-pu-f="dec:${i}" rows="3">${esc(lines(b.decisions, (x) => x))}</textarea></label>
-        <label class="faq-l">Action items <small>one per line: task | owner | due (YYYY-MM-DD)</small><textarea data-pu-f="act:${i}" rows="3">${esc(lines(b.actions, (x) => [x.text, x.owner, x.due].join(" | ").replace(/( \| )+$/, "")))}</textarea></label>
-        <label class="faq-l">Open questions <small>one per line</small><textarea data-pu-f="que:${i}" rows="2">${esc(lines(b.questions, (x) => x.text))}</textarea></label>
       </div>`).join("")}
       <button class="btn sm" data-pu="addblock">+ Add release</button>
       <div class="faq-l pu-imgl">Images <small>drop pictures here, paste with Ctrl+V, or use the button</small></div>
@@ -647,7 +642,7 @@ ${alreadyRecorded(only)}`;
           <button data-pu-mode="monthly" aria-pressed="${mode === "monthly"}">Monthly</button></span>
         <span class="pu-mnav">
           <button class="btn sm" data-pu-month="${esc(months[mi + 1] || "")}"${mi < months.length - 1 ? "" : " disabled"} title="Older month" aria-label="Older month">‹</button>
-          <select data-pu-pick aria-label="Month">${months.map((m) => `<option value="${m}"${m === month ? " selected" : ""}>${esc(monthName(m))} (${all.filter(inRel).filter((e) => ymOf(e.date) === m).length})</option>`).join("")}</select>
+          <select data-pu-pick aria-label="Month">${months.map((m) => `<option value="${m}"${m === month ? " selected" : ""}>${esc(monthName(m))}</option>`).join("")}</select>
           <button class="btn sm" data-pu-month="${esc(months[mi - 1] || "")}"${mi > 0 ? "" : " disabled"} title="Newer month" aria-label="Newer month">›</button>
         </span></div>` : "";
     const tl = !q && mode === "monthly" && month ? monthlyHtml(month, days) : days.length ? days.map((e) => e.id === edId ? dayEditor(editing) : `<div class="pu-day" id="pu-${e.id}" data-pu-dropday="${esc(e.id)}">
@@ -661,7 +656,7 @@ ${alreadyRecorded(only)}`;
               <button class="btn sm" data-pu="delete" data-id="${e.id}">Delete</button></span></div>
           <h3 class="pu-head">${hl(e.headline, q)}</h3>
           ${e.blocks.filter((b) => rel === "All" || b.release === rel).map((b) => blockHtml(b, q)).join("")}
-          ${imagesHtml(e, false)}
+          ${imagesHtml(e, true)}
         </div></div>`).join("")
       : `<div class="faq-none">${all.length ? (q ? "No day matches that." : "Nothing under this release yet.") : "No updates yet. Download the template, give it to Claude at the end of the day, and import what it sends back."}</div>`;
     const chipCount = (r) => (r === "All" ? all.length : all.filter((e) => e.blocks.some((b) => b.release === r)).length);
@@ -672,16 +667,17 @@ ${alreadyRecorded(only)}`;
         <span class="faq-tools">
           <button class="btn sm" data-pu="template">⤓ Template</button>
           <span class="faq-menuwrap"><button class="btn sm" data-pu="menu" data-m="imp">+ Import ▾</button>
-            <span class="faq-menu" data-menu="imp" hidden><button data-pu="importfile">Import file…</button><button data-pu="importpaste">Paste text…</button></span></span>
+            <span class="faq-menu" data-menu="imp"${openMenu === "imp" ? "" : " hidden"}><button data-pu="importfile">Import file…</button><button data-pu="importpaste">Paste text…</button></span></span>
           <span class="faq-menuwrap"><button class="btn sm" data-pu="menu" data-m="exp">Export ▾</button>
-            <span class="faq-menu" data-menu="exp" hidden><button data-pu="exportdoc">Readable document (.doc)</button><button data-pu="exportjson">Data file (.json)</button></span></span>
+            <span class="faq-menu" data-menu="exp"${openMenu === "exp" ? "" : " hidden"}><button data-pu="exportdoc">Readable document (.doc)</button><button data-pu="exportjson">Data file (.json)</button></span></span>
         </span>
       </div>
       <div class="pagetools faq-search">${window.TrackerLinks.searchBox("updates", "Search updates in your own words…")}</div>
       ${notice ? `<div class="faq-notice">${esc(notice)}</div>` : ""}
       ${q && weak ? `<div class="faq-ai">${aiFor && aiFor.busy ? "Asking the AI…" : aiFor && aiFor.note ? esc(aiFor.note)
         : aiFor ? "The AI's matches are included below." : `No close match. <button class="btn sm" data-pu="ai">Ask AI to find it</button>`}</div>` : ""}
-      ${rels.length > 1 ? `<div class="chips pu-chips">${["All", ...rels].map((r) => `<button class="chip" data-pu-rel="${esc(r)}" aria-pressed="${rel === r}">${esc(r)} <span class="pu-n">${chipCount(r)}</span></button>`).join("")}</div>` : ""}
+      ${/* Only releases that hold updates (18 Nov 2026); an empty release has no chip. */ ""}
+      ${rels.some((r) => chipCount(r)) ? `<div class="chips pu-chips">${["All", ...rels.filter((r) => chipCount(r) || r === rel)].map((r) => `<button class="chip" data-pu-rel="${esc(r)}" aria-pressed="${rel === r}">${esc(r)} <span class="pu-n">${chipCount(r)}</span></button>`).join("")}</div>` : ""}
       ${statusCard(all)}
       <h3 class="pu-tlh">Timeline</h3>
       ${pager}
@@ -757,35 +753,6 @@ ${alreadyRecorded(only)}`;
     inp.click();
   }
 
-  /* An item's text, one field, in a small dialog. */
-  async function editItem(id) {
-    const hit = findItem(id); if (!hit) return;
-    const { x, kind } = hit;
-    let out = null;
-    const v = await modal(`<h3>Edit ${kind === "actions" ? "action item" : "open question"}</h3>
-      <label class="faq-l">${kind === "actions" ? "Task" : "Question"}<textarea data-k="text" rows="3">${esc(x.text)}</textarea></label>
-      ${kind === "actions" ? `<div class="pu-row2"><label class="faq-l">Owner<input data-k="owner" value="${esc(x.owner || "")}"></label>
-        <label class="faq-l">Due<input type="date" data-k="due" value="${esc(x.due || "")}"></label></div>` : ""}
-      <div class="actions"><button class="btn" data-v="cancel">Cancel</button><button class="btn primary" data-v="save" data-self="1">Save</button></div>`,
-      (m, done) => m.querySelector('[data-v="save"]').addEventListener("click", () => {
-        out = {}; m.querySelectorAll("[data-k]").forEach((i) => { out[i.dataset.k] = i.value; }); done("save");
-      }));
-    if (v !== "save" || !clean(out.text)) return;
-    updateData((d) => { const h = findItem(id, d); h.x.text = sentence(out.text); if (kind === "actions") { h.x.owner = clean(out.owner); h.x.due = out.due; } });
-  }
-  async function deleteItem(id) {
-    const hit = findItem(id); if (!hit) return;
-    const yes = await window.TrackerUI.confirmDialog({ title: `Delete this ${hit.kind === "actions" ? "action item" : "question"}?`,
-      intro: `"${hit.x.text}" will be removed from ${longDate(hit.e.date)}.`, confirmLabel: "Delete" });
-    if (!yes) return;
-    updateData((d) => { const h = findItem(id, d); h.b[h.kind] = h.b[h.kind].filter((y) => y.id !== id); });
-  }
-  function findItem(id, d = load()) {
-    for (const e of d.entries) for (const b of e.blocks) for (const kind of ["actions", "questions"]) {
-      const x = b[kind].find((y) => y.id === id); if (x) return { x, b, e, kind };
-    }
-    return null;
-  }
   function updateData(fn) { const d = load(); fn(d); save(d); render(); }
 
   async function deleteDay(id) {
@@ -801,9 +768,6 @@ ${alreadyRecorded(only)}`;
   function dayText(e) {
     return [longDate(e.date) + " — " + e.headline, ...e.blocks.flatMap((b) => [
       "", (project === "adb" || b.release !== "General") ? b.release : "", ...b.summary,
-      ...(b.decisions.length ? ["", "Decisions & requirements:", ...b.decisions.map((x) => "• " + x)] : []),
-      ...(b.actions.length ? ["", "Action items:", ...b.actions.map((x) => `${x.done ? "☑" : "☐"} ${x.text}${x.owner ? " (" + x.owner + ")" : ""}${x.due ? " due " + longDate(x.due) : ""}`)] : []),
-      ...(b.questions.length ? ["", "Open questions:", ...b.questions.map((x) => `${x.done ? "☑" : "?"} ${x.text}`)] : []),
     ].filter((l, i, a) => l !== "" || a[i - 1] !== ""))].join("\n");
   }
   function flash(msg, ms = 4000) { notice = msg; render(); setTimeout(() => { if (notice === msg) { notice = ""; if (project) render(); } }, ms); }
@@ -820,9 +784,7 @@ ${alreadyRecorded(only)}`;
       ${st.text ? `<h2>Where things stand${st.asOf ? ", as of " + esc(longDate(st.asOf)) : ""}</h2><p>${esc(st.text)}</p>` : ""}
       ${days.map((e) => `<h2>${esc(longDate(e.date))}: ${esc(e.headline)}</h2>${e.blocks.map((b) => `
         ${project === "adb" || b.release !== "General" ? `<h3>${esc(b.release)}</h3>` : ""}${b.summary.map((p) => `<p>${esc(p)}</p>`).join("")}
-        ${b.decisions.length ? `<p><b>Decisions &amp; requirements</b></p><ul>${b.decisions.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-        ${b.actions.length ? `<p><b>Action items</b></p><ul>${b.actions.map((x) => `<li>${x.done ? "&#9745;" : "&#9744;"} ${esc(x.text)}${x.owner ? " (" + esc(x.owner) + ")" : ""}${x.due ? ", due " + esc(longDate(x.due)) : ""}</li>`).join("")}</ul>` : ""}
-        ${b.questions.length ? `<p><b>Open questions</b></p><ul>${b.questions.map((x) => `<li>${x.done ? "&#9745;" : "?"} ${esc(x.text)}</li>`).join("")}</ul>` : ""}`).join("")}`).join("")}`;
+`).join("")}`).join("")}`;
     const html = `<html><head><meta charset="utf-8"><title>${esc(fileStem())}</title><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.45}h1{font-size:20pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt;color:#1F4E79}</style></head><body>${body}</body></html>`;
     window.TrackerUI.saveBlob(new Blob(["﻿" + html], { type: "application/msword" }), fileStem() + ".doc");
   }
@@ -898,21 +860,19 @@ ${alreadyRecorded(only)}`;
     if (iv) return viewImage(iv.dataset.puView, iv.dataset.name);
     const ix = e.target.closest("[data-pu-imgdel]");
     if (ix) return removeImage(ix.dataset.day, ix.dataset.puImgdel);
-    const ied = e.target.closest("[data-pu-ied]"); if (ied) return editItem(ied.dataset.puIed);
-    const idl = e.target.closest("[data-pu-idel]"); if (idl) return deleteItem(idl.dataset.puIdel);
-    document.querySelectorAll(".pu .faq-menu").forEach((m) => { if (!m.hidden && !e.target.closest(".faq-menuwrap")) m.hidden = true; });
+    if (openMenu && !e.target.closest(".faq-menuwrap")) { openMenu = null; document.querySelectorAll(".pu .faq-menu").forEach((m) => (m.hidden = true)); }
     const b = e.target.closest("[data-pu]");
     if (!b || b.disabled) return;
     const id = b.dataset.id;
     switch (b.dataset.pu) {
       case "template": return downloadTemplate();
       case "back": project = null; editing = null; ai = null; return render();
-      case "menu": { const m = b.parentElement.querySelector(".faq-menu"); const was = m.hidden;
-        document.querySelectorAll(".pu .faq-menu").forEach((x) => (x.hidden = true)); m.hidden = !was; return; }
-      case "importfile": b.closest(".faq-menu").hidden = true; return importFile();
-      case "importpaste": b.closest(".faq-menu").hidden = true; return pasteDialog();
-      case "exportdoc": b.closest(".faq-menu").hidden = true; return exportDoc();
-      case "exportjson": b.closest(".faq-menu").hidden = true; return exportJson();
+      case "menu": { const which = b.dataset.m; openMenu = openMenu === which ? null : which;
+        document.querySelectorAll(".pu .faq-menu").forEach((x) => (x.hidden = x.dataset.menu !== openMenu)); return; }
+      case "importfile": openMenu = null; b.closest(".faq-menu").hidden = true; return importFile();
+      case "importpaste": openMenu = null; b.closest(".faq-menu").hidden = true; return pasteDialog();
+      case "exportdoc": openMenu = null; b.closest(".faq-menu").hidden = true; return exportDoc();
+      case "exportjson": openMenu = null; b.closest(".faq-menu").hidden = true; return exportJson();
       case "ai": return askAI(window.TrackerLinks.findValue("updates"), load().entries.filter((x) => x.project === project));
       case "copy": return copyDay(id);
       case "delete": return deleteDay(id);
@@ -938,9 +898,6 @@ ${alreadyRecorded(only)}`;
   document.addEventListener("change", (e) => {
     const pk = e.target.closest("[data-pu-pick]");
     if (pk) { month = pk.value; writing = null; return render(); }
-    const t = e.target.closest("[data-pu-tick]");
-    if (!t) return;
-    updateData((d) => { const h = findItem(t.dataset.puTick, d); if (h) h.x.done = t.checked; });
   });
   document.addEventListener("input", (e) => {
     const f = e.target.closest("[data-pu-f]");
@@ -970,7 +927,20 @@ ${alreadyRecorded(only)}`;
     e.preventDefault(); day.classList.remove("pu-over");
     addImagesTo(day.dataset.puDropday, [...e.dataTransfer.files]);
   });
+  /* The image area replaced the decision, action and question lists (18 Nov
+     2026), so it is on every day: click its tile, drop on the day, or click
+     the day and paste. */
+  let pasteDay = null;
+  document.addEventListener("pointerdown", (e) => {
+    const d = e.target.closest && e.target.closest(".pu-day[data-pu-dropday]");
+    pasteDay = d ? d.dataset.puDropday : null;
+  }, true);
   document.addEventListener("paste", (e) => {
+    const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || "");
+    if (pasteDay && !editing && !typing && document.getElementById("pu-" + pasteDay)) {
+      const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => /^image\//.test(f.type));
+      if (files.length) { e.preventDefault(); return addImagesTo(pasteDay, files); }
+    }
     if (!editing || editing.status || !document.querySelector(".pu-editing")) return;
     const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => /^image\//.test(f.type));
     if (!files.length) return;
@@ -978,5 +948,5 @@ ${alreadyRecorded(only)}`;
     addImagesTo(editing.id, files);
   });
 
-  window.TrackerUpdates = { view, count, parse, templateFor, RELEASES, canonRelease, _state: () => ({ project, rel, mode, month, editing: !!editing }) };
+  window.TrackerUpdates = { view, count, parse, templateFor, dataFile, RELEASES, canonRelease, _state: () => ({ project, rel, mode, month, editing: !!editing }) };
 })();
