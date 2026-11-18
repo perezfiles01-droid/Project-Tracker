@@ -142,3 +142,9 @@ jobs:
       # the canvas without handles, and no picture bytes may reach localStorage.
       - name: The image editor draws, crops, exports, keeps drafts and pages
         run: node checks/check_editor.mjs
+      # The loop: template, import (file or paste, one or many), find by
+      # meaning, edit, delete with confirmation, per project. Includes the
+      # template's own example importing, so the instructions and the parser
+      # cannot drift apart.
+      - name: The FAQ imports, finds, edits and deletes answers per project
+        run: node checks/check_faq.mjs
